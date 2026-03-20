@@ -1,0 +1,22 @@
+[package]
+name = "rust-hier-viewer"
+version = "0.1.0"
+edition = "2024"
+readme = "rust-hier-viewer/README.md"
+default-run = "rust-hier-viewer"
+
+[[bin]]
+name = "rust-hier-viewer"
+path = "rust-hier-viewer/src/main.rs"
+
+[dependencies]
+crossterm = "0.28.1"
+csv = "1.4.0"
+fuzzy-matcher = "0.3.7"
+globset = "0.4.16"
+ratatui = "0.29.0"
+rayon = "1.10.0"
+regex = "1.12.2"
+rusqlite = { version = "0.32.1", features = ["bundled"] }
+shell-words = "1.1.0"
+walkdir = "2.5.0"

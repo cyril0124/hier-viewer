@@ -1,0 +1,19 @@
+# Rust build output
+/target/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Generated hierarchy viewer artifacts
+/.hier-viewer-sources/
+/hier.html
+/tmp-check.html
+
+# Local scratch workspace
+/tmp/
+
+# Editor / OS noise
+.DS_Store
+*.swp
+*.swo
