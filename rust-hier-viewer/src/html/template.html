@@ -7,6 +7,8 @@
   <style>
     :root {
       color-scheme: light;
+      --ui-sans: "Avenir Next", "Segoe UI", "Helvetica Neue", "Noto Sans", sans-serif;
+      --ui-serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
       --bg: #f3efe7;
       --panel: rgba(255, 252, 246, 0.88);
       --panel-strong: rgba(255, 249, 240, 0.97);
@@ -60,6 +62,9 @@
       --control-bg-hover: rgba(255,255,255,0.95);
       --control-active-bg: rgba(38, 24, 14, 0.92);
       --control-active-text: #fff6ec;
+      --control-border-active: color-mix(in srgb, var(--accent) 38%, transparent);
+      --control-bg-active: var(--control-active-bg);
+      --control-text-active: var(--control-active-text);
       --metric-help-bg: rgba(255, 255, 255, 0.72);
       --crumb-text: #764017;
       --crumb-current-bg: rgba(38, 24, 14, 0.92);
@@ -480,7 +485,7 @@
       margin: 0;
       width: 100%;
       height: 100%;
-      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      font-family: var(--ui-sans);
       color: var(--text);
       background:
         radial-gradient(circle at top left, var(--body-radial-a), transparent 28%),
@@ -507,8 +512,8 @@
       display: grid;
       grid-template-rows: auto auto 1fr auto;
       height: 100%;
-      gap: 10px;
-      padding: 16px;
+      gap: 8px;
+      padding: 14px;
       isolation: isolate;
     }
 
@@ -638,7 +643,7 @@
       backdrop-filter: blur(18px);
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: 20px;
       box-shadow: var(--shadow);
     }
 
@@ -647,10 +652,22 @@
       z-index: var(--z-toolbar);
       overflow: visible;
       display: grid;
-      grid-template-columns: minmax(220px, 0.92fr) minmax(0, 2.7fr);
+      grid-template-columns: minmax(280px, 0.92fr) minmax(0, 2.5fr);
       align-items: start;
-      gap: 14px 18px;
-      padding: 12px 16px 40px;
+      gap: 12px 16px;
+      padding: 14px 16px 36px;
+    }
+
+    .toolbar::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 38%, transparent) 0%, transparent 56%),
+        linear-gradient(90deg, color-mix(in srgb, var(--accent) 7%, transparent) 0%, transparent 36%);
+      opacity: 0.88;
     }
 
     .toolbar-toggle {
@@ -658,7 +675,7 @@
       left: 50%;
       bottom: 8px;
       transform: translateX(-50%);
-      z-index: 1;
+      z-index: 2;
       min-width: 0;
       width: 62px;
       height: 22px;
@@ -696,11 +713,16 @@
       transform: translateX(-50%);
     }
 
+    .toolbar.advanced-open .toolbar-toggle {
+      opacity: 0;
+      pointer-events: none;
+    }
+
     .toolbar.collapsed {
       grid-template-columns: minmax(0, 1fr);
       align-items: center;
       gap: 4px 8px;
-      padding: 8px 12px 32px;
+      padding: 8px 12px 30px;
     }
 
     .toolbar.collapsed .controls {
@@ -783,20 +805,20 @@
 
     .zen-overlay {
       position: absolute;
-      top: 16px;
-      left: 16px;
-      right: 16px;
+      inset: 0;
       z-index: var(--z-zen-overlay);
       display: none;
       pointer-events: none;
     }
 
     .app.zen-active .zen-overlay {
-      display: flex;
-      justify-content: flex-start;
+      display: block;
     }
 
     .zen-overlay-shell {
+      position: absolute;
+      top: 16px;
+      left: 16px;
       display: inline-flex;
       align-items: center;
       gap: 8px;
@@ -804,6 +826,13 @@
       padding: 6px 8px;
       border-radius: 14px;
       pointer-events: auto;
+      cursor: grab;
+      user-select: none;
+      max-width: calc(100% - 32px);
+    }
+
+    .zen-overlay-shell.dragging {
+      cursor: grabbing;
     }
 
     .zen-overlay-label {
@@ -829,28 +858,42 @@
     }
 
     .title-block {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-width: 220px;
+      position: relative;
+      z-index: 1;
+      display: grid;
+      gap: 4px;
+      min-width: 240px;
+      align-content: center;
     }
 
     .eyebrow {
+      font-family: var(--ui-sans);
       font-size: 12px;
-      letter-spacing: 0.18em;
+      letter-spacing: 0.16em;
       text-transform: uppercase;
       color: var(--muted);
     }
 
     h1 {
       margin: 0;
-      font-size: 24px;
-      line-height: 1.1;
+      font-family: var(--ui-serif);
+      font-size: 33px;
+      line-height: 0.98;
       font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .title-meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
+      min-width: 0;
     }
 
     .title-subtitle {
-      font-size: 13px;
+      font-size: 12px;
+      font-weight: 500;
       color: var(--muted);
       line-height: 1.25;
     }
@@ -859,11 +902,13 @@
       font-size: 12px;
       color: var(--muted);
       line-height: 1.25;
+      white-space: nowrap;
     }
 
     .title-credit a {
       color: var(--accent);
       text-decoration: none;
+      font-weight: 600;
     }
 
     .title-credit a:hover,
@@ -872,21 +917,21 @@
     }
 
     .controls {
+      position: relative;
+      z-index: 4;
       min-width: 0;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 12px;
-      align-items: center;
-      justify-content: flex-end;
+      display: grid;
+      gap: 8px;
+      align-content: center;
+      justify-items: stretch;
     }
 
     .control-row {
       display: flex;
-      flex-wrap: wrap;
-      justify-content: flex-end;
+      width: 100%;
+      justify-content: flex-start;
       align-items: flex-start;
       gap: 8px;
-      flex: 0 1 auto;
       min-width: 0;
     }
 
@@ -895,10 +940,11 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 6px;
-      padding: 6px 8px;
-      border: 1px solid var(--strip-border);
+      max-width: min(100%, 960px);
+      padding: 5px 7px;
+      border: 1px solid color-mix(in srgb, var(--strip-border) 90%, transparent);
       border-radius: 18px;
-      background: var(--strip-bg);
+      background: color-mix(in srgb, var(--strip-bg) 88%, white 6%);
       box-shadow: inset 0 1px 0 var(--strip-inset);
     }
 
@@ -906,6 +952,7 @@
       position: relative;
       display: inline-flex;
       align-items: center;
+      z-index: 2;
     }
 
     .advanced-toggle.active {
@@ -945,13 +992,15 @@
     }
 
     .toolbar-bottom {
-      display: contents;
+      display: flex;
+      width: 100%;
+      justify-content: flex-start;
     }
 
     .toolbar button,
     .toolbar select,
     .toolbar input {
-      padding: 8px 12px;
+      padding: 7px 11px;
     }
 
     .metric-group {
@@ -992,15 +1041,15 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 8px;
-      width: auto;
+      width: min(100%, 860px);
       min-width: 0;
-      flex: 1 1 420px;
-      max-width: min(100%, 720px);
-      margin-left: auto;
-      padding: 8px 10px;
-      border: 1px solid var(--filter-border);
-      border-radius: 22px;
-      background: var(--filter-bg);
+      flex: 0 1 auto;
+      max-width: 100%;
+      margin-left: 0;
+      padding: 6px 8px;
+      border: 1px solid color-mix(in srgb, var(--filter-border) 92%, transparent);
+      border-radius: 18px;
+      background: color-mix(in srgb, var(--filter-bg) 90%, white 5%);
       box-shadow: inset 0 1px 0 var(--filter-inset);
     }
 
@@ -1010,10 +1059,10 @@
     }
 
     .group-label {
-      padding: 0 6px 0 2px;
-      font-size: 12px;
+      padding: 0 6px 0 4px;
+      font-size: 11px;
       font-weight: 700;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
       color: var(--muted);
       white-space: nowrap;
@@ -1021,7 +1070,7 @@
 
     .metric-inline-label {
       color: var(--muted);
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 700;
       white-space: nowrap;
     }
@@ -1111,6 +1160,8 @@
       border-radius: 999px;
       padding: 10px 14px;
       font: inherit;
+      font-family: var(--ui-sans);
+      font-size: 13px;
       transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
     }
 
@@ -1153,8 +1204,8 @@
     .breadcrumb-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
-      gap: 10px;
-      align-items: stretch;
+      gap: 8px;
+      align-items: center;
       min-width: 0;
     }
 
@@ -1164,10 +1215,10 @@
       overflow: visible;
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 6px;
       align-items: center;
-      min-height: 44px;
-      padding: 5px 10px;
+      min-height: 42px;
+      padding: 5px 9px;
     }
 
     .crumb {
@@ -1176,8 +1227,10 @@
       border: none;
       background: var(--accent-soft);
       color: var(--crumb-text);
-      min-height: 32px;
-      padding: 6px 12px;
+      min-height: 30px;
+      padding: 5px 11px;
+      font-size: 12px;
+      font-weight: 600;
     }
 
     .crumb::after {
@@ -1222,6 +1275,7 @@
       min-height: 0;
       overflow: hidden;
       isolation: isolate;
+      background: color-mix(in srgb, var(--panel) 84%, white 4%);
     }
 
     .main-stage {
@@ -1299,7 +1353,7 @@
     }
 
     .hover-title {
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 700;
       line-height: 1.15;
       margin-bottom: 4px;
@@ -2256,8 +2310,8 @@
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      padding: 12px 16px;
-      font-size: 14px;
+      padding: 10px 14px;
+      font-size: 13px;
       color: var(--muted);
     }
 
@@ -2267,7 +2321,7 @@
 
     .hint {
       color: var(--muted);
-      font-size: 13px;
+      font-size: 12px;
     }
 
     .ui-annotation-layer {
@@ -2312,6 +2366,10 @@
         grid-template-columns: 1fr;
       }
 
+      h1 {
+        font-size: 26px;
+      }
+
       .view-switcher {
         justify-content: flex-start;
       }
@@ -2321,6 +2379,7 @@
       }
 
       .controls {
+        justify-items: stretch;
         align-items: stretch;
       }
 
@@ -2340,6 +2399,7 @@
 
       .control-strip {
         width: 100%;
+        max-width: none;
       }
 
       .advanced-group {
@@ -2359,12 +2419,16 @@
       .filter-group {
         width: 100%;
         max-width: none;
-        margin-left: 0;
+        justify-content: flex-start;
       }
 
       .filter-group input {
         min-width: 180px;
         flex: 1 1 220px;
+      }
+
+      .title-meta-row {
+        gap: 4px 10px;
       }
 
       .chart-layout {
@@ -2401,13 +2465,14 @@
       }
 
       .zen-overlay {
-        left: 12px;
-        right: 12px;
-        top: 12px;
+        inset: 0;
       }
 
       .zen-overlay-shell {
-        width: min(100%, 100%);
+        top: 12px;
+        left: 12px;
+        width: calc(100% - 24px);
+        max-width: calc(100% - 24px);
       }
     }
   </style>
@@ -2430,9 +2495,11 @@
       <div class="title-block" data-ui-name="title-block">
         <div class="eyebrow">Standalone Hierarchy Viewer</div>
         <h1 id="page-title" data-ui-name="page-title"></h1>
-        <div class="title-subtitle" id="page-subtitle" data-ui-name="page-subtitle"></div>
-        <div class="title-credit" data-ui-name="page-credit">
-          Author: <a href="https://github.com/cyril0124" target="_blank" rel="noopener noreferrer">cyril0124</a>
+        <div class="title-meta-row" data-ui-name="title-meta-row">
+          <div class="title-subtitle" id="page-subtitle" data-ui-name="page-subtitle"></div>
+          <div class="title-credit" data-ui-name="page-credit">
+            Author: <a href="https://github.com/cyril0124" target="_blank" rel="noopener noreferrer">cyril0124</a>
+          </div>
         </div>
       </div>
       <div class="controls" data-ui-name="toolbar-controls">
@@ -2623,7 +2690,7 @@
 
     <section class="canvas-panel panel" data-ui-name="canvas-panel" data-ui-label="always">
       <div class="zen-overlay" id="zen-overlay" data-ui-name="zen-overlay" data-ui-label="always">
-        <div class="zen-overlay-shell panel" data-ui-name="zen-overlay-shell">
+        <div id="zen-overlay-shell" class="zen-overlay-shell panel" data-ui-name="zen-overlay-shell">
           <div class="zen-overlay-label">Zen</div>
           <div class="zen-overlay-group" data-ui-name="zen-overlay-group">
             <button id="zen-view-treemap-btn" class="view-switch-btn" type="button" data-ui-name="zen-view-treemap-btn">Treemap</button>
@@ -3326,6 +3393,7 @@
     const viewPieBtn = document.getElementById("view-pie-btn");
     const viewThreeBtn = document.getElementById("view-three-btn");
     const zenToggleBtn = document.getElementById("zen-toggle-btn");
+    const zenOverlayShell = document.getElementById("zen-overlay-shell");
     const zenViewTreemapBtn = document.getElementById("zen-view-treemap-btn");
     const zenViewPieBtn = document.getElementById("zen-view-pie-btn");
     const zenViewThreeBtn = document.getElementById("zen-view-three-btn");
@@ -3504,6 +3572,11 @@
       chartLevel: null,
       chartPanelDirty: true,
       zenMode: false,
+      zenOverlayLeft: null,
+      zenOverlayTop: null,
+      draggingZenOverlay: false,
+      zenOverlayDragOffsetX: 0,
+      zenOverlayDragOffsetY: 0,
       chartPanelWidth: 1080,
       chartPanelHeight: 760,
       chartPanelLeft: 16,
@@ -3905,6 +3978,7 @@
 
     function setAdvancedPopoverOpen(open) {
       state.advancedPopoverOpen = !!open;
+      toolbar.classList.toggle("advanced-open", state.advancedPopoverOpen);
       advancedPopover.classList.toggle("hidden", !state.advancedPopoverOpen);
       advancedControlsBtn.classList.toggle("active", state.advancedPopoverOpen);
       advancedControlsBtn.setAttribute("aria-expanded", state.advancedPopoverOpen ? "true" : "false");
@@ -3958,7 +4032,9 @@
           matchPanelLeft: state.matchPanelLeft,
           matchPanelTop: state.matchPanelTop,
           hoverCardLeft: state.hoverCardLeft,
-          hoverCardTop: state.hoverCardTop
+          hoverCardTop: state.hoverCardTop,
+          zenOverlayLeft: state.zenOverlayLeft,
+          zenOverlayTop: state.zenOverlayTop
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
       } catch (_) {
@@ -4048,6 +4124,8 @@
         if (typeof saved.matchPanelTop === "number") state.matchPanelTop = saved.matchPanelTop;
         if (typeof saved.hoverCardLeft === "number") state.hoverCardLeft = saved.hoverCardLeft;
         if (typeof saved.hoverCardTop === "number") state.hoverCardTop = saved.hoverCardTop;
+        if (typeof saved.zenOverlayLeft === "number") state.zenOverlayLeft = saved.zenOverlayLeft;
+        if (typeof saved.zenOverlayTop === "number") state.zenOverlayTop = saved.zenOverlayTop;
         expandTreePath(state.currentRoot);
       } catch (_) {
       }
@@ -4113,6 +4191,9 @@
       zenToggleBtn.setAttribute("aria-pressed", state.zenMode ? "true" : "false");
       zenToggleBtn.textContent = state.zenMode ? "Zen On" : "Zen";
       zenExitBtn.setAttribute("aria-pressed", state.zenMode ? "true" : "false");
+      if (zenOverlayShell) {
+        applyZenOverlayPosition();
+      }
     }
 
     function setZenMode(enabled) {
@@ -5571,6 +5652,39 @@
       scheduleUiAnnotations();
     }
 
+    function clampZenOverlayPosition() {
+      if (!zenOverlayShell) {
+        return;
+      }
+      if (state.zenOverlayLeft === null || state.zenOverlayTop === null) {
+        return;
+      }
+      const panelWidth = zenOverlayShell.offsetWidth;
+      const panelHeight = zenOverlayShell.offsetHeight;
+      const maxLeft = Math.max(12, canvasPanel.clientWidth - panelWidth - 12);
+      const maxTop = Math.max(12, canvasPanel.clientHeight - panelHeight - 12);
+      state.zenOverlayLeft = clamp(state.zenOverlayLeft, 12, maxLeft);
+      state.zenOverlayTop = clamp(state.zenOverlayTop, 12, maxTop);
+    }
+
+    function applyZenOverlayPosition() {
+      if (!zenOverlayShell) {
+        scheduleUiAnnotations();
+        return;
+      }
+      zenOverlayShell.classList.toggle("dragging", state.draggingZenOverlay);
+      if (state.zenOverlayLeft === null || state.zenOverlayTop === null) {
+        zenOverlayShell.style.left = "";
+        zenOverlayShell.style.top = "";
+        scheduleUiAnnotations();
+        return;
+      }
+      clampZenOverlayPosition();
+      zenOverlayShell.style.left = `${state.zenOverlayLeft}px`;
+      zenOverlayShell.style.top = `${state.zenOverlayTop}px`;
+      scheduleUiAnnotations();
+    }
+
     function renderMatchPanel() {
       matchPanel.classList.toggle("visible", state.matchPanelOpen);
       matchPanel.classList.toggle("dragging", state.draggingMatchPanel);
@@ -6964,6 +7078,28 @@
       setZenMode(false);
     });
 
+    if (zenOverlayShell) {
+      zenOverlayShell.addEventListener("mousedown", (event) => {
+        if (event.button !== 0) {
+          return;
+        }
+        if (event.target.closest("button, a, input, select, textarea")) {
+          return;
+        }
+        const panelRect = canvasPanel.getBoundingClientRect();
+        const rect = zenOverlayShell.getBoundingClientRect();
+        if (state.zenOverlayLeft === null || state.zenOverlayTop === null) {
+          state.zenOverlayLeft = rect.left - panelRect.left;
+          state.zenOverlayTop = rect.top - panelRect.top;
+        }
+        state.draggingZenOverlay = true;
+        state.zenOverlayDragOffsetX = event.clientX - panelRect.left - state.zenOverlayLeft;
+        state.zenOverlayDragOffsetY = event.clientY - panelRect.top - state.zenOverlayTop;
+        applyZenOverlayPosition();
+        event.preventDefault();
+      });
+    }
+
     expandTreeBtn.addEventListener("click", () => {
       forEachVisibleTreeNode((nodeId) => {
         state.treeCollapsedIds.delete(nodeId);
@@ -7301,6 +7437,13 @@
     });
 
     window.addEventListener("mousemove", (event) => {
+      if (state.draggingZenOverlay) {
+        const panelRect = canvasPanel.getBoundingClientRect();
+        state.zenOverlayLeft = event.clientX - panelRect.left - state.zenOverlayDragOffsetX;
+        state.zenOverlayTop = event.clientY - panelRect.top - state.zenOverlayDragOffsetY;
+        applyZenOverlayPosition();
+        return;
+      }
       if (state.draggingHoverCard) {
         const panelRect = canvasPanel.getBoundingClientRect();
         state.hoverCardLeft = event.clientX - panelRect.left - state.hoverCardDragOffsetX;
@@ -7335,6 +7478,11 @@
     window.addEventListener("mouseup", () => {
       let shouldPersist = false;
 
+      if (state.draggingZenOverlay) {
+        state.draggingZenOverlay = false;
+        applyZenOverlayPosition();
+        shouldPersist = true;
+      }
       if (state.draggingHoverCard) {
         state.draggingHoverCard = false;
         applyHoverCardPosition();
@@ -7375,6 +7523,7 @@
     });
 
     window.addEventListener("resize", () => {
+      applyZenOverlayPosition();
       scheduleUiAnnotations();
     });
 
