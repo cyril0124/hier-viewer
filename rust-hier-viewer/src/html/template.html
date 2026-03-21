@@ -66,6 +66,13 @@
       --control-bg-active: var(--control-active-bg);
       --control-text-active: var(--control-active-text);
       --metric-help-bg: rgba(255, 255, 255, 0.72);
+      --panel-radius: 24px;
+      --panel-inner-line: inset 0 1px 0 rgba(255, 255, 255, 0.32);
+      --panel-edge-line: inset 0 0 0 1px color-mix(in srgb, var(--border) 68%, transparent);
+      --stage-glow: radial-gradient(circle at top, color-mix(in srgb, var(--accent-soft) 90%, transparent), transparent 48%);
+      --source-code-bg: color-mix(in srgb, var(--side-body-bg) 92%, white 4%);
+      --source-code-text: color-mix(in srgb, var(--text) 96%, #18120d);
+      --source-line-no: color-mix(in srgb, var(--muted) 78%, transparent);
       --crumb-text: #764017;
       --crumb-current-bg: rgba(38, 24, 14, 0.92);
       --crumb-current-text: #fff6ec;
@@ -640,11 +647,13 @@
     }
 
     .panel {
+      position: relative;
       backdrop-filter: blur(18px);
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 20px;
-      box-shadow: var(--shadow);
+      border-radius: var(--panel-radius);
+      box-shadow: var(--shadow), var(--panel-inner-line), var(--panel-edge-line);
+      isolation: isolate;
     }
 
     .toolbar {
@@ -652,10 +661,11 @@
       z-index: var(--z-toolbar);
       overflow: visible;
       display: grid;
-      grid-template-columns: minmax(280px, 0.92fr) minmax(0, 2.5fr);
+      grid-template-columns: minmax(300px, 0.88fr) minmax(0, 1.42fr);
       align-items: start;
-      gap: 12px 16px;
-      padding: 14px 16px 36px;
+      gap: 14px 18px;
+      min-height: 136px;
+      padding: 18px 64px 18px 18px;
     }
 
     .toolbar::before {
@@ -665,35 +675,46 @@
       border-radius: inherit;
       pointer-events: none;
       background:
-        linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 38%, transparent) 0%, transparent 56%),
-        linear-gradient(90deg, color-mix(in srgb, var(--accent) 7%, transparent) 0%, transparent 36%);
-      opacity: 0.88;
+        linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 84%, transparent) 0%, transparent 46%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, transparent 62%),
+        linear-gradient(90deg, color-mix(in srgb, var(--accent) 10%, transparent) 0%, transparent 38%);
+      opacity: 1;
+    }
+
+    .toolbar::after {
+      content: "";
+      position: absolute;
+      inset: 1px;
+      border-radius: calc(var(--panel-radius) - 1px);
+      pointer-events: none;
+      border: 1px solid color-mix(in srgb, rgba(255, 255, 255, 0.26) 70%, transparent);
+      mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 72%);
     }
 
     .toolbar-toggle {
       position: absolute;
-      left: 50%;
-      bottom: 8px;
-      transform: translateX(-50%);
+      top: 14px;
+      right: 14px;
       z-index: 2;
       min-width: 0;
-      width: 62px;
-      height: 22px;
+      width: 34px;
+      height: 34px;
       padding: 0;
-      border-radius: 999px;
+      border-radius: 12px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 8px 18px color-mix(in srgb, var(--text) 12%, transparent);
+      background: color-mix(in srgb, var(--control-bg-strong) 92%, transparent);
+      box-shadow: 0 10px 26px color-mix(in srgb, var(--text) 10%, transparent);
     }
 
     .toolbar-toggle::before {
       content: "";
-      width: 12px;
-      height: 12px;
+      width: 10px;
+      height: 10px;
       border-right: 2px solid currentColor;
       border-bottom: 2px solid currentColor;
-      transform: translateY(-1px) rotate(45deg);
+      transform: translateY(1px) rotate(45deg);
       transition: transform 140ms ease;
     }
 
@@ -710,7 +731,7 @@
     }
 
     .toolbar-toggle:hover {
-      transform: translateX(-50%);
+      transform: none;
     }
 
     .toolbar.advanced-open .toolbar-toggle {
@@ -721,8 +742,9 @@
     .toolbar.collapsed {
       grid-template-columns: minmax(0, 1fr);
       align-items: center;
+      min-height: 72px;
       gap: 4px 8px;
-      padding: 8px 12px 30px;
+      padding: 12px 54px 12px 14px;
     }
 
     .toolbar.collapsed .controls {
@@ -742,18 +764,20 @@
     }
 
     .toolbar.collapsed h1 {
-      font-size: 19px;
+      font-size: 21px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
     .toolbar.collapsed .toolbar-toggle {
-      bottom: 6px;
+      top: 50%;
+      right: 12px;
+      transform: translateY(-50%);
     }
 
     .toolbar.collapsed .toolbar-toggle::before {
-      transform: translateY(1px) rotate(225deg);
+      transform: translateY(-1px) rotate(225deg);
     }
 
     .view-switcher {
@@ -766,10 +790,12 @@
     .view-switcher-shell {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
       min-height: 44px;
-      padding: 5px 7px;
-      border-radius: 12px;
+      padding: 5px 8px;
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--panel-strong) 82%, transparent);
+      box-shadow: var(--panel-inner-line), var(--panel-edge-line);
     }
 
     .view-switcher-label {
@@ -789,11 +815,11 @@
     }
 
     .view-switch-btn {
-      min-width: 70px;
-      padding: 6px 10px;
+      min-width: 74px;
+      padding: 7px 11px;
       font-size: 12px;
       line-height: 1.1;
-      border-radius: 10px;
+      border-radius: 11px;
     }
 
     .view-switch-btn.active {
@@ -821,14 +847,16 @@
       left: 16px;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      min-height: 46px;
-      padding: 6px 8px;
-      border-radius: 14px;
+      gap: 10px;
+      min-height: 48px;
+      padding: 8px 10px;
+      border-radius: 16px;
       pointer-events: auto;
       cursor: grab;
       user-select: none;
       max-width: calc(100% - 32px);
+      background: color-mix(in srgb, var(--panel-strong) 90%, transparent);
+      box-shadow: 0 18px 34px color-mix(in srgb, var(--text) 12%, transparent), var(--panel-inner-line), var(--panel-edge-line);
     }
 
     .zen-overlay-shell.dragging {
@@ -853,7 +881,7 @@
     }
 
     .zen-overlay-actions {
-      padding-left: 4px;
+      padding-left: 8px;
       border-left: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
     }
 
@@ -861,7 +889,7 @@
       position: relative;
       z-index: 1;
       display: grid;
-      gap: 4px;
+      gap: 6px;
       min-width: 240px;
       align-content: center;
     }
@@ -877,17 +905,19 @@
     h1 {
       margin: 0;
       font-family: var(--ui-serif);
-      font-size: 33px;
+      font-size: 35px;
       line-height: 0.98;
       font-weight: 700;
       letter-spacing: -0.02em;
+      max-width: 15ch;
+      text-wrap: balance;
     }
 
     .title-meta-row {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 8px 12px;
+      gap: 10px 14px;
       min-width: 0;
     }
 
@@ -921,17 +951,20 @@
       z-index: 4;
       min-width: 0;
       display: grid;
-      gap: 8px;
+      gap: 10px;
       align-content: center;
       justify-items: stretch;
+      padding-top: 2px;
     }
 
     .control-row {
+      position: relative;
+      z-index: 2;
       display: flex;
       width: 100%;
       justify-content: flex-start;
       align-items: flex-start;
-      gap: 8px;
+      gap: 10px;
       min-width: 0;
     }
 
@@ -939,13 +972,16 @@
       display: inline-flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 6px;
-      max-width: min(100%, 960px);
-      padding: 5px 7px;
-      border: 1px solid color-mix(in srgb, var(--strip-border) 90%, transparent);
+      gap: 8px;
+      width: 100%;
+      max-width: 100%;
+      min-height: 48px;
+      padding: 6px 8px;
+      border: 1px solid color-mix(in srgb, var(--strip-border) 96%, transparent);
       border-radius: 18px;
-      background: color-mix(in srgb, var(--strip-bg) 88%, white 6%);
+      background: color-mix(in srgb, var(--strip-bg) 90%, var(--panel-strong) 10%);
       box-shadow: inset 0 1px 0 var(--strip-inset);
+      backdrop-filter: blur(16px);
     }
 
     .advanced-group {
@@ -953,6 +989,10 @@
       display: inline-flex;
       align-items: center;
       z-index: 2;
+    }
+
+    .toolbar.advanced-open .advanced-group {
+      z-index: calc(var(--z-toolbar-popover) + 1);
     }
 
     .advanced-toggle.active {
@@ -965,33 +1005,114 @@
       top: calc(100% + 10px);
       right: 0;
       z-index: var(--z-toolbar-popover);
-      width: min(560px, calc(100vw - 36px));
+      width: min(760px, calc(100vw - 40px));
       display: grid;
-      gap: 10px;
-      padding: 14px;
+      gap: 14px;
+      padding: 16px;
       border: 1px solid var(--popover-border);
-      border-radius: 18px;
+      border-radius: 22px;
       background: var(--popover-bg);
       box-shadow: var(--popover-shadow);
       backdrop-filter: blur(16px);
+      transform-origin: top right;
+      animation: advanced-popover-in 140ms ease;
     }
 
     .advanced-popover.hidden {
       display: none;
     }
 
+    @keyframes advanced-popover-in {
+      from {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.985);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .advanced-popover-header {
+      display: grid;
+      gap: 4px;
+      padding-bottom: 2px;
+    }
+
+    .advanced-popover-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .advanced-popover-title {
+      font-family: var(--ui-serif);
+      font-size: 24px;
+      line-height: 1;
+      color: var(--text);
+    }
+
+    .advanced-popover-description {
+      max-width: 56ch;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .advanced-popover-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
     .advanced-section {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+      min-height: 128px;
+      padding: 14px;
+      border: 1px solid color-mix(in srgb, var(--section-border) 96%, transparent);
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, rgba(255, 255, 255, 0.18) 70%, transparent), transparent 58%),
+        var(--section-bg);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    }
+
+    .advanced-section-wide {
+      grid-column: 1 / -1;
+      min-height: 0;
+    }
+
+    .advanced-section-copy {
+      display: grid;
+      gap: 4px;
+    }
+
+    .advanced-section-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .advanced-section-hint {
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .advanced-section-controls {
       display: flex;
       flex-wrap: wrap;
+      gap: 10px;
       align-items: center;
-      gap: 8px;
-      padding: 8px 10px;
-      border: 1px solid var(--section-border);
-      border-radius: 14px;
-      background: var(--section-bg);
     }
 
     .toolbar-bottom {
+      position: relative;
+      z-index: 1;
       display: flex;
       width: 100%;
       justify-content: flex-start;
@@ -1000,7 +1121,7 @@
     .toolbar button,
     .toolbar select,
     .toolbar input {
-      padding: 7px 11px;
+      padding: 8px 12px;
     }
 
     .metric-group {
@@ -1041,11 +1162,12 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 8px;
-      width: min(100%, 860px);
+      width: 100%;
       min-width: 0;
       flex: 0 1 auto;
       max-width: 100%;
       margin-left: 0;
+      min-height: 48px;
       padding: 6px 8px;
       border: 1px solid color-mix(in srgb, var(--filter-border) 92%, transparent);
       border-radius: 18px;
@@ -1157,12 +1279,12 @@
       border: 1px solid var(--control-border);
       background: var(--control-bg);
       color: var(--text);
-      border-radius: 999px;
+      border-radius: 12px;
       padding: 10px 14px;
       font: inherit;
       font-family: var(--ui-sans);
       font-size: 13px;
-      transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
+      transition: transform 140ms ease, background 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
     }
 
     button:hover, select:hover, input:hover {
@@ -1173,6 +1295,7 @@
       transform: translateY(-1px);
       background: var(--control-bg-hover);
       cursor: pointer;
+      box-shadow: 0 8px 18px color-mix(in srgb, var(--text) 8%, transparent);
     }
 
     .controls button.active {
@@ -1189,6 +1312,7 @@
     input {
       min-width: 300px;
       background: var(--control-bg-strong);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
     }
 
     .filter-group select,
@@ -1217,8 +1341,9 @@
       flex-wrap: wrap;
       gap: 6px;
       align-items: center;
-      min-height: 42px;
-      padding: 5px 9px;
+      min-height: 44px;
+      padding: 6px 10px;
+      background: color-mix(in srgb, var(--panel-strong) 86%, transparent);
     }
 
     .crumb {
@@ -1228,9 +1353,10 @@
       background: var(--accent-soft);
       color: var(--crumb-text);
       min-height: 30px;
-      padding: 5px 11px;
+      padding: 6px 11px;
       font-size: 12px;
       font-weight: 600;
+      border-radius: 999px;
     }
 
     .crumb::after {
@@ -1275,7 +1401,20 @@
       min-height: 0;
       overflow: hidden;
       isolation: isolate;
-      background: color-mix(in srgb, var(--panel) 84%, white 4%);
+      background:
+        var(--stage-glow),
+        linear-gradient(180deg, color-mix(in srgb, var(--panel) 90%, white 6%), color-mix(in srgb, var(--panel-strong) 90%, transparent));
+    }
+
+    .canvas-panel::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at top left, color-mix(in srgb, var(--accent-soft) 58%, transparent), transparent 34%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 28%);
+      opacity: 0.9;
     }
 
     .main-stage {
@@ -1290,7 +1429,7 @@
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
-      transition: opacity 140ms ease, visibility 140ms ease;
+      transition: opacity 180ms ease, visibility 180ms ease;
     }
 
     .main-view-layer.active {
@@ -1315,13 +1454,13 @@
       right: 18px;
       top: 18px;
       z-index: var(--z-hover-card);
-      max-width: min(420px, calc(100% - 36px));
-      padding: 14px 16px;
-      border-radius: 14px;
+      max-width: min(360px, calc(100% - 36px));
+      padding: 14px 15px;
+      border-radius: 16px;
       border: 1px solid var(--hover-card-border);
       background: var(--hover-card-bg);
       backdrop-filter: blur(12px) saturate(1.08);
-      box-shadow: var(--hover-card-shadow);
+      box-shadow: var(--hover-card-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.18);
       pointer-events: auto;
       cursor: grab;
       opacity: 1;
@@ -1389,17 +1528,18 @@
 
     .side-panel {
       position: absolute;
-      top: 12px;
-      bottom: 12px;
+      top: 14px;
+      bottom: 14px;
       z-index: var(--z-side-panel);
       width: min(360px, calc(100% - 24px));
       display: none;
       flex-direction: column;
       border: 1px solid var(--side-panel-border);
-      border-radius: 14px;
+      border-radius: 18px;
       overflow: hidden;
       background: var(--side-panel-bg);
-      box-shadow: var(--side-panel-shadow);
+      box-shadow: var(--side-panel-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+      backdrop-filter: blur(18px);
     }
 
     .panel-resizer {
@@ -1426,6 +1566,7 @@
 
     .side-panel.visible {
       display: flex;
+      animation: panel-float-in 150ms ease;
     }
 
     .tree-panel {
@@ -1504,8 +1645,6 @@
       position: absolute;
       inset: 0;
       z-index: 0;
-      display: flex;
-      flex-direction: column;
       overflow: hidden;
       background: transparent;
       box-shadow: none;
@@ -1513,20 +1652,61 @@
       backdrop-filter: none;
     }
 
+    .chart-shell {
+      position: absolute;
+      inset: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .chart-panel.active .chart-shell {
+      animation: panel-float-in 170ms ease;
+    }
+
+    .chart-toolbar {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid color-mix(in srgb, var(--side-panel-border) 86%, transparent);
+      border-radius: 18px;
+      background: color-mix(in srgb, var(--panel-strong) 82%, transparent);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+      backdrop-filter: blur(18px);
+    }
+
     .chart-header {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
-      gap: 12px;
-      padding: 14px 16px 10px;
-      border-bottom: 1px solid var(--section-border);
-      background: color-mix(in srgb, var(--panel) 72%, transparent);
-      backdrop-filter: blur(12px);
+      gap: 16px;
+      padding: 0;
+      border-bottom: none;
+      background: transparent;
+      backdrop-filter: none;
     }
 
     .chart-header-main {
       min-width: 0;
       flex: 1 1 auto;
+      display: grid;
+      gap: 4px;
+    }
+
+    .chart-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .chart-header-note {
+      max-width: 36ch;
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--muted);
     }
 
     .chart-controls {
@@ -1534,14 +1714,14 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 10px;
-      padding: 12px 16px 0;
+      padding: 0;
     }
 
     .chart-status {
-      min-height: 20px;
-      padding: 8px 16px 0;
+      min-height: 18px;
+      padding: 0;
       color: var(--muted);
-      font-size: 13px;
+      font-size: 12px;
     }
 
     .chart-analysis-editor {
@@ -1549,7 +1729,7 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 10px;
-      padding: 8px 16px 0;
+      padding: 0;
     }
 
     .chart-analysis-editor.hidden {
@@ -1573,7 +1753,7 @@
         12px
         minmax(240px, var(--chart-legend-fr, 0.78fr));
       gap: 12px;
-      padding: 12px 16px 16px;
+      padding: 0;
       --chart-visual-fr: 1.45fr;
       --chart-legend-fr: 0.78fr;
     }
@@ -1587,9 +1767,10 @@
     .chart-legend-card {
       min-height: 0;
       border: 1px solid var(--section-border);
-      border-radius: 14px;
+      border-radius: 18px;
       background: var(--section-bg);
       overflow: hidden;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
     }
 
     .chart-visual-card {
@@ -1629,7 +1810,7 @@
       flex-wrap: wrap;
       gap: 6px;
       align-items: center;
-      padding: 10px 12px 0;
+      padding: 12px 12px 0;
     }
 
     .chart-crumb {
@@ -1664,20 +1845,22 @@
       width: 100%;
       height: 100%;
       min-height: 340px;
-      background: color-mix(in srgb, var(--side-body-bg) 76%, transparent);
+      background:
+        radial-gradient(circle at top, color-mix(in srgb, var(--accent-soft) 56%, transparent), transparent 36%),
+        linear-gradient(180deg, color-mix(in srgb, var(--side-body-bg) 86%, transparent), color-mix(in srgb, var(--section-bg) 94%, transparent));
     }
 
     .chart-detail-card {
       position: absolute;
-      top: 12px;
-      right: 12px;
+      left: 12px;
+      bottom: 12px;
       z-index: 2;
-      width: min(360px, calc(100% - 24px));
+      width: min(320px, calc(100% - 24px));
       padding: 12px 14px;
-      border-radius: 14px;
+      border-radius: 16px;
       border: 1px solid var(--hover-card-border);
       background: var(--hover-card-bg);
-      box-shadow: var(--hover-card-shadow);
+      box-shadow: var(--hover-card-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.16);
       backdrop-filter: blur(12px) saturate(1.08);
       pointer-events: none;
     }
@@ -1759,7 +1942,7 @@
     }
 
     .chart-legend-title {
-      padding: 12px 14px 8px;
+      padding: 14px 14px 8px;
       font-size: 14px;
       font-weight: 700;
       color: var(--text);
@@ -1865,9 +2048,10 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 12px 14px;
+      padding: 14px;
       border-bottom: 1px solid var(--side-header-border);
       background: var(--side-header-bg);
+      backdrop-filter: blur(14px);
     }
 
     .side-header > div:first-child {
@@ -1901,7 +2085,7 @@
     .side-body {
       flex: 1 1 auto;
       overflow: auto;
-      padding: 10px;
+      padding: 12px;
       background: var(--side-body-bg);
     }
 
@@ -1914,7 +2098,7 @@
     .tree-list {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 3px;
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     }
 
@@ -1987,8 +2171,8 @@
       align-items: center;
       gap: 8px;
       text-align: left;
-      border-radius: 10px;
-      padding: 7px 10px;
+      border-radius: 12px;
+      padding: 8px 10px;
       overflow: hidden;
     }
 
@@ -2044,12 +2228,16 @@
       width: 100%;
       text-align: left;
       border-radius: 12px;
-      padding: 10px 12px;
+      padding: 11px 12px;
     }
 
     .match-item.dimmed {
       color: var(--tree-entry-dim-text);
       background: var(--tree-entry-dim-bg);
+    }
+
+    .match-item:hover {
+      border-color: var(--control-border-hover);
     }
 
     .match-path {
@@ -2067,22 +2255,25 @@
 
     .source-panel {
       position: absolute;
-      top: 12px;
-      right: 12px;
-      bottom: 12px;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
       z-index: var(--z-source-panel);
-      width: min(960px, calc(100% - 24px));
+      width: auto;
       display: none;
       flex-direction: column;
       border: 1px solid var(--side-panel-border);
-      border-radius: 14px;
+      border-radius: 20px;
       overflow: hidden;
       background: var(--side-panel-bg);
-      box-shadow: var(--side-panel-shadow);
+      box-shadow: var(--side-panel-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+      backdrop-filter: blur(18px);
     }
 
     .source-panel.visible {
       display: flex;
+      animation: panel-float-in 170ms ease;
     }
 
     .source-panel.fullscreen {
@@ -2100,10 +2291,11 @@
       display: flex;
       flex-direction: column;
       align-items: stretch;
-      gap: 8px;
-      padding: 12px 14px;
+      gap: 12px;
+      padding: 14px 16px;
       border-bottom: 1px solid var(--side-header-border);
       background: var(--side-header-bg);
+      backdrop-filter: blur(16px);
     }
 
     .source-header-top {
@@ -2119,6 +2311,15 @@
       flex: 1 1 auto;
     }
 
+    .source-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
     .source-title {
       font-size: 16px;
       font-weight: 700;
@@ -2129,7 +2330,7 @@
     .source-subtitle {
       font-size: 12px;
       color: var(--muted);
-      margin-top: 2px;
+      margin-top: 4px;
       word-break: break-all;
     }
 
@@ -2154,6 +2355,16 @@
       flex-wrap: wrap;
       justify-content: flex-end;
       flex: 0 0 auto;
+    }
+
+    .source-searchbar-shell {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border-radius: 16px;
+      border: 1px solid color-mix(in srgb, var(--section-border) 92%, transparent);
+      background: color-mix(in srgb, var(--section-bg) 88%, transparent);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
     }
 
     .source-searchbar {
@@ -2184,7 +2395,7 @@
       min-height: 18px;
       font-size: 12px;
       color: var(--muted);
-      text-align: right;
+      text-align: left;
     }
 
     .source-search-status.error {
@@ -2232,16 +2443,18 @@
     .source-expand,
     .source-close {
       padding: 8px 12px;
+      border-radius: 11px;
     }
 
     .source-code {
       flex: 1 1 auto;
       overflow: auto;
-      padding: 10px 0;
-      background: #fffdf9;
+      padding: 12px 0 18px;
+      background: var(--source-code-bg);
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-      font-size: 13px;
-      line-height: 1.55;
+      font-size: 13.5px;
+      line-height: 1.58;
+      overscroll-behavior: contain;
     }
 
     .source-panel.fullscreen .source-header {
@@ -2254,9 +2467,14 @@
 
     .source-line {
       display: grid;
-      grid-template-columns: 72px minmax(0, 1fr);
+      grid-template-columns: 78px minmax(0, 1fr);
       gap: 0;
       white-space: pre;
+      min-width: max-content;
+    }
+
+    .source-line:hover {
+      background: color-mix(in srgb, var(--accent-soft) 10%, transparent);
     }
 
     .source-line.active {
@@ -2273,16 +2491,21 @@
 
     .source-lineno {
       user-select: none;
+      position: sticky;
+      left: 0;
+      z-index: 1;
       text-align: right;
       padding: 0 14px 0 0;
-      color: #ad8a63;
+      color: var(--source-line-no);
       border-right: 1px solid var(--line-number-border);
       margin-right: 14px;
+      background: var(--source-code-bg);
     }
 
     .source-code-text {
       overflow: visible;
-      color: #2b2017;
+      color: var(--source-code-text);
+      padding-right: 24px;
     }
 
     .source-find-hit {
@@ -2313,6 +2536,18 @@
       padding: 10px 14px;
       font-size: 13px;
       color: var(--muted);
+      background: color-mix(in srgb, var(--panel-strong) 84%, transparent);
+    }
+
+    @keyframes panel-float-in {
+      from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.992);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
     }
 
     .statusbar strong {
@@ -2364,10 +2599,13 @@
 
       .toolbar {
         grid-template-columns: 1fr;
+        min-height: 0;
+        padding: 16px 48px 16px 14px;
       }
 
       h1 {
         font-size: 26px;
+        max-width: none;
       }
 
       .view-switcher {
@@ -2384,7 +2622,7 @@
       }
 
       .toolbar.collapsed {
-        padding: 12px 12px 34px;
+        padding: 10px 48px 10px 12px;
       }
 
       input {
@@ -2412,8 +2650,13 @@
         width: min(100%, calc(100vw - 40px));
       }
 
+      .advanced-popover-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
       .advanced-section {
         width: 100%;
+        min-height: 0;
       }
 
       .filter-group {
@@ -2429,6 +2672,18 @@
 
       .title-meta-row {
         gap: 4px 10px;
+      }
+
+      .chart-shell {
+        inset: 12px;
+      }
+
+      .chart-header {
+        flex-direction: column;
+      }
+
+      .chart-header-note {
+        max-width: none;
       }
 
       .chart-layout {
@@ -2462,6 +2717,21 @@
         top: auto;
         bottom: 12px;
         max-width: none;
+      }
+
+      .source-panel {
+        top: 12px;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+      }
+
+      .source-searchbar-shell {
+        padding: 8px;
+      }
+
+      .source-search-main {
+        flex-wrap: wrap;
       }
 
       .zen-overlay {
@@ -2547,97 +2817,134 @@
             <div class="advanced-group" data-ui-name="advanced-group">
               <button id="advanced-controls-btn" class="advanced-toggle" type="button" aria-expanded="false" aria-haspopup="dialog" data-ui-name="advanced-btn">Advanced</button>
               <div class="advanced-popover hidden" id="advanced-popover" role="dialog" aria-label="Advanced viewer controls" data-ui-name="advanced-popover">
-                <div class="advanced-section" data-ui-name="theme-layout-section">
-                  <div class="metric-group" data-ui-name="theme-group">
-                    <label class="metric-inline-label" for="theme-select">Theme:</label>
-                    <select id="theme-select" aria-label="Viewer theme" data-ui-name="theme-select">
-                      <option value="warm-paper">Warm Paper</option>
-                      <option value="vscode-dark">VSCode Dark</option>
-                      <option value="github-light">GitHub Light</option>
-                      <option value="tokyo-night">Tokyo Night</option>
-                      <option value="nord">Nord</option>
-                      <option value="solarized-light">Solarized Light</option>
-                      <option value="catppuccin-latte">Catppuccin Latte</option>
-                    </select>
-                  </div>
+                <div class="advanced-popover-header" data-ui-name="advanced-popover-header">
+                  <div class="advanced-popover-kicker">Workspace Controls</div>
+                  <div class="advanced-popover-title">Advanced</div>
+                  <div class="advanced-popover-description">Tune layout, theme, weighted sizing, and signal analysis without leaving the current hierarchy view.</div>
                 </div>
-                <div class="advanced-section" data-ui-name="layout-section">
-                  <div class="metric-group" data-ui-name="layout-group">
-                    <label class="metric-inline-label" for="layout-select">Layout:</label>
-                    <select
-                      id="layout-select"
-                      aria-label="Treemap layout mode"
-                      title="Classic keeps the previous visual style. Accurate uses an ordered slicing layout with proportional area."
-                      data-ui-name="layout-select"
-                    >
-                      <option value="classic">Classic</option>
-                      <option value="accurate">Accurate</option>
-                    </select>
+                <div class="advanced-popover-grid" data-ui-name="advanced-popover-grid">
+                  <div class="advanced-section" data-ui-name="theme-layout-section">
+                    <div class="advanced-section-copy">
+                      <div class="advanced-section-title">Appearance</div>
+                      <div class="advanced-section-hint">Choose the workspace tone.</div>
+                    </div>
+                    <div class="advanced-section-controls">
+                      <div class="metric-group" data-ui-name="theme-group">
+                        <label class="metric-inline-label" for="theme-select">Theme:</label>
+                        <select id="theme-select" aria-label="Viewer theme" data-ui-name="theme-select">
+                          <option value="warm-paper">Warm Paper</option>
+                          <option value="vscode-dark">VSCode Dark</option>
+                          <option value="github-light">GitHub Light</option>
+                          <option value="tokyo-night">Tokyo Night</option>
+                          <option value="nord">Nord</option>
+                          <option value="solarized-light">Solarized Light</option>
+                          <option value="catppuccin-latte">Catppuccin Latte</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
-                  <div class="metric-group" data-ui-name="decomp-group">
-                    <label class="metric-inline-label" for="decomposition-select">Decomp:</label>
-                    <select
-                      id="decomposition-select"
-                      aria-label="Treemap decomposition mode"
-                      title="Subtree Only keeps the old clean hierarchy view. Subtree + Local Self reserves explicit area for the current module's own local contribution."
-                      data-ui-name="decomp-select"
-                    >
-                      <option value="subtree">Subtree Only</option>
-                      <option value="self">Subtree + Local Self</option>
-                    </select>
+                  <div class="advanced-section" data-ui-name="layout-section">
+                    <div class="advanced-section-copy">
+                      <div class="advanced-section-title">Treemap Layout</div>
+                      <div class="advanced-section-hint">Switch between classic composition and proportional slicing.</div>
+                    </div>
+                    <div class="advanced-section-controls">
+                      <div class="metric-group" data-ui-name="layout-group">
+                        <label class="metric-inline-label" for="layout-select">Layout:</label>
+                        <select
+                          id="layout-select"
+                          aria-label="Treemap layout mode"
+                          title="Classic keeps the previous visual style. Accurate uses an ordered slicing layout with proportional area."
+                          data-ui-name="layout-select"
+                        >
+                          <option value="classic">Classic</option>
+                          <option value="accurate">Accurate</option>
+                        </select>
+                      </div>
+                      <div class="metric-group" data-ui-name="decomp-group">
+                        <label class="metric-inline-label" for="decomposition-select">Decomp:</label>
+                        <select
+                          id="decomposition-select"
+                          aria-label="Treemap decomposition mode"
+                          title="Subtree Only keeps the old clean hierarchy view. Subtree + Local Self reserves explicit area for the current module's own local contribution."
+                          data-ui-name="decomp-select"
+                        >
+                          <option value="subtree">Subtree Only</option>
+                          <option value="self">Subtree + Local Self</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div class="advanced-section hidden" id="weighted-metric-group" data-ui-name="weighted-sizing-section">
-                  <div class="metric-group" data-ui-name="weighted-var-group">
-                    <label class="metric-inline-label" for="weighted-variable-input">Var:</label>
-                    <input id="weighted-variable-input" type="number" min="0" step="0.05" inputmode="decimal" value="1.00" data-ui-name="weighted-var-input" />
+                  <div class="advanced-section advanced-section-wide hidden" id="weighted-metric-group" data-ui-name="weighted-sizing-section">
+                    <div class="advanced-section-copy">
+                      <div class="advanced-section-title">Weighted Signal Bits</div>
+                      <div class="advanced-section-hint">Control how much variables and nets contribute to subtree area.</div>
+                    </div>
+                    <div class="advanced-section-controls">
+                      <div class="metric-group" data-ui-name="weighted-var-group">
+                        <label class="metric-inline-label" for="weighted-variable-input">Var:</label>
+                        <input id="weighted-variable-input" type="number" min="0" step="0.05" inputmode="decimal" value="1.00" data-ui-name="weighted-var-input" />
+                      </div>
+                      <div class="metric-group" data-ui-name="weighted-net-group">
+                        <label class="metric-inline-label" for="weighted-net-input">Net:</label>
+                        <input id="weighted-net-input" type="number" min="0" step="0.05" inputmode="decimal" value="0.15" data-ui-name="weighted-net-input" />
+                      </div>
+                    </div>
                   </div>
-                  <div class="metric-group" data-ui-name="weighted-net-group">
-                    <label class="metric-inline-label" for="weighted-net-input">Net:</label>
-                    <input id="weighted-net-input" type="number" min="0" step="0.05" inputmode="decimal" value="0.15" data-ui-name="weighted-net-input" />
+                  <div class="advanced-section" data-ui-name="analysis-section">
+                    <div class="advanced-section-copy">
+                      <div class="advanced-section-title">Analysis Overlay</div>
+                      <div class="advanced-section-hint">Choose which module statistic should tint the current view.</div>
+                    </div>
+                    <div class="advanced-section-controls">
+                      <div class="metric-group" data-ui-name="analysis-group">
+                        <label class="metric-inline-label" for="analysis-select">Analysis:</label>
+                        <select id="analysis-select" aria-label="Signal analysis mode" data-ui-name="analysis-select">
+                          <option value="none">None</option>
+                          <option value="ratio">Pattern Ratio</option>
+                          <option value="count">Pattern Count</option>
+                          <option value="loc">Module LOC</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div class="advanced-section" data-ui-name="analysis-section">
-                  <div class="metric-group" data-ui-name="analysis-group">
-                    <label class="metric-inline-label" for="analysis-select">Analysis:</label>
-                    <select id="analysis-select" aria-label="Signal analysis mode" data-ui-name="analysis-select">
-                      <option value="none">None</option>
-                      <option value="ratio">Pattern Ratio</option>
-                      <option value="count">Pattern Count</option>
-                      <option value="loc">Module LOC</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="advanced-section hidden" id="analysis-pattern-group" data-ui-name="analysis-pattern-section">
-                  <div class="metric-group" data-ui-name="analysis-mode-group">
-                    <label class="metric-inline-label" for="analysis-pattern-mode-select">Mode:</label>
-                    <select id="analysis-pattern-mode-select" aria-label="Signal pattern mode" data-ui-name="analysis-mode-select">
-                      <option value="wildcard">Wildcard</option>
-                      <option value="text">Text</option>
-                      <option value="regex">Regex</option>
-                    </select>
-                  </div>
-                  <div class="metric-group" data-ui-name="analysis-pattern-group">
-                    <label class="metric-inline-label" for="analysis-pattern-input">Pattern:</label>
-                    <input
-                      id="analysis-pattern-input"
-                      type="search"
-                      placeholder="Signal pattern: _GEN* ; foo_*"
-                      title="Use ';' to combine multiple signal-name patterns. This matches internal signals only."
-                      data-ui-name="analysis-pattern-input"
-                    />
-                  </div>
-                  <div class="metric-group" data-ui-name="analysis-gray-group">
-                    <label class="metric-inline-label" for="analysis-gray-threshold-input">Gray &lt;</label>
-                    <input
-                      id="analysis-gray-threshold-input"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      inputmode="decimal"
-                      value="0"
-                      data-ui-name="analysis-gray-input"
-                    />
+                  <div class="advanced-section advanced-section-wide hidden" id="analysis-pattern-group" data-ui-name="analysis-pattern-section">
+                    <div class="advanced-section-copy">
+                      <div class="advanced-section-title">Pattern Analysis</div>
+                      <div class="advanced-section-hint">Match internal signal names with wildcard, text, or regex, then gray out low-value modules.</div>
+                    </div>
+                    <div class="advanced-section-controls">
+                      <div class="metric-group" data-ui-name="analysis-mode-group">
+                        <label class="metric-inline-label" for="analysis-pattern-mode-select">Mode:</label>
+                        <select id="analysis-pattern-mode-select" aria-label="Signal pattern mode" data-ui-name="analysis-mode-select">
+                          <option value="wildcard">Wildcard</option>
+                          <option value="text">Text</option>
+                          <option value="regex">Regex</option>
+                        </select>
+                      </div>
+                      <div class="metric-group" data-ui-name="analysis-pattern-group">
+                        <label class="metric-inline-label" for="analysis-pattern-input">Pattern:</label>
+                        <input
+                          id="analysis-pattern-input"
+                          type="search"
+                          placeholder="Signal pattern: _GEN* ; foo_*"
+                          title="Use ';' to combine multiple signal-name patterns. This matches internal signals only."
+                          data-ui-name="analysis-pattern-input"
+                        />
+                      </div>
+                      <div class="metric-group" data-ui-name="analysis-gray-group">
+                        <label class="metric-inline-label" for="analysis-gray-threshold-input">Gray &lt;</label>
+                        <input
+                          id="analysis-gray-threshold-input"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          inputmode="decimal"
+                          value="0"
+                          data-ui-name="analysis-gray-input"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2707,83 +3014,89 @@
           <canvas id="treemap" data-ui-name="treemap-canvas"></canvas>
         </div>
         <section class="main-view-layer chart-panel" id="chart-panel" data-ui-name="chart-panel" data-ui-label="always">
-          <div class="chart-header">
-            <div class="chart-header-main">
-              <div class="side-title">Hierarchy Charts</div>
-              <div class="side-subtitle" id="chart-panel-subtitle"></div>
-            </div>
-          </div>
-          <div class="chart-controls" data-ui-name="chart-controls">
-            <div class="metric-group" data-ui-name="chart-mode-group">
-              <label class="metric-inline-label" for="chart-mode-select">Mode:</label>
-              <select id="chart-mode-select" aria-label="Chart mode" data-ui-name="chart-mode-select">
-                <option value="weighted_bits">Weighted Bits</option>
-                <option value="analysis">Analysis Pattern</option>
-              </select>
-            </div>
-            <div class="metric-group" data-ui-name="chart-level-group">
-              <label class="metric-inline-label" for="chart-level-select">Level:</label>
-              <select id="chart-level-select" aria-label="Chart hierarchy level" data-ui-name="chart-level-select"></select>
-            </div>
-          </div>
-          <div class="chart-analysis-editor hidden" id="chart-analysis-editor" data-ui-name="chart-analysis-editor">
-            <div class="metric-group" data-ui-name="chart-analysis-select-group">
-              <label class="metric-inline-label" for="chart-analysis-select">Analysis:</label>
-              <select id="chart-analysis-select" aria-label="Chart signal analysis mode" data-ui-name="chart-analysis-select">
-                <option value="none">None</option>
-                <option value="ratio">Pattern Ratio</option>
-                <option value="count">Pattern Count</option>
-                <option value="loc">Module LOC</option>
-              </select>
-            </div>
-            <div class="metric-group" data-ui-name="chart-analysis-mode-group">
-              <label class="metric-inline-label" for="chart-analysis-pattern-mode-select">Mode:</label>
-              <select id="chart-analysis-pattern-mode-select" aria-label="Chart signal pattern mode" data-ui-name="chart-analysis-pattern-mode-select">
-                <option value="wildcard">Wildcard</option>
-                <option value="text">Text</option>
-                <option value="regex">Regex</option>
-              </select>
-            </div>
-            <div class="metric-group" data-ui-name="chart-analysis-pattern-group">
-              <label class="metric-inline-label" for="chart-analysis-pattern-input">Pattern:</label>
-              <input
-                id="chart-analysis-pattern-input"
-                type="search"
-                placeholder="Signal pattern: _GEN* ; foo_*"
-                title="Use ';' to combine multiple signal-name patterns. This matches internal signals only."
-                data-ui-name="chart-analysis-pattern-input"
-              />
-            </div>
-            <div class="metric-group" data-ui-name="chart-analysis-gray-group">
-              <label class="metric-inline-label" for="chart-analysis-gray-threshold-input">Gray &lt;</label>
-              <input
-                id="chart-analysis-gray-threshold-input"
-                type="number"
-                min="0"
-                step="0.01"
-                inputmode="decimal"
-                value="0"
-                data-ui-name="chart-analysis-gray-threshold-input"
-              />
-            </div>
-          </div>
-          <div class="chart-status" id="chart-status" data-ui-name="chart-status"></div>
-          <div class="chart-layout">
-            <div class="chart-visual-card" data-ui-name="chart-visual-card">
-              <div class="chart-crumbs" id="chart-crumbs" data-ui-name="chart-crumbs"></div>
-              <div class="chart-visual-shell" data-ui-name="chart-visual-shell">
-                <div class="chart-detail-card hidden" id="chart-detail-card" data-ui-name="chart-detail-card">
-                  <div class="chart-detail-path" id="chart-detail-path"></div>
-                  <div class="chart-detail-title" id="chart-detail-title"></div>
-                  <div class="chart-detail-meta" id="chart-detail-meta"></div>
+          <div class="chart-shell" data-ui-name="chart-shell">
+            <div class="chart-toolbar" data-ui-name="chart-toolbar">
+              <div class="chart-header">
+                <div class="chart-header-main">
+                  <div class="chart-kicker">Chart Workspace</div>
+                  <div class="side-title">Hierarchy Charts</div>
+                  <div class="side-subtitle" id="chart-panel-subtitle"></div>
                 </div>
-                <div class="chart-visual" id="chart-visual"></div>
+                <div class="chart-header-note">Charts follow the current root, filter, and hierarchy depth context.</div>
               </div>
+              <div class="chart-controls" data-ui-name="chart-controls">
+                <div class="metric-group" data-ui-name="chart-mode-group">
+                  <label class="metric-inline-label" for="chart-mode-select">Mode:</label>
+                  <select id="chart-mode-select" aria-label="Chart mode" data-ui-name="chart-mode-select">
+                    <option value="weighted_bits">Weighted Bits</option>
+                    <option value="analysis">Analysis Pattern</option>
+                  </select>
+                </div>
+                <div class="metric-group" data-ui-name="chart-level-group">
+                  <label class="metric-inline-label" for="chart-level-select">Level:</label>
+                  <select id="chart-level-select" aria-label="Chart hierarchy level" data-ui-name="chart-level-select"></select>
+                </div>
+              </div>
+              <div class="chart-analysis-editor hidden" id="chart-analysis-editor" data-ui-name="chart-analysis-editor">
+                <div class="metric-group" data-ui-name="chart-analysis-select-group">
+                  <label class="metric-inline-label" for="chart-analysis-select">Analysis:</label>
+                  <select id="chart-analysis-select" aria-label="Chart signal analysis mode" data-ui-name="chart-analysis-select">
+                    <option value="none">None</option>
+                    <option value="ratio">Pattern Ratio</option>
+                    <option value="count">Pattern Count</option>
+                    <option value="loc">Module LOC</option>
+                  </select>
+                </div>
+                <div class="metric-group" data-ui-name="chart-analysis-mode-group">
+                  <label class="metric-inline-label" for="chart-analysis-pattern-mode-select">Mode:</label>
+                  <select id="chart-analysis-pattern-mode-select" aria-label="Chart signal pattern mode" data-ui-name="chart-analysis-pattern-mode-select">
+                    <option value="wildcard">Wildcard</option>
+                    <option value="text">Text</option>
+                    <option value="regex">Regex</option>
+                  </select>
+                </div>
+                <div class="metric-group" data-ui-name="chart-analysis-pattern-group">
+                  <label class="metric-inline-label" for="chart-analysis-pattern-input">Pattern:</label>
+                  <input
+                    id="chart-analysis-pattern-input"
+                    type="search"
+                    placeholder="Signal pattern: _GEN* ; foo_*"
+                    title="Use ';' to combine multiple signal-name patterns. This matches internal signals only."
+                    data-ui-name="chart-analysis-pattern-input"
+                  />
+                </div>
+                <div class="metric-group" data-ui-name="chart-analysis-gray-group">
+                  <label class="metric-inline-label" for="chart-analysis-gray-threshold-input">Gray &lt;</label>
+                  <input
+                    id="chart-analysis-gray-threshold-input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputmode="decimal"
+                    value="0"
+                    data-ui-name="chart-analysis-gray-threshold-input"
+                  />
+                </div>
+              </div>
+              <div class="chart-status" id="chart-status" data-ui-name="chart-status"></div>
             </div>
-            <div class="chart-layout-divider" id="chart-layout-divider" aria-hidden="true" data-ui-name="chart-layout-divider"></div>
-            <div class="chart-legend-card" data-ui-name="chart-legend-card">
-              <div class="chart-legend-title">Slices</div>
-              <div class="chart-legend" id="chart-legend"></div>
+            <div class="chart-layout">
+              <div class="chart-visual-card" data-ui-name="chart-visual-card">
+                <div class="chart-crumbs" id="chart-crumbs" data-ui-name="chart-crumbs"></div>
+                <div class="chart-visual-shell" data-ui-name="chart-visual-shell">
+                  <div class="chart-detail-card hidden" id="chart-detail-card" data-ui-name="chart-detail-card">
+                    <div class="chart-detail-path" id="chart-detail-path"></div>
+                    <div class="chart-detail-title" id="chart-detail-title"></div>
+                    <div class="chart-detail-meta" id="chart-detail-meta"></div>
+                  </div>
+                  <div class="chart-visual" id="chart-visual"></div>
+                </div>
+              </div>
+              <div class="chart-layout-divider" id="chart-layout-divider" aria-hidden="true" data-ui-name="chart-layout-divider"></div>
+              <div class="chart-legend-card" data-ui-name="chart-legend-card">
+                <div class="chart-legend-title">Slices</div>
+                <div class="chart-legend" id="chart-legend"></div>
+              </div>
             </div>
           </div>
         </section>
@@ -2835,6 +3148,7 @@
         <div class="source-header">
           <div class="source-header-top">
             <div class="source-header-main">
+              <div class="source-kicker">Source Reader</div>
               <div class="source-title" id="source-title" data-ui-name="source-title"></div>
               <div class="source-subtitle" id="source-subtitle" data-ui-name="source-subtitle"></div>
               <div class="source-status hidden" id="source-status" data-ui-name="source-status"></div>
@@ -2845,44 +3159,46 @@
               <button class="source-close" id="close-source-btn" type="button" data-ui-name="close-source-btn">Close</button>
             </div>
           </div>
-          <div class="source-searchbar" data-ui-name="source-searchbar">
-            <div class="metric-group" data-ui-name="source-search-mode-group">
-              <label class="metric-inline-label" for="source-search-mode-select">Search:</label>
-              <select id="source-search-mode-select" aria-label="Source search mode" data-ui-name="source-search-mode-select">
-                <option value="wildcard">Wildcard</option>
-                <option value="regex">Regex</option>
-              </select>
-            </div>
-            <div class="source-search-main" data-ui-name="source-search-main">
-              <input
-                id="source-search-input"
-                class="source-search-input"
-                type="search"
-                placeholder="Search current view: foo_*"
-                title="Search the currently rendered source. Enter jumps to next match, Shift+Enter jumps to previous. Supports wildcard and regex."
-                data-ui-name="source-search-input"
-              />
-              <div class="source-search-actions" data-ui-name="source-search-actions">
-                <button
-                  id="source-search-prev-btn"
-                  class="source-nav-btn"
-                  type="button"
-                  aria-label="Previous source search match"
-                  title="Previous match (Shift+Enter)"
-                  data-ui-name="source-search-prev-btn"
-                >↑</button>
-                <button
-                  id="source-search-next-btn"
-                  class="source-nav-btn"
-                  type="button"
-                  aria-label="Next source search match"
-                  title="Next match (Enter)"
-                  data-ui-name="source-search-next-btn"
-                >↓</button>
+          <div class="source-searchbar-shell" data-ui-name="source-searchbar-shell">
+            <div class="source-searchbar" data-ui-name="source-searchbar">
+              <div class="metric-group" data-ui-name="source-search-mode-group">
+                <label class="metric-inline-label" for="source-search-mode-select">Search:</label>
+                <select id="source-search-mode-select" aria-label="Source search mode" data-ui-name="source-search-mode-select">
+                  <option value="wildcard">Wildcard</option>
+                  <option value="regex">Regex</option>
+                </select>
+              </div>
+              <div class="source-search-main" data-ui-name="source-search-main">
+                <input
+                  id="source-search-input"
+                  class="source-search-input"
+                  type="search"
+                  placeholder="Search current view: foo_*"
+                  title="Search the currently rendered source. Enter jumps to next match, Shift+Enter jumps to previous. Supports wildcard and regex."
+                  data-ui-name="source-search-input"
+                />
+                <div class="source-search-actions" data-ui-name="source-search-actions">
+                  <button
+                    id="source-search-prev-btn"
+                    class="source-nav-btn"
+                    type="button"
+                    aria-label="Previous source search match"
+                    title="Previous match (Shift+Enter)"
+                    data-ui-name="source-search-prev-btn"
+                  >↑</button>
+                  <button
+                    id="source-search-next-btn"
+                    class="source-nav-btn"
+                    type="button"
+                    aria-label="Next source search match"
+                    title="Next match (Enter)"
+                    data-ui-name="source-search-next-btn"
+                  >↓</button>
+                </div>
               </div>
             </div>
+            <div class="source-search-status" id="source-search-status" data-ui-name="source-search-status">Search current view</div>
           </div>
-          <div class="source-search-status" id="source-search-status" data-ui-name="source-search-status">Search current view</div>
         </div>
         <div class="source-code" id="source-code" data-ui-name="source-code"></div>
       </aside>
