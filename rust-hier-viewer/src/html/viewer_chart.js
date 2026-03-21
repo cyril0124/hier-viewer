@@ -151,7 +151,6 @@
     const chartAnalysisSelect = document.getElementById("chart-analysis-select");
     const chartAnalysisPatternModeSelect = document.getElementById("chart-analysis-pattern-mode-select");
     const chartAnalysisPatternInput = document.getElementById("chart-analysis-pattern-input");
-    const chartAnalysisGrayThresholdInput = document.getElementById("chart-analysis-gray-threshold-input");
     const chartAnalysisPatternModeField = chartAnalysisPatternModeSelect
       ? chartAnalysisPatternModeSelect.closest(".metric-group")
       : null;
@@ -176,7 +175,6 @@
       !chartAnalysisSelect ||
       !chartAnalysisPatternModeSelect ||
       !chartAnalysisPatternInput ||
-      !chartAnalysisGrayThresholdInput ||
       !chartStatus ||
       !chartCrumbs ||
       !chartDetailCard ||
@@ -254,7 +252,6 @@
         state.analysisMode,
         state.analysisPatternMode,
         state.analysisPattern,
-        state.analysisGrayThreshold,
         state.search,
         state.filterScope,
         state.filterMode,
@@ -301,7 +298,6 @@
         state.analysisMode,
         state.analysisPatternMode,
         state.analysisPattern,
-        state.analysisGrayThreshold,
         state.search,
         state.filterScope,
         state.filterMode,
@@ -489,9 +485,6 @@
       chartAnalysisSelect.value = state.analysisMode;
       chartAnalysisPatternModeSelect.value = state.analysisPatternMode;
       chartAnalysisPatternInput.value = state.analysisPattern;
-      chartAnalysisGrayThresholdInput.value = api.formatMetricValue(
-        Math.max(0, state.analysisGrayThreshold || 0)
-      );
       const usesSignalPattern = state.analysisMode === "count" || state.analysisMode === "ratio";
       if (chartAnalysisPatternModeField) {
         chartAnalysisPatternModeField.classList.toggle("hidden", !usesSignalPattern);
@@ -501,11 +494,8 @@
       }
       chartAnalysisPatternModeSelect.disabled = !usesSignalPattern;
       chartAnalysisPatternInput.disabled = !usesSignalPattern;
-      chartAnalysisGrayThresholdInput.disabled = state.analysisMode === "none";
       chartAnalysisPatternModeSelect.title = "Choose wildcard, text, or regex matching for signal names.";
       chartAnalysisPatternInput.title = "Use ';' to combine multiple signal-name patterns. Example: _GEN* ; foo_*";
-      chartAnalysisGrayThresholdInput.step =
-        state.analysisMode === "count" || state.analysisMode === "loc" ? "1" : "0.01";
       chartLevelSelect.title = "Level follows treemap semantics: descend from the current root up to this depth, and keep leaf nodes that end earlier.";
       syncLevelOptions();
       applyChartSplitRatio();
@@ -576,7 +566,6 @@
         state.analysisMode,
         state.analysisPatternMode,
         state.analysisPattern,
-        state.analysisGrayThreshold,
         state.theme,
         state.weightedVariableWeight,
         state.weightedNetWeight,
@@ -1611,23 +1600,6 @@
       invalidate();
       api.savePersistedState();
       api.requestDraw();
-    });
-
-    chartAnalysisGrayThresholdInput.addEventListener("input", () => {
-      const parsed = Number(chartAnalysisGrayThresholdInput.value);
-      state.analysisGrayThreshold = Number.isFinite(parsed) && parsed >= 0
-        ? parsed
-        : Math.max(0, state.analysisGrayThreshold || 0);
-      api.syncAnalysisControls();
-      invalidate();
-      api.savePersistedState();
-      api.requestDraw();
-    });
-
-    chartAnalysisGrayThresholdInput.addEventListener("blur", () => {
-      chartAnalysisGrayThresholdInput.value = api.formatMetricValue(
-        Math.max(0, state.analysisGrayThreshold || 0)
-      );
     });
 
     if (typeof ResizeObserver === "function") {

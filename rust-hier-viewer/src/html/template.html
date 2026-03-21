@@ -815,11 +815,13 @@
     }
 
     .view-switch-btn {
+      position: relative;
       min-width: 74px;
       padding: 7px 11px;
       font-size: 12px;
       line-height: 1.1;
       border-radius: 11px;
+      overflow: hidden;
     }
 
     .view-switch-btn.active {
@@ -827,6 +829,49 @@
       background: var(--control-bg-active);
       color: var(--control-text-active);
       box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent);
+    }
+
+    .view-switch-btn.zen-mode-btn {
+      border-color: color-mix(in srgb, var(--accent) 32%, var(--control-border));
+      background:
+        repeating-linear-gradient(
+          -45deg,
+          color-mix(in srgb, var(--accent) 12%, transparent) 0 7px,
+          transparent 7px 14px
+        ),
+        color-mix(in srgb, var(--control-bg) 90%, var(--panel-strong) 10%);
+      box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent),
+        0 0 0 1px color-mix(in srgb, var(--panel) 18%, transparent);
+    }
+
+    .view-switch-btn.zen-mode-btn:hover {
+      background:
+        repeating-linear-gradient(
+          -45deg,
+          color-mix(in srgb, var(--accent) 17%, transparent) 0 7px,
+          transparent 7px 14px
+        ),
+        color-mix(in srgb, var(--control-bg-hover) 88%, var(--panel-strong) 12%);
+    }
+
+    .view-switch-btn.zen-mode-btn.active {
+      border-color: color-mix(in srgb, var(--accent) 64%, var(--control-border-active));
+      background:
+        repeating-linear-gradient(
+          -45deg,
+          color-mix(in srgb, var(--control-text-active) 12%, transparent) 0 7px,
+          transparent 7px 14px
+        ),
+        linear-gradient(
+          180deg,
+          color-mix(in srgb, var(--control-bg-active) 94%, white 6%),
+          color-mix(in srgb, var(--control-bg-active) 100%, transparent)
+        );
+      color: var(--control-text-active);
+      box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--control-text-active) 14%, transparent),
+        0 10px 24px color-mix(in srgb, var(--accent) 18%, transparent);
     }
 
     .zen-overlay {
@@ -1148,12 +1193,6 @@
 
     #analysis-pattern-group input {
       min-width: 220px;
-    }
-
-    #analysis-gray-threshold-input {
-      width: 96px;
-      min-width: 96px;
-      text-align: right;
     }
 
     .filter-group {
@@ -2367,11 +2406,21 @@
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
     }
 
+    .source-search-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 44%);
+      gap: 12px 14px;
+      align-items: start;
+    }
+
     .source-searchbar {
-      display: flex;
+      min-width: 0;
+      width: min(100%, 560px);
+      justify-self: end;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
       align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
+      gap: 8px 10px;
     }
 
     .source-searchbar .metric-group {
@@ -2400,6 +2449,12 @@
 
     .source-search-status.error {
       color: #c53a2f;
+    }
+
+    .source-search-footer {
+      display: grid;
+      gap: 8px;
+      min-width: 0;
     }
 
     .source-search-actions {
@@ -2446,6 +2501,206 @@
       border-radius: 11px;
     }
 
+    .source-bookmark-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 8px;
+      min-height: 22px;
+    }
+
+    .source-bookmark-label {
+      flex: 0 0 auto;
+      padding-top: 2px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .source-bookmark-list {
+      min-width: 0;
+      flex: 1 1 auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: stretch;
+    }
+
+    .source-bookmark-empty {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .source-bookmark-card {
+      min-width: 0;
+      max-width: min(100%, 320px);
+      display: flex;
+      align-items: stretch;
+      border-radius: 14px;
+      border: 1px solid var(--control-border);
+      background: color-mix(in srgb, var(--control-bg) 94%, transparent);
+      overflow: hidden;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    }
+
+    .source-bookmark-card.current {
+      border-color: color-mix(in srgb, var(--accent) 52%, transparent);
+      box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--accent-soft) 44%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    }
+
+    .source-bookmark-card.editing {
+      max-width: min(100%, 420px);
+      display: grid;
+      gap: 8px;
+      padding: 9px 10px;
+      background: color-mix(in srgb, var(--section-bg) 92%, transparent);
+    }
+
+    .source-bookmark-main {
+      min-width: 0;
+      flex: 1 1 auto;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      padding: 7px 9px;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
+      text-align: left;
+    }
+
+    .source-bookmark-main:hover {
+      background: color-mix(in srgb, var(--control-bg-hover) 84%, transparent);
+    }
+
+    .source-bookmark-main.current {
+      background: color-mix(in srgb, var(--accent-soft) 56%, var(--control-bg));
+    }
+
+    .source-bookmark-line {
+      align-self: start;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 36px;
+      padding: 4px 6px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--accent-soft) 54%, transparent);
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      line-height: 1;
+    }
+
+    .source-bookmark-copy {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+      align-content: center;
+    }
+
+    .source-bookmark-title {
+      min-width: 0;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.25;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .source-bookmark-meta {
+      min-width: 0;
+      font-size: 11px;
+      line-height: 1.25;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .source-bookmark-actions {
+      flex: 0 0 auto;
+      display: grid;
+      grid-template-rows: 1fr 1fr;
+      min-width: 52px;
+      border-left: 1px solid color-mix(in srgb, var(--control-border) 88%, transparent);
+      background: color-mix(in srgb, var(--panel) 46%, transparent);
+    }
+
+    .source-bookmark-action {
+      flex: 0 0 auto;
+      min-width: 52px;
+      padding: 0 8px;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .source-bookmark-action + .source-bookmark-action {
+      border-top: 1px solid color-mix(in srgb, var(--control-border) 84%, transparent);
+    }
+
+    .source-bookmark-action:hover {
+      background: color-mix(in srgb, var(--control-bg-hover) 74%, transparent);
+      color: var(--text);
+    }
+
+    .source-bookmark-action.remove:hover {
+      color: #c53a2f;
+    }
+
+    .source-bookmark-editor {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .source-bookmark-input {
+      min-width: 0;
+      width: 100%;
+      padding: 7px 10px;
+      border-radius: 10px;
+    }
+
+    .source-bookmark-save,
+    .source-bookmark-cancel {
+      padding: 7px 10px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .source-bookmark-editor-hint {
+      min-width: 0;
+      font-size: 11px;
+      line-height: 1.35;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .source-code {
       flex: 1 1 auto;
       overflow: auto;
@@ -2467,7 +2722,7 @@
 
     .source-line {
       display: grid;
-      grid-template-columns: 78px minmax(0, 1fr);
+      grid-template-columns: 92px minmax(0, 1fr);
       gap: 0;
       white-space: pre;
       min-width: max-content;
@@ -2489,23 +2744,79 @@
       background: color-mix(in srgb, var(--accent-soft) 42%, var(--line-highlight-bg));
     }
 
+    .source-line.bookmarked:not(.active):not(.search-current) {
+      background: color-mix(in srgb, var(--accent-soft) 14%, transparent);
+    }
+
+    .source-line.bookmark-jump {
+      background: color-mix(in srgb, var(--accent-soft) 54%, var(--line-highlight-bg));
+    }
+
     .source-lineno {
       user-select: none;
       position: sticky;
       left: 0;
       z-index: 1;
-      text-align: right;
-      padding: 0 14px 0 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      width: 100%;
+      padding: 0 12px 0 0;
       color: var(--source-line-no);
       border-right: 1px solid var(--line-number-border);
       margin-right: 14px;
       background: var(--source-code-bg);
+      border-top: none;
+      border-bottom: none;
+      border-left: none;
+      font: inherit;
+      cursor: pointer;
     }
 
     .source-code-text {
       overflow: visible;
       color: var(--source-code-text);
       padding-right: 24px;
+    }
+
+    .source-lineno:hover {
+      color: var(--text);
+      background: color-mix(in srgb, var(--accent-soft) 12%, var(--source-code-bg));
+    }
+
+    .source-lineno:hover .source-bookmark-dot,
+    .source-lineno:focus-visible .source-bookmark-dot {
+      opacity: 0.42;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--source-line-no) 72%, transparent);
+    }
+
+    .source-lineno.bookmarked {
+      color: var(--text);
+    }
+
+    .source-lineno-value {
+      display: inline-block;
+      min-width: 0;
+      text-align: right;
+    }
+
+    .source-bookmark-dot {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 8px;
+      border-radius: 999px;
+      background: transparent;
+      box-shadow: inset 0 0 0 1px transparent;
+      opacity: 0;
+      transition: opacity 120ms ease, background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+    }
+
+    .source-lineno.bookmarked .source-bookmark-dot {
+      opacity: 1;
+      background: var(--accent);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent);
+      transform: scale(1.08);
     }
 
     .source-find-hit {
@@ -2730,6 +3041,16 @@
         padding: 8px;
       }
 
+      .source-search-row {
+        grid-template-columns: 1fr;
+      }
+
+      .source-searchbar {
+        width: 100%;
+        justify-self: stretch;
+        grid-template-columns: 1fr;
+      }
+
       .source-search-main {
         flex-wrap: wrap;
       }
@@ -2911,7 +3232,7 @@
                   <div class="advanced-section advanced-section-wide hidden" id="analysis-pattern-group" data-ui-name="analysis-pattern-section">
                     <div class="advanced-section-copy">
                       <div class="advanced-section-title">Pattern Analysis</div>
-                      <div class="advanced-section-hint">Match internal signal names with wildcard, text, or regex, then gray out low-value modules.</div>
+                      <div class="advanced-section-hint">Match internal signal names with wildcard, text, or regex, then tint contributing modules inside the current view.</div>
                     </div>
                     <div class="advanced-section-controls">
                       <div class="metric-group" data-ui-name="analysis-mode-group">
@@ -2930,18 +3251,6 @@
                           placeholder="Signal pattern: _GEN* ; foo_*"
                           title="Use ';' to combine multiple signal-name patterns. This matches internal signals only."
                           data-ui-name="analysis-pattern-input"
-                        />
-                      </div>
-                      <div class="metric-group" data-ui-name="analysis-gray-group">
-                        <label class="metric-inline-label" for="analysis-gray-threshold-input">Gray &lt;</label>
-                        <input
-                          id="analysis-gray-threshold-input"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          inputmode="decimal"
-                          value="0"
-                          data-ui-name="analysis-gray-input"
                         />
                       </div>
                     </div>
@@ -2989,7 +3298,7 @@
             <button id="view-treemap-btn" class="view-switch-btn" type="button" data-ui-name="view-treemap-btn">Treemap</button>
             <button id="view-pie-btn" class="view-switch-btn" type="button" data-ui-name="view-pie-btn">2D Pie</button>
             <button id="view-three-btn" class="view-switch-btn" type="button" data-ui-name="view-three-btn">3D</button>
-            <button id="zen-toggle-btn" class="view-switch-btn" type="button" aria-pressed="false" data-ui-name="zen-toggle-btn">Zen</button>
+            <button id="zen-toggle-btn" class="view-switch-btn zen-mode-btn" type="button" aria-pressed="false" data-ui-name="zen-toggle-btn">Zen</button>
           </div>
         </div>
       </div>
@@ -3005,7 +3314,7 @@
             <button id="zen-view-three-btn" class="view-switch-btn" type="button" data-ui-name="zen-view-three-btn">3D</button>
           </div>
           <div class="zen-overlay-actions" data-ui-name="zen-overlay-actions">
-            <button id="zen-exit-btn" class="view-switch-btn" type="button" aria-pressed="true" data-ui-name="zen-exit-btn">Exit Zen</button>
+            <button id="zen-exit-btn" class="view-switch-btn zen-mode-btn" type="button" aria-pressed="true" data-ui-name="zen-exit-btn">Exit Zen</button>
           </div>
         </div>
       </div>
@@ -3063,18 +3372,6 @@
                     placeholder="Signal pattern: _GEN* ; foo_*"
                     title="Use ';' to combine multiple signal-name patterns. This matches internal signals only."
                     data-ui-name="chart-analysis-pattern-input"
-                  />
-                </div>
-                <div class="metric-group" data-ui-name="chart-analysis-gray-group">
-                  <label class="metric-inline-label" for="chart-analysis-gray-threshold-input">Gray &lt;</label>
-                  <input
-                    id="chart-analysis-gray-threshold-input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    inputmode="decimal"
-                    value="0"
-                    data-ui-name="chart-analysis-gray-threshold-input"
                   />
                 </div>
               </div>
@@ -3160,44 +3457,52 @@
             </div>
           </div>
           <div class="source-searchbar-shell" data-ui-name="source-searchbar-shell">
-            <div class="source-searchbar" data-ui-name="source-searchbar">
-              <div class="metric-group" data-ui-name="source-search-mode-group">
-                <label class="metric-inline-label" for="source-search-mode-select">Search:</label>
-                <select id="source-search-mode-select" aria-label="Source search mode" data-ui-name="source-search-mode-select">
-                  <option value="wildcard">Wildcard</option>
-                  <option value="regex">Regex</option>
-                </select>
+            <div class="source-search-status" id="source-search-status" data-ui-name="source-search-status">Search current view</div>
+            <div class="source-search-row" data-ui-name="source-search-row">
+              <div class="source-bookmark-bar" data-ui-name="source-bookmark-bar">
+                <div class="source-bookmark-label">Bookmarks</div>
+                <div class="source-bookmark-list" id="source-bookmark-list" data-ui-name="source-bookmark-list">
+                  <span class="source-bookmark-empty">Click a line number to bookmark it.</span>
+                </div>
               </div>
-              <div class="source-search-main" data-ui-name="source-search-main">
-                <input
-                  id="source-search-input"
-                  class="source-search-input"
-                  type="search"
-                  placeholder="Search current view: foo_*"
-                  title="Search the currently rendered source. Enter jumps to next match, Shift+Enter jumps to previous. Supports wildcard and regex."
-                  data-ui-name="source-search-input"
-                />
-                <div class="source-search-actions" data-ui-name="source-search-actions">
-                  <button
-                    id="source-search-prev-btn"
-                    class="source-nav-btn"
-                    type="button"
-                    aria-label="Previous source search match"
-                    title="Previous match (Shift+Enter)"
-                    data-ui-name="source-search-prev-btn"
-                  >↑</button>
-                  <button
-                    id="source-search-next-btn"
-                    class="source-nav-btn"
-                    type="button"
-                    aria-label="Next source search match"
-                    title="Next match (Enter)"
-                    data-ui-name="source-search-next-btn"
-                  >↓</button>
+              <div class="source-searchbar" data-ui-name="source-searchbar">
+                <div class="metric-group" data-ui-name="source-search-mode-group">
+                  <label class="metric-inline-label" for="source-search-mode-select">Search:</label>
+                  <select id="source-search-mode-select" aria-label="Source search mode" data-ui-name="source-search-mode-select">
+                    <option value="wildcard">Wildcard</option>
+                    <option value="regex">Regex</option>
+                  </select>
+                </div>
+                <div class="source-search-main" data-ui-name="source-search-main">
+                  <input
+                    id="source-search-input"
+                    class="source-search-input"
+                    type="search"
+                    placeholder="Search current view: foo_*"
+                    title="Search the currently rendered source. Enter jumps to next match, Shift+Enter jumps to previous. Supports wildcard and regex."
+                    data-ui-name="source-search-input"
+                  />
+                  <div class="source-search-actions" data-ui-name="source-search-actions">
+                    <button
+                      id="source-search-prev-btn"
+                      class="source-nav-btn"
+                      type="button"
+                      aria-label="Previous source search match"
+                      title="Previous match (Shift+Enter)"
+                      data-ui-name="source-search-prev-btn"
+                    >↑</button>
+                    <button
+                      id="source-search-next-btn"
+                      class="source-nav-btn"
+                      type="button"
+                      aria-label="Next source search match"
+                      title="Next match (Enter)"
+                      data-ui-name="source-search-next-btn"
+                    >↓</button>
+                  </div>
                 </div>
               </div>
             </div>
-            <div class="source-search-status" id="source-search-status" data-ui-name="source-search-status">Search current view</div>
           </div>
         </div>
         <div class="source-code" id="source-code" data-ui-name="source-code"></div>
@@ -3748,7 +4053,6 @@
     const analysisPatternGroup = document.getElementById("analysis-pattern-group");
     const analysisPatternModeSelect = document.getElementById("analysis-pattern-mode-select");
     const analysisPatternInput = document.getElementById("analysis-pattern-input");
-    const analysisGrayThresholdInput = document.getElementById("analysis-gray-threshold-input");
     const analysisPatternModeField = analysisPatternModeSelect ? analysisPatternModeSelect.closest(".metric-group") : null;
     const analysisPatternInputField = analysisPatternInput ? analysisPatternInput.closest(".metric-group") : null;
     const metricTooltipItems = Array.from(document.querySelectorAll(".metric-tooltip-item"));
@@ -3781,6 +4085,7 @@
     const sourceSearchStatus = document.getElementById("source-search-status");
     const sourceSearchPrevBtn = document.getElementById("source-search-prev-btn");
     const sourceSearchNextBtn = document.getElementById("source-search-next-btn");
+    const sourceBookmarkList = document.getElementById("source-bookmark-list");
     const toolbar = document.getElementById("toolbar");
     const toggleToolbarBtn = document.getElementById("toggle-toolbar-btn");
     const ctx = canvas.getContext("2d");
@@ -3812,7 +4117,6 @@
       analysisMode: "none",
       analysisPatternMode: "wildcard",
       analysisPattern: "",
-      analysisGrayThreshold: 0,
       analysisError: "",
       analysisLocalCounts: new Array(nodes.length).fill(0),
       analysisSubtreeCounts: new Array(nodes.length).fill(0),
@@ -3859,6 +4163,10 @@
       sourceSearch: "",
       sourceSearchError: "",
       sourceSearchMatchIndex: -1,
+      sourceBookmarkEditingKey: null,
+      sourceBookmarkEditingLine: null,
+      sourceBookmarkEditingDraft: "",
+      sourceBookmarksByFile: {},
       treePanelOpen: false,
       treePanelWidth: 360,
       draggingTreePanelResize: false,
@@ -4279,17 +4587,6 @@
       analysisPatternInput.title = "Use ';' to combine multiple signal-name patterns. Example: _GEN* ; foo_*";
       analysisPatternModeSelect.disabled = !usesSignalPattern;
       analysisPatternInput.disabled = !usesSignalPattern;
-      analysisGrayThresholdInput.disabled = state.analysisMode === "none";
-      analysisGrayThresholdInput.value = formatMetricValue(analysisThreshold());
-      if (state.analysisMode === "count" || state.analysisMode === "loc") {
-        analysisGrayThresholdInput.step = "1";
-        analysisGrayThresholdInput.title = state.analysisMode === "loc"
-          ? "Nodes with local module LOC below this threshold are dimmed."
-          : "Nodes with local matched-signal count below this threshold are dimmed.";
-      } else {
-        analysisGrayThresholdInput.step = "0.01";
-        analysisGrayThresholdInput.title = "Nodes with local matched-signal ratio below this threshold are dimmed. Ratio mode uses 0..1.";
-      }
     }
 
     function setAdvancedPopoverOpen(open) {
@@ -4324,12 +4621,12 @@
           analysisMode: state.analysisMode,
           analysisPatternMode: state.analysisPatternMode,
           analysisPattern: state.analysisPattern,
-          analysisGrayThreshold: state.analysisGrayThreshold,
           toolbarCollapsed: state.toolbarCollapsed,
           depthLimit: state.depthLimit,
           search: state.search,
           filterScope: state.filterScope,
           filterMode: state.filterMode,
+          sourceBookmarksByFile: state.sourceBookmarksByFile,
           treePanelOpen: state.treePanelOpen,
           matchPanelOpen: state.matchPanelOpen,
           mainViewMode: state.mainViewMode,
@@ -4389,8 +4686,8 @@
         if (typeof saved.analysisPattern === "string") {
           state.analysisPattern = saved.analysisPattern;
         }
-        if (typeof saved.analysisGrayThreshold === "number" && saved.analysisGrayThreshold >= 0) {
-          state.analysisGrayThreshold = saved.analysisGrayThreshold;
+        if (saved.sourceBookmarksByFile && typeof saved.sourceBookmarksByFile === "object") {
+          state.sourceBookmarksByFile = normalizeSourceBookmarks(saved.sourceBookmarksByFile);
         }
         state.toolbarCollapsed = !!saved.toolbarCollapsed;
         state.depthLimit = saved.depthLimit === null
@@ -4547,6 +4844,72 @@
       return !!(node.filePath && node.sourceHref);
     }
 
+    function normalizeSourceBookmarkPreview(text, useBlankFallback = false) {
+      const compact = String(text ?? "").replace(/\s+/g, " ").trim();
+      if (compact.length > 0) {
+        return compact;
+      }
+      return useBlankFallback ? "(blank line)" : "";
+    }
+
+    function normalizeSourceBookmarkEntry(entry) {
+      if (Number.isInteger(entry) && entry > 0) {
+        return { line: entry, label: "", preview: "" };
+      }
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+      const line = Number(entry.line);
+      if (!Number.isInteger(line) || line <= 0) {
+        return null;
+      }
+      return {
+        line,
+        label: typeof entry.label === "string" ? entry.label.trim() : "",
+        preview: typeof entry.preview === "string"
+          ? normalizeSourceBookmarkPreview(entry.preview, false)
+          : ""
+      };
+    }
+
+    function normalizeSourceBookmarks(raw) {
+      if (!raw || typeof raw !== "object") {
+        return {};
+      }
+      const normalized = {};
+      for (const [key, value] of Object.entries(raw)) {
+        if (typeof key !== "string" || key.length === 0 || !Array.isArray(value)) {
+          continue;
+        }
+        const bookmarkMap = new Map();
+        for (const item of value) {
+          const bookmark = normalizeSourceBookmarkEntry(item);
+          if (!bookmark) {
+            continue;
+          }
+          bookmarkMap.set(bookmark.line, bookmark);
+        }
+        const bookmarks = Array.from(bookmarkMap.values()).sort((left, right) => left.line - right.line);
+        if (bookmarks.length) {
+          normalized[key] = bookmarks;
+        }
+      }
+      return normalized;
+    }
+
+    function sourceBookmarkKeyForNode(node) {
+      if (!node) {
+        return null;
+      }
+      if (node.sourceHref) {
+        return `href:${node.sourceHref}`;
+      }
+      if (node.filePath) {
+        return `path:${node.filePath}`;
+      }
+      return null;
+    }
+
     function resolveSourceUrl(node) {
       if (!node.sourceHref) {
         return null;
@@ -4572,6 +4935,359 @@
       return new Promise((resolve) => {
         requestAnimationFrame(() => resolve());
       });
+    }
+
+    function currentSourceBookmarkKey() {
+      if (currentSourceView && currentSourceView.bookmarkKey) {
+        return currentSourceView.bookmarkKey;
+      }
+      if (state.sourceNodeId === null || state.sourceNodeId === undefined) {
+        return null;
+      }
+      return sourceBookmarkKeyForNode(getNode(state.sourceNodeId));
+    }
+
+    function currentSourceBookmarkLines() {
+      return currentSourceBookmarks().map((bookmark) => bookmark.line);
+    }
+
+    function currentSourceBookmarks() {
+      const bookmarkKey = currentSourceBookmarkKey();
+      if (!bookmarkKey) {
+        return [];
+      }
+      return state.sourceBookmarksByFile[bookmarkKey] || [];
+    }
+
+    function findCurrentSourceBookmark(lineNo) {
+      return currentSourceBookmarks().find((bookmark) => bookmark.line === lineNo) || null;
+    }
+
+    function sourceBookmarkPreviewForLine(lineNo) {
+      if (!currentSourceView || !Array.isArray(currentSourceView.lines)) {
+        return "";
+      }
+      const index = lineNo - currentSourceView.firstLineNumber;
+      if (index < 0 || index >= currentSourceView.lines.length) {
+        return "";
+      }
+      return normalizeSourceBookmarkPreview(currentSourceView.lines[index], true);
+    }
+
+    function syncCurrentSourceBookmarkPreviews() {
+      const bookmarkKey = currentSourceBookmarkKey();
+      if (!bookmarkKey) {
+        return;
+      }
+      const bookmarks = state.sourceBookmarksByFile[bookmarkKey];
+      if (!Array.isArray(bookmarks) || !bookmarks.length) {
+        return;
+      }
+      let changed = false;
+      for (const bookmark of bookmarks) {
+        const preview = sourceBookmarkPreviewForLine(bookmark.line);
+        if (!preview || bookmark.preview === preview) {
+          continue;
+        }
+        bookmark.preview = preview;
+        changed = true;
+      }
+      if (changed) {
+        savePersistedState();
+      }
+    }
+
+    function sourceBookmarkDisplayTitle(bookmark) {
+      return bookmark.label || bookmark.preview || `Line ${bookmark.line}`;
+    }
+
+    function sourceBookmarkDisplayMeta(bookmark) {
+      if (bookmark.label) {
+        return bookmark.preview
+          ? `L${bookmark.line} · ${bookmark.preview}`
+          : `Line ${bookmark.line}`;
+      }
+      return `Line ${bookmark.line}`;
+    }
+
+    function clearSourceBookmarkRename() {
+      state.sourceBookmarkEditingKey = null;
+      state.sourceBookmarkEditingLine = null;
+      state.sourceBookmarkEditingDraft = "";
+    }
+
+    function startSourceBookmarkRename(lineNo) {
+      const bookmark = findCurrentSourceBookmark(lineNo);
+      if (!bookmark) {
+        return;
+      }
+      const bookmarkKey = currentSourceBookmarkKey();
+      if (!bookmarkKey) {
+        return;
+      }
+      state.sourceBookmarkEditingKey = bookmarkKey;
+      state.sourceBookmarkEditingLine = lineNo;
+      state.sourceBookmarkEditingDraft = bookmark.label;
+      renderSourceBookmarkBar();
+    }
+
+    function commitSourceBookmarkRename(lineNo) {
+      const bookmarkKey = currentSourceBookmarkKey();
+      const bookmark = findCurrentSourceBookmark(lineNo);
+      if (!bookmarkKey || !bookmark || state.sourceBookmarkEditingKey !== bookmarkKey) {
+        clearSourceBookmarkRename();
+        renderSourceBookmarkBar();
+        return;
+      }
+      const label = state.sourceBookmarkEditingDraft.trim();
+      bookmark.label = label;
+      clearSourceBookmarkRename();
+      renderSourceBookmarkBar();
+      savePersistedState();
+      showSourceStatus(label
+        ? `Renamed bookmark at line ${lineNo}.`
+        : `Cleared custom name for bookmark line ${lineNo}.`);
+    }
+
+    function setSourceLineBookmarkState(lineElement, bookmarked) {
+      if (!lineElement) {
+        return;
+      }
+      lineElement.classList.toggle("bookmarked", bookmarked);
+      const gutterButton = lineElement.querySelector(".source-lineno");
+      if (!gutterButton) {
+        return;
+      }
+      gutterButton.classList.toggle("bookmarked", bookmarked);
+      gutterButton.setAttribute("aria-pressed", bookmarked ? "true" : "false");
+      const lineNo = Number(lineElement.dataset.line);
+      gutterButton.title = bookmarked
+        ? `Remove bookmark at line ${lineNo}`
+        : `Bookmark line ${lineNo}`;
+    }
+
+    function renderSourceBookmarkBar() {
+      if (!sourceBookmarkList) {
+        return;
+      }
+      const bookmarkKey = currentSourceBookmarkKey();
+      const lines = bookmarkKey ? currentSourceBookmarkLines() : [];
+      sourceBookmarkList.innerHTML = "";
+      if (!bookmarkKey) {
+        sourceBookmarkList.innerHTML = '<span class="source-bookmark-empty">Bookmarks follow the current file.</span>';
+        return;
+      }
+      const bookmarks = currentSourceBookmarks();
+      if (!bookmarks.length) {
+        sourceBookmarkList.innerHTML = '<span class="source-bookmark-empty">Click a line number to bookmark it.</span>';
+        return;
+      }
+      const fragment = document.createDocumentFragment();
+      for (const bookmark of bookmarks) {
+        const lineNo = bookmark.line;
+        const isEditing = state.sourceBookmarkEditingKey === bookmarkKey
+          && state.sourceBookmarkEditingLine === lineNo;
+        const card = document.createElement("div");
+        card.className = "source-bookmark-card";
+        if (isEditing) {
+          card.classList.add("editing");
+        }
+        if (isEditing) {
+          const editor = document.createElement("div");
+          editor.className = "source-bookmark-editor";
+
+          const lineBadge = document.createElement("span");
+          lineBadge.className = "source-bookmark-line";
+          lineBadge.textContent = `L${lineNo}`;
+
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "source-bookmark-input";
+          input.value = state.sourceBookmarkEditingDraft;
+          input.placeholder = bookmark.preview || `Bookmark line ${lineNo}`;
+          input.title = "Enter a custom bookmark name. Leave empty to show the source preview.";
+          input.addEventListener("input", () => {
+            state.sourceBookmarkEditingDraft = input.value;
+          });
+          input.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commitSourceBookmarkRename(lineNo);
+              return;
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              clearSourceBookmarkRename();
+              renderSourceBookmarkBar();
+            }
+          });
+
+          const saveButton = document.createElement("button");
+          saveButton.type = "button";
+          saveButton.className = "source-bookmark-save";
+          saveButton.textContent = "Save";
+          saveButton.addEventListener("click", () => {
+            commitSourceBookmarkRename(lineNo);
+          });
+
+          const cancelButton = document.createElement("button");
+          cancelButton.type = "button";
+          cancelButton.className = "source-bookmark-cancel";
+          cancelButton.textContent = "Cancel";
+          cancelButton.addEventListener("click", () => {
+            clearSourceBookmarkRename();
+            renderSourceBookmarkBar();
+          });
+
+          const hint = document.createElement("div");
+          hint.className = "source-bookmark-editor-hint";
+          hint.textContent = bookmark.preview
+            ? `Preview: ${bookmark.preview}`
+            : `Preview unavailable for line ${lineNo} in the current inline view.`;
+
+          editor.appendChild(lineBadge);
+          editor.appendChild(input);
+          editor.appendChild(saveButton);
+          editor.appendChild(cancelButton);
+          card.appendChild(editor);
+          card.appendChild(hint);
+          fragment.appendChild(card);
+          continue;
+        }
+
+        const mainButton = document.createElement("button");
+        mainButton.type = "button";
+        mainButton.className = "source-bookmark-main";
+        mainButton.title = `${sourceBookmarkDisplayTitle(bookmark)} · ${sourceBookmarkDisplayMeta(bookmark)}`;
+        if (
+          currentSourceView &&
+          lineNo >= currentSourceView.focusStartLine &&
+          lineNo <= currentSourceView.focusEndLine
+        ) {
+          card.classList.add("current");
+          mainButton.classList.add("current");
+        }
+        mainButton.addEventListener("click", () => {
+          focusSourceBookmark(lineNo);
+        });
+
+        const lineBadge = document.createElement("span");
+        lineBadge.className = "source-bookmark-line";
+        lineBadge.textContent = `L${lineNo}`;
+
+        const copy = document.createElement("span");
+        copy.className = "source-bookmark-copy";
+
+        const title = document.createElement("span");
+        title.className = "source-bookmark-title";
+        title.textContent = sourceBookmarkDisplayTitle(bookmark);
+
+        const meta = document.createElement("span");
+        meta.className = "source-bookmark-meta";
+        meta.textContent = sourceBookmarkDisplayMeta(bookmark);
+
+        copy.appendChild(title);
+        copy.appendChild(meta);
+        mainButton.appendChild(lineBadge);
+        mainButton.appendChild(copy);
+
+        const actions = document.createElement("div");
+        actions.className = "source-bookmark-actions";
+
+        const editButton = document.createElement("button");
+        editButton.type = "button";
+        editButton.className = "source-bookmark-action";
+        editButton.textContent = "Edit";
+        editButton.title = `Rename bookmark at line ${lineNo}`;
+        editButton.addEventListener("click", () => {
+          startSourceBookmarkRename(lineNo);
+        });
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "source-bookmark-action remove";
+        deleteButton.textContent = "Del";
+        deleteButton.title = `Delete bookmark at line ${lineNo}`;
+        deleteButton.setAttribute("aria-label", `Delete bookmark at line ${lineNo}`);
+        deleteButton.addEventListener("click", () => {
+          toggleSourceBookmark(lineNo);
+        });
+
+        card.appendChild(mainButton);
+        actions.appendChild(editButton);
+        actions.appendChild(deleteButton);
+        card.appendChild(actions);
+        fragment.appendChild(card);
+      }
+      sourceBookmarkList.appendChild(fragment);
+      if (state.sourceBookmarkEditingKey === bookmarkKey && state.sourceBookmarkEditingLine !== null) {
+        const input = sourceBookmarkList.querySelector(".source-bookmark-input");
+        if (input) {
+          requestAnimationFrame(() => {
+            input.focus();
+            input.select();
+          });
+        }
+      }
+    }
+
+    function syncSourceBookmarksInView() {
+      const bookmarkSet = new Set(currentSourceBookmarkLines());
+      for (const lineElement of sourceCode.querySelectorAll(".source-line[data-line]")) {
+        const lineNo = Number(lineElement.dataset.line);
+        setSourceLineBookmarkState(lineElement, bookmarkSet.has(lineNo));
+      }
+      renderSourceBookmarkBar();
+    }
+
+    function focusSourceBookmark(lineNo) {
+      for (const element of sourceCode.querySelectorAll(".source-line.bookmark-jump")) {
+        element.classList.remove("bookmark-jump");
+      }
+      const target = sourceCode.querySelector(`.source-line[data-line="${lineNo}"]`);
+      if (!target) {
+        showSourceStatus(`Bookmark line ${lineNo} is outside the current inline view. Use Open Raw for the full file.`);
+        renderSourceBookmarkBar();
+        return;
+      }
+      target.classList.add("bookmark-jump");
+      target.scrollIntoView({ block: "center", inline: "nearest" });
+      showSourceStatus(`Jumped to bookmark line ${lineNo}.`);
+      renderSourceBookmarkBar();
+    }
+
+    function toggleSourceBookmark(lineNo) {
+      const bookmarkKey = currentSourceBookmarkKey();
+      if (!bookmarkKey || !Number.isInteger(lineNo) || lineNo <= 0) {
+        return;
+      }
+      const bookmarks = [...currentSourceBookmarks()];
+      const existingIndex = bookmarks.findIndex((bookmark) => bookmark.line === lineNo);
+      if (existingIndex >= 0) {
+        bookmarks.splice(existingIndex, 1);
+        if (
+          state.sourceBookmarkEditingKey === bookmarkKey
+          && state.sourceBookmarkEditingLine === lineNo
+        ) {
+          clearSourceBookmarkRename();
+        }
+        showSourceStatus(`Removed bookmark at line ${lineNo}.`);
+      } else {
+        bookmarks.push({
+          line: lineNo,
+          label: "",
+          preview: sourceBookmarkPreviewForLine(lineNo)
+        });
+        bookmarks.sort((left, right) => left.line - right.line);
+        showSourceStatus(`Bookmarked line ${lineNo}.`);
+      }
+      if (bookmarks.length) {
+        state.sourceBookmarksByFile[bookmarkKey] = bookmarks;
+      } else {
+        delete state.sourceBookmarksByFile[bookmarkKey];
+      }
+      syncSourceBookmarksInView();
+      savePersistedState();
     }
 
     function escapeHtml(text) {
@@ -4756,13 +5472,15 @@
         sourceCode.innerHTML = "";
         sourceSearchMatchElements = [];
         state.sourceSearchMatchIndex = -1;
+        renderSourceBookmarkBar();
         updateSourceSearchStatus();
         return;
       }
       const search = buildSourceSearchRegExp();
       state.sourceSearchError = search.error;
-      const { text, firstLineNumber, focusStartLine, focusEndLine } = currentSourceView;
-      const lines = text.split("\n");
+      const { lines, firstLineNumber, focusStartLine, focusEndLine } = currentSourceView;
+      syncCurrentSourceBookmarkPreviews();
+      const bookmarkSet = new Set(currentSourceBookmarkLines());
       sourceCode.innerHTML = lines
         .map((line, index) => {
           const lineNo = firstLineNumber + index;
@@ -4774,7 +5492,13 @@
           if (matchRanges.length > 0) {
             classes.push("search-match");
           }
-          return `<div class="${classes.join(" ")}" data-line="${lineNo}"><span class="source-lineno">${lineNo}</span><span class="source-code-text">${highlightVerilogLine(line, matchRanges)}</span></div>`;
+          if (bookmarkSet.has(lineNo)) {
+            classes.push("bookmarked");
+          }
+          const bookmarkTitle = bookmarkSet.has(lineNo)
+            ? `Remove bookmark at line ${lineNo}`
+            : `Bookmark line ${lineNo}`;
+          return `<div class="${classes.join(" ")}" data-line="${lineNo}"><button class="source-lineno${bookmarkSet.has(lineNo) ? " bookmarked" : ""}" type="button" data-line="${lineNo}" aria-pressed="${bookmarkSet.has(lineNo) ? "true" : "false"}" title="${bookmarkTitle}"><span class="source-bookmark-dot" aria-hidden="true"></span><span class="source-lineno-value">${lineNo}</span></button><span class="source-code-text">${highlightVerilogLine(line, matchRanges)}</span></div>`;
         })
         .join("");
 
@@ -4789,6 +5513,7 @@
       }
 
       const shouldFocusSearch = state.sourceSearch.trim().length > 0 && sourceSearchMatchElements.length > 0;
+      syncSourceBookmarksInView();
       if (shouldFocusSearch) {
         applyCurrentSourceSearchSelection(true);
         return;
@@ -4802,13 +5527,18 @@
       }
     }
 
-    function renderSourceText(text, firstLineNumber, focusStartLine, focusEndLine) {
+    function renderSourceText(text, firstLineNumber, focusStartLine, focusEndLine, options = {}) {
       currentSourceView = {
         text,
+        lines: text.split("\n"),
         firstLineNumber,
         focusStartLine,
-        focusEndLine
+        focusEndLine,
+        bookmarkKey: options.bookmarkKey || currentSourceView?.bookmarkKey || null
       };
+      if (state.sourceBookmarkEditingKey !== currentSourceView.bookmarkKey) {
+        clearSourceBookmarkRename();
+      }
       renderCurrentSourceView(true);
     }
 
@@ -4820,11 +5550,19 @@
       scheduleUiAnnotations();
     }
 
-    function renderSourceExcerpt(node, text, focusStartLine, focusEndLine, message) {
+    function renderSourceExcerpt(node, text, focusStartLine, focusEndLine, message, bookmarkKey) {
       const lines = text.split("\n");
       if (!lines.length) {
         sourceSubtitle.textContent = `${node.module} · ${formatLocation(node)} · ${message}`;
         sourceCode.innerHTML = '<div class="source-line"><span class="source-lineno">-</span><span class="source-code-text">Source file is empty.</span></div>';
+        currentSourceView = {
+          text: "",
+          firstLineNumber: 1,
+          focusStartLine: 1,
+          focusEndLine: 1,
+          bookmarkKey: bookmarkKey || sourceBookmarkKeyForNode(node)
+        };
+        renderSourceBookmarkBar();
         return;
       }
 
@@ -4838,7 +5576,7 @@
       const boundedEnd = Math.min(excerptEnd, excerptStart + MAX_PREVIEW_SOURCE_LINES - 1);
       const excerptText = lines.slice(excerptStart - 1, boundedEnd).join("\n");
       sourceSubtitle.textContent = `${node.module} · ${formatLocation(node)} · excerpt ${excerptStart}-${boundedEnd} · ${message}`;
-      renderSourceText(excerptText, excerptStart, clampedFocusStart, clampedFocusEnd);
+      renderSourceText(excerptText, excerptStart, clampedFocusStart, clampedFocusEnd, { bookmarkKey });
     }
 
     async function loadFullSource(node, signal) {
@@ -4870,6 +5608,7 @@
       const focusStartLine = node.line || 1;
       const focusEndLine = node.endLine || focusStartLine;
       const sourceUrl = resolveSourceUrl(node);
+      const bookmarkKey = sourceBookmarkKeyForNode(node);
 
       sourceTitle.textContent = node.path;
       if (sourceUrl) {
@@ -4914,13 +5653,14 @@
             focusStartLine,
             focusEndLine,
             `full file loaded but too large to render inline (${lineCount} lines, ${text.length} bytes); use Open Raw`,
+            bookmarkKey,
           );
           showSourceStatus("Full file loaded. Inline render skipped to keep the page responsive.");
           return;
         }
         sourceSubtitle.textContent = `${node.module} · ${formatLocation(node)} · full file`;
         showSourceStatus(`Full file loaded (${lineCount} lines).`);
-        renderSourceText(text, 1, focusStartLine, focusEndLine);
+        renderSourceText(text, 1, focusStartLine, focusEndLine, { bookmarkKey });
       } catch (error) {
         if (state.sourceNodeId !== nodeId || state.sourceRequestToken !== requestToken) {
           return;
@@ -4949,12 +5689,14 @@
       state.sourceSearchMatchIndex = -1;
       state.sourceSearchError = "";
       state.sourcePanelFullscreen = false;
+      clearSourceBookmarkRename();
       sourceCode.innerHTML = "";
       showSourceStatus("");
       openRawSourceLink.href = "#";
       openRawSourceLink.classList.add("hidden");
       applySourcePanelWindowState();
       sourcePanel.classList.remove("visible");
+      renderSourceBookmarkBar();
       updateSourceSearchStatus();
       if (state.hoverId === null || state.hoverId === undefined) {
         hoverCard.classList.add("hidden");
@@ -5396,10 +6138,6 @@
       return "disabled";
     }
 
-    function analysisThreshold() {
-      return Math.max(0, state.analysisGrayThreshold || 0);
-    }
-
     function analysisLocalValue(nodeId) {
       if (!analysisActive()) {
         return 0;
@@ -5460,8 +6198,7 @@
       if (!analysisActive()) {
         return false;
       }
-      const value = analysisLocalValue(nodeId);
-      return value > 0 && value >= analysisThreshold();
+      return analysisLocalValue(nodeId) > 0;
     }
 
     function analysisNormalizedValue(nodeId) {
@@ -7087,8 +7824,8 @@
             "Pattern",
             analysisActive()
               ? state.analysisMode === "loc"
-                ? `module loc -> local ${state.analysisLocalLocs[nodeId] || 0}, subtree ${state.analysisSubtreeLocs[nodeId] || 0}, gray < ${formatMetricValue(analysisThreshold())}`
-                : `${state.analysisPattern} -> local count ${state.analysisLocalCounts[nodeId] || 0}, local ratio ${formatMetricValue((state.analysisLocalRatios[nodeId] || 0) * 100)}%, subtree count ${state.analysisSubtreeCounts[nodeId] || 0}, gray < ${formatMetricValue(analysisThreshold())}`
+                ? `module loc -> local ${state.analysisLocalLocs[nodeId] || 0}, subtree ${state.analysisSubtreeLocs[nodeId] || 0}`
+                : `${state.analysisPattern} -> local count ${state.analysisLocalCounts[nodeId] || 0}, local ratio ${formatMetricValue((state.analysisLocalRatios[nodeId] || 0) * 100)}%, subtree count ${state.analysisSubtreeCounts[nodeId] || 0}`
               : "disabled"
           ),
           hoverMetaLine(
@@ -7537,6 +8274,19 @@
       moveSourceSearch(1);
     });
 
+    sourceCode.addEventListener("click", (event) => {
+      const gutterButton = event.target.closest(".source-lineno");
+      if (!gutterButton || !sourceCode.contains(gutterButton)) {
+        return;
+      }
+      const lineNo = Number(gutterButton.dataset.line);
+      if (!Number.isInteger(lineNo) || lineNo <= 0) {
+        return;
+      }
+      event.preventDefault();
+      toggleSourceBookmark(lineNo);
+    });
+
     window.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") {
         return;
@@ -7645,20 +8395,6 @@
       buildSignalAnalysis();
       savePersistedState();
       draw();
-    });
-
-    analysisGrayThresholdInput.addEventListener("input", () => {
-      state.analysisGrayThreshold = sanitizeWeight(
-        analysisGrayThresholdInput.value,
-        state.analysisGrayThreshold
-      );
-      syncAnalysisControls();
-      savePersistedState();
-      draw();
-    });
-
-    analysisGrayThresholdInput.addEventListener("blur", () => {
-      analysisGrayThresholdInput.value = formatMetricValue(analysisThreshold());
     });
 
     filterScopeSelect.addEventListener("change", () => {
