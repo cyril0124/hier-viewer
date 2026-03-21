@@ -512,7 +512,8 @@
       isolation: isolate;
     }
 
-    body.zen-active {
+    body.zen-active,
+    body.source-fullscreen-active {
       overflow: hidden;
     }
 
@@ -538,9 +539,12 @@
     }
 
     .app.zen-active > .canvas-panel .tree-panel,
-    .app.zen-active > .canvas-panel .match-panel,
-    .app.zen-active > .canvas-panel .source-panel {
+    .app.zen-active > .canvas-panel .match-panel {
       display: none !important;
+    }
+
+    .app.zen-active > .canvas-panel .source-panel {
+      z-index: calc(var(--z-zen-overlay) + 12);
     }
 
     .app.zen-active > .canvas-panel .hover-card {
@@ -2013,7 +2017,7 @@
       right: 12px;
       bottom: 12px;
       z-index: var(--z-source-panel);
-      width: min(760px, calc(100% - 24px));
+      width: min(960px, calc(100% - 24px));
       display: none;
       flex-direction: column;
       border: 1px solid var(--side-panel-border);
@@ -2027,18 +2031,38 @@
       display: flex;
     }
 
+    .source-panel.fullscreen {
+      position: fixed;
+      inset: 0;
+      width: auto;
+      max-width: none;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+      z-index: calc(var(--z-loading-overlay) - 20);
+    }
+
     .source-header {
       display: flex;
       flex-direction: column;
       align-items: stretch;
-      gap: 12px;
+      gap: 8px;
       padding: 12px 14px;
       border-bottom: 1px solid var(--side-header-border);
       background: var(--side-header-bg);
     }
 
+    .source-header-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
     .source-header-main {
       min-width: 0;
+      flex: 1 1 auto;
     }
 
     .source-title {
@@ -2075,6 +2099,63 @@
       gap: 8px;
       flex-wrap: wrap;
       justify-content: flex-end;
+      flex: 0 0 auto;
+    }
+
+    .source-searchbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .source-searchbar .metric-group {
+      flex: 0 0 auto;
+    }
+
+    .source-search-main {
+      min-width: 0;
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .source-search-input {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .source-search-status {
+      min-height: 18px;
+      font-size: 12px;
+      color: var(--muted);
+      text-align: right;
+    }
+
+    .source-search-status.error {
+      color: #c53a2f;
+    }
+
+    .source-search-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex: 0 0 auto;
+    }
+
+    .source-nav-btn {
+      width: 30px;
+      height: 30px;
+      min-width: 30px;
+      padding: 0;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .source-open-link {
@@ -2093,6 +2174,12 @@
       display: none;
     }
 
+    .source-open-link,
+    .source-expand,
+    .source-close {
+      padding: 8px 12px;
+    }
+
     .source-code {
       flex: 1 1 auto;
       overflow: auto;
@@ -2101,6 +2188,14 @@
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
       font-size: 13px;
       line-height: 1.55;
+    }
+
+    .source-panel.fullscreen .source-header {
+      padding: 14px 18px 10px;
+    }
+
+    .source-panel.fullscreen .source-code {
+      padding: 12px 0 18px;
     }
 
     .source-line {
@@ -2112,6 +2207,14 @@
 
     .source-line.active {
       background: var(--line-highlight-bg);
+    }
+
+    .source-line.search-match {
+      background: color-mix(in srgb, var(--accent-soft) 24%, transparent);
+    }
+
+    .source-line.search-current {
+      background: color-mix(in srgb, var(--accent-soft) 42%, var(--line-highlight-bg));
     }
 
     .source-lineno {
@@ -2126,6 +2229,19 @@
     .source-code-text {
       overflow: visible;
       color: #2b2017;
+    }
+
+    .source-find-hit {
+      background: color-mix(in srgb, var(--accent-soft) 72%, #fff3b3);
+      color: inherit;
+      border-radius: 3px;
+      padding: 0 1px;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+    }
+
+    .source-find-hit.current {
+      background: color-mix(in srgb, var(--accent) 28%, #ffe08a);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 54%, transparent);
     }
 
     .tok-comment { color: #7a8b54; }
@@ -2467,6 +2583,7 @@
             <select id="filter-scope-select" aria-label="Filter scope" data-ui-name="filter-scope-select">
               <option value="both">Path + Module</option>
               <option value="path">Hierarchy Path</option>
+              <option value="instance">Instance Name</option>
               <option value="module">Module Name</option>
             </select>
             <select id="filter-mode-select" aria-label="Filter mode" data-ui-name="filter-mode-select">
@@ -2649,15 +2766,56 @@
       </div>
       <aside class="source-panel" id="source-panel" data-ui-name="source-panel" data-ui-label="always">
         <div class="source-header">
-          <div class="source-header-main">
-            <div class="source-title" id="source-title" data-ui-name="source-title"></div>
-            <div class="source-subtitle" id="source-subtitle" data-ui-name="source-subtitle"></div>
-            <div class="source-status hidden" id="source-status" data-ui-name="source-status"></div>
+          <div class="source-header-top">
+            <div class="source-header-main">
+              <div class="source-title" id="source-title" data-ui-name="source-title"></div>
+              <div class="source-subtitle" id="source-subtitle" data-ui-name="source-subtitle"></div>
+              <div class="source-status hidden" id="source-status" data-ui-name="source-status"></div>
+            </div>
+            <div class="source-actions">
+              <a class="source-open-link hidden" id="open-raw-source-link" href="#" target="_blank" rel="noopener noreferrer" data-ui-name="open-raw-source-link">Open Raw</a>
+              <button class="source-expand" id="toggle-source-fullscreen-btn" type="button" aria-pressed="false" data-ui-name="toggle-source-fullscreen-btn">Fullscreen</button>
+              <button class="source-close" id="close-source-btn" type="button" data-ui-name="close-source-btn">Close</button>
+            </div>
           </div>
-          <div class="source-actions">
-            <a class="source-open-link hidden" id="open-raw-source-link" href="#" target="_blank" rel="noopener noreferrer" data-ui-name="open-raw-source-link">Open Raw</a>
-            <button class="source-close" id="close-source-btn" type="button" data-ui-name="close-source-btn">Close</button>
+          <div class="source-searchbar" data-ui-name="source-searchbar">
+            <div class="metric-group" data-ui-name="source-search-mode-group">
+              <label class="metric-inline-label" for="source-search-mode-select">Search:</label>
+              <select id="source-search-mode-select" aria-label="Source search mode" data-ui-name="source-search-mode-select">
+                <option value="wildcard">Wildcard</option>
+                <option value="regex">Regex</option>
+              </select>
+            </div>
+            <div class="source-search-main" data-ui-name="source-search-main">
+              <input
+                id="source-search-input"
+                class="source-search-input"
+                type="search"
+                placeholder="Search current view: foo_*"
+                title="Search the currently rendered source. Enter jumps to next match, Shift+Enter jumps to previous. Supports wildcard and regex."
+                data-ui-name="source-search-input"
+              />
+              <div class="source-search-actions" data-ui-name="source-search-actions">
+                <button
+                  id="source-search-prev-btn"
+                  class="source-nav-btn"
+                  type="button"
+                  aria-label="Previous source search match"
+                  title="Previous match (Shift+Enter)"
+                  data-ui-name="source-search-prev-btn"
+                >↑</button>
+                <button
+                  id="source-search-next-btn"
+                  class="source-nav-btn"
+                  type="button"
+                  aria-label="Next source search match"
+                  title="Next match (Enter)"
+                  data-ui-name="source-search-next-btn"
+                >↓</button>
+              </div>
+            </div>
           </div>
+          <div class="source-search-status" id="source-search-status" data-ui-name="source-search-status">Search current view</div>
         </div>
         <div class="source-code" id="source-code" data-ui-name="source-code"></div>
       </aside>
@@ -3232,7 +3390,13 @@
     const sourceStatus = document.getElementById("source-status");
     const sourceCode = document.getElementById("source-code");
     const openRawSourceLink = document.getElementById("open-raw-source-link");
+    const toggleSourceFullscreenBtn = document.getElementById("toggle-source-fullscreen-btn");
     const closeSourceBtn = document.getElementById("close-source-btn");
+    const sourceSearchModeSelect = document.getElementById("source-search-mode-select");
+    const sourceSearchInput = document.getElementById("source-search-input");
+    const sourceSearchStatus = document.getElementById("source-search-status");
+    const sourceSearchPrevBtn = document.getElementById("source-search-prev-btn");
+    const sourceSearchNextBtn = document.getElementById("source-search-next-btn");
     const toolbar = document.getElementById("toolbar");
     const toggleToolbarBtn = document.getElementById("toggle-toolbar-btn");
     const ctx = canvas.getContext("2d");
@@ -3249,6 +3413,8 @@
     const MAX_INLINE_SOURCE_LINES = 4000;
     const defaultHint = "Wheel to zoom. Drag to pan. Click to drill down. Filter supports text, wc:pattern, and re:regex. Signal analysis supports wildcard/text/regex over internal signal names. Press Escape to close source.";
     const STORAGE_KEY = `hier-viewer:${window.location.pathname}`;
+    let currentSourceView = null;
+    let sourceSearchMatchElements = [];
 
     const state = {
       homeRoot: DATA.rootId,
@@ -3304,6 +3470,11 @@
       matchLines: [],
       sourceRequestToken: 0,
       sourceAbortController: null,
+      sourcePanelFullscreen: false,
+      sourceSearchMode: "wildcard",
+      sourceSearch: "",
+      sourceSearchError: "",
+      sourceSearchMatchIndex: -1,
       treePanelOpen: false,
       treePanelWidth: 360,
       draggingTreePanelResize: false,
@@ -3836,7 +4007,7 @@
             ? saved.depthLimit
             : null;
         if (typeof saved.search === "string") state.search = saved.search;
-        if (["both", "path", "module"].includes(saved.filterScope)) {
+        if (["both", "path", "instance", "module"].includes(saved.filterScope)) {
           state.filterScope = saved.filterScope;
         }
         if (["text", "wildcard", "regex"].includes(saved.filterMode)) {
@@ -3914,6 +4085,8 @@
     filterScopeSelect.value = state.filterScope;
     filterModeSelect.value = state.filterMode;
     searchInput.value = state.search;
+    sourceSearchModeSelect.value = state.sourceSearchMode;
+    sourceSearchInput.value = state.sourceSearch;
 
     function applyMainViewMode() {
       state.chartPanelOpen = state.mainViewMode !== "treemap";
@@ -4013,13 +4186,103 @@
         .replaceAll("'", "&#39;");
     }
 
-    function highlightVerilogLine(rawLine) {
+    function buildSourceSearchRegExp() {
+      const raw = state.sourceSearch.trim();
+      if (!raw) {
+        return { regex: null, error: "" };
+      }
+      try {
+        if (state.sourceSearchMode === "regex") {
+          return { regex: new RegExp(raw, "gi"), error: "" };
+        }
+        const fragment = raw
+          .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+          .replaceAll("*", ".*?")
+          .replaceAll("?", ".");
+        return { regex: new RegExp(fragment, "gi"), error: "" };
+      } catch (error) {
+        return {
+          regex: null,
+          error: `Invalid source search: ${error instanceof Error ? error.message : String(error)}`
+        };
+      }
+    }
+
+    function collectSourceSearchRanges(rawLine, searchRegex) {
+      if (!searchRegex || !rawLine.length) {
+        return [];
+      }
+      const regex = new RegExp(searchRegex.source, searchRegex.flags);
+      const ranges = [];
+      let match;
+      while ((match = regex.exec(rawLine)) !== null) {
+        const text = match[0] || "";
+        if (!text.length) {
+          if (regex.lastIndex >= rawLine.length) {
+            break;
+          }
+          regex.lastIndex += 1;
+          continue;
+        }
+        const start = match.index ?? 0;
+        ranges.push({ start, end: start + text.length });
+        if (!regex.global) {
+          break;
+        }
+      }
+      return ranges;
+    }
+
+    function renderSourceStyledSlice(text, className) {
+      if (!text) {
+        return "";
+      }
+      const escaped = escapeHtml(text);
+      return className ? `<span class="${className}">${escaped}</span>` : escaped;
+    }
+
+    function renderSourceSegmentWithSearch(text, segmentStart, className, matchRanges) {
+      if (!text.length) {
+        return "";
+      }
+      let out = "";
+      let cursor = 0;
+      const segmentEnd = segmentStart + text.length;
+      for (const range of matchRanges) {
+        if (range.end <= segmentStart) {
+          continue;
+        }
+        if (range.start >= segmentEnd) {
+          break;
+        }
+        const localStart = Math.max(range.start, segmentStart) - segmentStart;
+        const localEnd = Math.min(range.end, segmentEnd) - segmentStart;
+        if (localStart > cursor) {
+          out += renderSourceStyledSlice(text.slice(cursor, localStart), className);
+        }
+        if (localEnd > localStart) {
+          out += `<mark class="source-find-hit">${renderSourceStyledSlice(text.slice(localStart, localEnd), className)}</mark>`;
+        }
+        cursor = localEnd;
+      }
+      if (cursor < text.length) {
+        out += renderSourceStyledSlice(text.slice(cursor), className);
+      }
+      return out;
+    }
+
+    function highlightVerilogLine(rawLine, matchRanges = []) {
       const pattern = /"(?:\\.|[^"])*"|\/\/.*|`[A-Za-z_][A-Za-z0-9_]*|\b(?:module|endmodule|input|output|inout|wire|logic|reg|assign|always|always_ff|always_comb|always_latch|if|else|case|endcase|for|foreach|while|begin|end|generate|endgenerate|parameter|localparam|typedef|struct|union|enum|interface|modport|package|import|function|endfunction|task|endtask|class|endclass|virtual|const|static|automatic|return)\b|\b\d+(?:'[bdhoBDHO][0-9a-fA-F_xXzZ?]+)?\b/g;
       let out = "";
       let last = 0;
       for (const match of rawLine.matchAll(pattern)) {
         const index = match.index ?? 0;
-        out += escapeHtml(rawLine.slice(last, index));
+        out += renderSourceSegmentWithSearch(
+          rawLine.slice(last, index),
+          last,
+          null,
+          matchRanges
+        );
         const token = match[0];
         let cls = "tok-keyword";
         if (token.startsWith("//")) {
@@ -4031,26 +4294,133 @@
         } else if (/^\d/.test(token)) {
           cls = "tok-number";
         }
-        out += `<span class="${cls}">${escapeHtml(token)}</span>`;
+        out += renderSourceSegmentWithSearch(token, index, cls, matchRanges);
         last = index + token.length;
       }
-      out += escapeHtml(rawLine.slice(last));
+      out += renderSourceSegmentWithSearch(
+        rawLine.slice(last),
+        last,
+        null,
+        matchRanges
+      );
       return out.length ? out : "&nbsp;";
     }
 
-    function renderSourceText(text, firstLineNumber, focusStartLine, focusEndLine) {
+    function updateSourceSearchStatus() {
+      const activeQuery = state.sourceSearch.trim();
+      sourceSearchStatus.classList.toggle("error", !!state.sourceSearchError);
+      if (state.sourceSearchError) {
+        sourceSearchStatus.textContent = state.sourceSearchError;
+      } else if (!activeQuery) {
+        sourceSearchStatus.textContent = "Search current view";
+      } else if (!sourceSearchMatchElements.length) {
+        sourceSearchStatus.textContent = "0 matches";
+      } else {
+        sourceSearchStatus.textContent = `${state.sourceSearchMatchIndex + 1}/${sourceSearchMatchElements.length} matches`;
+      }
+      const disabled = !sourceSearchMatchElements.length || !!state.sourceSearchError;
+      sourceSearchPrevBtn.disabled = disabled;
+      sourceSearchNextBtn.disabled = disabled;
+    }
+
+    function applyCurrentSourceSearchSelection(scrollIntoView = true) {
+      for (const element of sourceSearchMatchElements) {
+        element.classList.remove("current");
+        element.closest(".source-line")?.classList.remove("search-current");
+      }
+      if (
+        state.sourceSearchMatchIndex < 0 ||
+        state.sourceSearchMatchIndex >= sourceSearchMatchElements.length
+      ) {
+        updateSourceSearchStatus();
+        return;
+      }
+      const current = sourceSearchMatchElements[state.sourceSearchMatchIndex];
+      current.classList.add("current");
+      current.closest(".source-line")?.classList.add("search-current");
+      if (scrollIntoView) {
+        current.scrollIntoView({ block: "center", inline: "nearest" });
+      }
+      updateSourceSearchStatus();
+    }
+
+    function moveSourceSearch(delta) {
+      if (!sourceSearchMatchElements.length) {
+        return;
+      }
+      const total = sourceSearchMatchElements.length;
+      const current = state.sourceSearchMatchIndex < 0 ? 0 : state.sourceSearchMatchIndex;
+      state.sourceSearchMatchIndex = (current + delta + total) % total;
+      applyCurrentSourceSearchSelection(true);
+    }
+
+    function renderCurrentSourceView(preferFocusLine = true) {
+      if (!currentSourceView) {
+        sourceCode.innerHTML = "";
+        sourceSearchMatchElements = [];
+        state.sourceSearchMatchIndex = -1;
+        updateSourceSearchStatus();
+        return;
+      }
+      const search = buildSourceSearchRegExp();
+      state.sourceSearchError = search.error;
+      const { text, firstLineNumber, focusStartLine, focusEndLine } = currentSourceView;
       const lines = text.split("\n");
       sourceCode.innerHTML = lines
         .map((line, index) => {
           const lineNo = firstLineNumber + index;
-          const active = lineNo >= focusStartLine && lineNo <= focusEndLine ? " active" : "";
-          return `<div class="source-line${active}" data-line="${lineNo}"><span class="source-lineno">${lineNo}</span><span class="source-code-text">${highlightVerilogLine(line)}</span></div>`;
+          const matchRanges = search.error ? [] : collectSourceSearchRanges(line, search.regex);
+          const classes = ["source-line"];
+          if (lineNo >= focusStartLine && lineNo <= focusEndLine) {
+            classes.push("active");
+          }
+          if (matchRanges.length > 0) {
+            classes.push("search-match");
+          }
+          return `<div class="${classes.join(" ")}" data-line="${lineNo}"><span class="source-lineno">${lineNo}</span><span class="source-code-text">${highlightVerilogLine(line, matchRanges)}</span></div>`;
         })
         .join("");
-      const focusElement = sourceCode.querySelector(`[data-line="${focusStartLine}"]`);
-      if (focusElement) {
-        focusElement.scrollIntoView({ block: "center" });
+
+      sourceSearchMatchElements = Array.from(sourceCode.querySelectorAll(".source-find-hit"));
+      if (!sourceSearchMatchElements.length) {
+        state.sourceSearchMatchIndex = -1;
+      } else if (
+        state.sourceSearchMatchIndex < 0 ||
+        state.sourceSearchMatchIndex >= sourceSearchMatchElements.length
+      ) {
+        state.sourceSearchMatchIndex = 0;
       }
+
+      const shouldFocusSearch = state.sourceSearch.trim().length > 0 && sourceSearchMatchElements.length > 0;
+      if (shouldFocusSearch) {
+        applyCurrentSourceSearchSelection(true);
+        return;
+      }
+      updateSourceSearchStatus();
+      if (preferFocusLine) {
+        const focusElement = sourceCode.querySelector(`[data-line="${focusStartLine}"]`);
+        if (focusElement) {
+          focusElement.scrollIntoView({ block: "center" });
+        }
+      }
+    }
+
+    function renderSourceText(text, firstLineNumber, focusStartLine, focusEndLine) {
+      currentSourceView = {
+        text,
+        firstLineNumber,
+        focusStartLine,
+        focusEndLine
+      };
+      renderCurrentSourceView(true);
+    }
+
+    function applySourcePanelWindowState() {
+      sourcePanel.classList.toggle("fullscreen", state.sourcePanelFullscreen);
+      document.body.classList.toggle("source-fullscreen-active", state.sourcePanelFullscreen);
+      toggleSourceFullscreenBtn.textContent = state.sourcePanelFullscreen ? "Windowed" : "Fullscreen";
+      toggleSourceFullscreenBtn.setAttribute("aria-pressed", state.sourcePanelFullscreen ? "true" : "false");
+      scheduleUiAnnotations();
     }
 
     function renderSourceExcerpt(node, text, focusStartLine, focusEndLine, message) {
@@ -4098,9 +4468,6 @@
       if (!nodeHasSource(node)) {
         return;
       }
-      if (state.zenMode) {
-        setZenMode(false);
-      }
       cancelScheduledHoverUpdate();
 
       const focusStartLine = node.line || 1;
@@ -4119,6 +4486,7 @@
       hoverCard.classList.add("hidden");
       clearUiAnnotationHoverTargetWithin(hoverCard);
       sourcePanel.classList.add("visible");
+      applySourcePanelWindowState();
       state.sourceNodeId = nodeId;
       const requestToken = state.sourceRequestToken + 1;
       state.sourceRequestToken = requestToken;
@@ -4179,11 +4547,18 @@
       }
       state.sourceNodeId = null;
       state.sourceRequestToken += 1;
+      currentSourceView = null;
+      sourceSearchMatchElements = [];
+      state.sourceSearchMatchIndex = -1;
+      state.sourceSearchError = "";
+      state.sourcePanelFullscreen = false;
       sourceCode.innerHTML = "";
       showSourceStatus("");
       openRawSourceLink.href = "#";
       openRawSourceLink.classList.add("hidden");
+      applySourcePanelWindowState();
       sourcePanel.classList.remove("visible");
+      updateSourceSearchStatus();
       if (state.hoverId === null || state.hoverId === undefined) {
         hoverCard.classList.add("hidden");
         clearUiAnnotationHoverTargetWithin(hoverCard);
@@ -4796,6 +5171,7 @@
 
     function filterTargetText(node) {
       if (state.filterScope === "path") return node.path;
+      if (state.filterScope === "instance") return node.name;
       if (state.filterScope === "module") return node.module;
       return `${node.path} ${node.module}`;
     }
@@ -6676,6 +7052,39 @@
       closeSourcePanel();
     });
 
+    toggleSourceFullscreenBtn.addEventListener("click", () => {
+      state.sourcePanelFullscreen = !state.sourcePanelFullscreen;
+      applySourcePanelWindowState();
+    });
+
+    sourceSearchModeSelect.addEventListener("change", () => {
+      state.sourceSearchMode = sourceSearchModeSelect.value;
+      state.sourceSearchMatchIndex = 0;
+      renderCurrentSourceView(false);
+    });
+
+    sourceSearchInput.addEventListener("input", () => {
+      state.sourceSearch = sourceSearchInput.value;
+      state.sourceSearchMatchIndex = 0;
+      renderCurrentSourceView(false);
+    });
+
+    sourceSearchInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+      event.preventDefault();
+      moveSourceSearch(event.shiftKey ? -1 : 1);
+    });
+
+    sourceSearchPrevBtn.addEventListener("click", () => {
+      moveSourceSearch(-1);
+    });
+
+    sourceSearchNextBtn.addEventListener("click", () => {
+      moveSourceSearch(1);
+    });
+
     window.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") {
         return;
@@ -6685,6 +7094,11 @@
         return;
       }
       if (sourcePanel.classList.contains("visible")) {
+        if (state.sourcePanelFullscreen) {
+          state.sourcePanelFullscreen = false;
+          applySourcePanelWindowState();
+          return;
+        }
         closeSourcePanel();
         return;
       }
@@ -6982,6 +7396,8 @@
 
     syncMetricHelp();
     syncAnalysisControls();
+    updateSourceSearchStatus();
+    applySourcePanelWindowState();
     buildSignalAnalysis();
     buildMatches();
     applyTreePanelSize();

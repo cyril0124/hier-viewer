@@ -12,7 +12,12 @@ const META_ANALYSIS_FILE: &str = "viewer-analysis.bin";
 pub(crate) fn render_meta_json(data: &ViewerData) -> String {
     let mut json = String::new();
     json.push('{');
-    push_json_field(&mut json, "formatVersion", &BUNDLE_VERSION.to_string(), false);
+    push_json_field(
+        &mut json,
+        "formatVersion",
+        &BUNDLE_VERSION.to_string(),
+        false,
+    );
     push_json_field(&mut json, "title", &json_string(&data.title), true);
     push_json_field(
         &mut json,
@@ -23,7 +28,11 @@ pub(crate) fn render_meta_json(data: &ViewerData) -> String {
     push_json_field(
         &mut json,
         "debugUiLabels",
-        if data.debug_ui_labels { "true" } else { "false" },
+        if data.debug_ui_labels {
+            "true"
+        } else {
+            "false"
+        },
         true,
     );
     push_json_field(&mut json, "rootId", &data.root_id.to_string(), true);
@@ -90,7 +99,11 @@ pub(crate) fn render_core_bin(data: &ViewerData) -> Result<Vec<u8>, String> {
         push_u32_from_usize(&mut bytes, node.subtree_leaves, "subtree_leaves")?;
     }
     for node in &data.nodes {
-        push_u32_from_usize(&mut bytes, node.subtree_signal_count, "subtree_signal_count")?;
+        push_u32_from_usize(
+            &mut bytes,
+            node.subtree_signal_count,
+            "subtree_signal_count",
+        )?;
     }
     for node in &data.nodes {
         push_u32_from_usize(
@@ -100,19 +113,31 @@ pub(crate) fn render_core_bin(data: &ViewerData) -> Result<Vec<u8>, String> {
         )?;
     }
     for node in &data.nodes {
-        push_u64_from_usize(&mut bytes, node.subtree_variable_bits, "subtree_variable_bits")?;
+        push_u64_from_usize(
+            &mut bytes,
+            node.subtree_variable_bits,
+            "subtree_variable_bits",
+        )?;
     }
     for node in &data.nodes {
         push_u64_from_usize(&mut bytes, node.subtree_net_bits, "subtree_net_bits")?;
     }
     for node in &data.nodes {
-        push_u32_from_usize(&mut bytes, node.module_variable_count, "module_variable_count")?;
+        push_u32_from_usize(
+            &mut bytes,
+            node.module_variable_count,
+            "module_variable_count",
+        )?;
     }
     for node in &data.nodes {
         push_u32_from_usize(&mut bytes, node.module_net_count, "module_net_count")?;
     }
     for node in &data.nodes {
-        push_u64_from_usize(&mut bytes, node.module_variable_bits, "module_variable_bits")?;
+        push_u64_from_usize(
+            &mut bytes,
+            node.module_variable_bits,
+            "module_variable_bits",
+        )?;
     }
     for node in &data.nodes {
         push_u64_from_usize(&mut bytes, node.module_net_bits, "module_net_bits")?;
@@ -231,17 +256,13 @@ fn push_optional_string_id(
 }
 
 fn push_len_u32(bytes: &mut Vec<u8>, value: usize, label: &str) -> Result<(), String> {
-    let converted = u32::try_from(value)
-        .map_err(|_| format!("{label} exceeds u32 range: {value}"))?;
+    let converted =
+        u32::try_from(value).map_err(|_| format!("{label} exceeds u32 range: {value}"))?;
     push_u32(bytes, converted);
     Ok(())
 }
 
-fn push_optional_u32(
-    bytes: &mut Vec<u8>,
-    value: Option<usize>,
-    label: &str,
-) -> Result<(), String> {
+fn push_optional_u32(bytes: &mut Vec<u8>, value: Option<usize>, label: &str) -> Result<(), String> {
     match value {
         Some(raw) => push_u32_from_usize(bytes, raw, label),
         None => {
@@ -273,8 +294,8 @@ fn push_u32_from_usize(bytes: &mut Vec<u8>, value: usize, label: &str) -> Result
 }
 
 fn push_u64_from_usize(bytes: &mut Vec<u8>, value: usize, _label: &str) -> Result<(), String> {
-    let converted = u64::try_from(value)
-        .map_err(|_| format!("value exceeds u64 range: {value}"))?;
+    let converted =
+        u64::try_from(value).map_err(|_| format!("value exceeds u64 range: {value}"))?;
     push_u64(bytes, converted);
     Ok(())
 }

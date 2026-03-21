@@ -70,7 +70,7 @@ cargo run -- \
 
 The generated bundle contains `index.html`, `viewer-meta.json`, `viewer-core.bin`, `viewer-chart.js`, `viewer-three.module.js`, `three.core.js`, and `.hier-viewer-sources/`. When signal analysis data is available, the bundle also includes `viewer-analysis.bin`.
 When the bundle is built from RTL inputs instead of a prebuilt `--input`, the output directory also contains `.hier-viewer-cache/` with reused sqlite exports.
-`cargo build` / `cargo run` also builds a static `slang-hier-exporter` binary next to the Rust executable, so no separate Python / `pyslang` runtime is required for internal exports.
+`cargo build` / `cargo run` also builds a static `slang-hier-exporter` binary next to the Rust executable, and the Rust binary embeds that exporter for standalone distribution. This means a released `rust-hier-viewer` binary can parse RTL on its own even when no sibling `slang-hier-exporter` file is present.
 Open the bundle directory through a static file server such as VSCode Live Server and load `index.html`.
 When the input is CSV, the viewer shows file locations in the detail card and opens source code from the bundled relative files with SystemVerilog-oriented syntax highlighting.
 `Weighted Signal Bits` is bit-aware and subtree-aware. It sizes by subtree variable bits plus subtree net bits using user-configurable coefficients; setting `Var=1` and `Net=1` reproduces the old subtree signal-bits behavior.

@@ -778,8 +778,7 @@ fn compute_stats(
             child_variable_bits,
             child_net_bits,
             child_signal_bits,
-        ) =
-            compute_stats(nodes, child_id);
+        ) = compute_stats(nodes, child_id);
         subtree_instances += child_instances;
         subtree_leaves += child_leaves;
         subtree_signal_count += child_signal_count;
@@ -810,7 +809,11 @@ fn compute_stats(
     )
 }
 
-fn derive_default_title(nodes: &[Node], root_id: usize, input_path: Option<&str>) -> Option<String> {
+fn derive_default_title(
+    nodes: &[Node],
+    root_id: usize,
+    input_path: Option<&str>,
+) -> Option<String> {
     if root_id != 0 {
         let root = &nodes[root_id];
         if !root.module.trim().is_empty() {

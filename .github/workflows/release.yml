@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-linux:
+    name: Release Linux Binary
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++ pkg-config
+
+      - name: Lint
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+      - name: Build release binary
+        run: cargo build --locked --release
+
+      - name: Prepare release binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          DIST_DIR="dist"
+          BIN_NAME="rust-hier-viewer"
+          ASSET_BASENAME="${BIN_NAME}-${TAG}-x86_64-linux-gnu"
+          mkdir -p "${DIST_DIR}"
+          cp "target/release/${BIN_NAME}" "${DIST_DIR}/${ASSET_BASENAME}"
+          chmod +x "${DIST_DIR}/${ASSET_BASENAME}"
+          strip "${DIST_DIR}/${ASSET_BASENAME}" || true
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/rust-hier-viewer-*

@@ -66,10 +66,9 @@ fn run() -> Result<(), String> {
         let file_index = FileIndex::build()?;
         if has_source_inputs(&config) {
             let selection = StartupSelection {
-                output_dir: config
-                    .output_path
-                    .clone()
-                    .ok_or_else(|| "--output <dir> is required when using --rtl-path/--filelist".to_string())?,
+                output_dir: config.output_path.clone().ok_or_else(|| {
+                    "--output <dir> is required when using --rtl-path/--filelist".to_string()
+                })?,
                 title: config.title.clone(),
                 source_args_tokens: file_index.build_source_args(
                     &config.rtl_paths,

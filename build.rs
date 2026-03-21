@@ -64,17 +64,23 @@ fn main() {
             "FetchContent(https://github.com/MikePopoloski/slang.git @ 168f65f)".to_string()
         });
 
-    emit_build_log("INFO ", format!(
-        "configuring slang-hier-exporter: build_type={build_type}, static={}, slang_source={}",
-        if fully_static { "ON" } else { "OFF" },
-        slang_source_desc
-    ));
+    emit_build_log(
+        "INFO ",
+        format!(
+            "configuring slang-hier-exporter: build_type={build_type}, static={}, slang_source={}",
+            if fully_static { "ON" } else { "OFF" },
+            slang_source_desc
+        ),
+    );
     let configure_started = Instant::now();
     run_command(configure, "failed to configure C++ slang exporter");
-    emit_build_log("INFO ", format!(
-        "configured slang-hier-exporter in {:.1}s",
-        configure_started.elapsed().as_secs_f64()
-    ));
+    emit_build_log(
+        "INFO ",
+        format!(
+            "configured slang-hier-exporter in {:.1}s",
+            configure_started.elapsed().as_secs_f64()
+        ),
+    );
 
     let mut build = Command::new("cmake");
     build
@@ -82,15 +88,24 @@ fn main() {
         .arg(&build_dir)
         .arg("--target")
         .arg("slang-hier-exporter");
-    emit_build_log("INFO ", "building slang-hier-exporter with cmake --build".to_string());
+    emit_build_log(
+        "INFO ",
+        "building slang-hier-exporter with cmake --build".to_string(),
+    );
     let build_started = Instant::now();
     run_command(build, "failed to build C++ slang exporter");
-    emit_build_log("INFO ", format!(
-        "built slang-hier-exporter in {:.1}s",
-        build_started.elapsed().as_secs_f64()
-    ));
+    emit_build_log(
+        "INFO ",
+        format!(
+            "built slang-hier-exporter in {:.1}s",
+            build_started.elapsed().as_secs_f64()
+        ),
+    );
 
-    let built_binary = build_dir.join("out").join("bin").join("slang-hier-exporter");
+    let built_binary = build_dir
+        .join("out")
+        .join("bin")
+        .join("slang-hier-exporter");
     if !built_binary.is_file() {
         panic!(
             "C++ slang exporter was built but '{}' does not exist",
@@ -103,11 +118,38 @@ fn main() {
         .nth(3)
         .expect("failed to derive target profile directory")
         .to_path_buf();
+    let embedded_dir = out_dir.join("embedded-exporter");
+    fs::create_dir_all(&embedded_dir).expect("failed to create embedded exporter dir");
+    let built_bytes = fs::read(&built_binary).unwrap_or_else(|err| {
+        panic!(
+            "failed to read built C++ slang exporter '{}': {err}",
+            built_binary.display()
+        )
+    });
+    let embedded_hash = fnv1a_hex(&built_bytes);
+    let embedded_binary = embedded_dir.join(format!("{embedded_hash}-{EXPORTER_BINARY_NAME}"));
+    emit_build_log(
+        "INFO ",
+        format!(
+            "embedding slang-hier-exporter at '{}'",
+            embedded_binary.display()
+        ),
+    );
+    fs::write(&embedded_binary, &built_bytes).unwrap_or_else(|err| {
+        panic!(
+            "failed to write embedded C++ slang exporter to '{}': {err}",
+            embedded_binary.display()
+        )
+    });
+
     let sibling_binary = profile_dir.join("slang-hier-exporter");
-    emit_build_log("INFO ", format!(
-        "copying slang-hier-exporter to '{}'",
-        sibling_binary.display()
-    ));
+    emit_build_log(
+        "INFO ",
+        format!(
+            "copying slang-hier-exporter to '{}'",
+            sibling_binary.display()
+        ),
+    );
     fs::copy(&built_binary, &sibling_binary).unwrap_or_else(|err| {
         panic!(
             "failed to copy C++ slang exporter from '{}' to '{}': {err}",
@@ -117,14 +159,25 @@ fn main() {
     });
 
     println!(
-        "cargo:rustc-env=HIER_VIEWER_EXPORTER_BUILD_PATH={}",
-        sibling_binary.display()
+        "cargo:rustc-env=HIER_VIEWER_EMBEDDED_EXPORTER_PATH={}",
+        embedded_binary.display()
     );
-    emit_build_log("INFO ", format!(
-        "slang-hier-exporter is ready at '{}'",
-        sibling_binary.display()
-    ));
+    println!("cargo:rustc-env=HIER_VIEWER_EMBEDDED_EXPORTER_HASH={embedded_hash}");
+    emit_build_log(
+        "INFO ",
+        format!(
+            "slang-hier-exporter is ready at '{}' (embedded hash {})",
+            sibling_binary.display(),
+            embedded_hash
+        ),
+    );
 }
+
+const EXPORTER_BINARY_NAME: &str = if cfg!(windows) {
+    "slang-hier-exporter.exe"
+} else {
+    "slang-hier-exporter"
+};
 
 fn emit_rerun_for_dir(dir: &Path) {
     if let Ok(entries) = fs::read_dir(dir) {
@@ -137,6 +190,15 @@ fn emit_rerun_for_dir(dir: &Path) {
             }
         }
     }
+}
+
+fn fnv1a_hex(bytes: &[u8]) -> String {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
 }
 
 fn run_command(mut command: Command, context: &str) {

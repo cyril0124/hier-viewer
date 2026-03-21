@@ -151,25 +151,39 @@ fn parse_csv_entries(input: &str) -> Result<Vec<Entry>, String> {
     let column_index = headers.iter().position(|name| name == "column");
     let end_line_index = headers.iter().position(|name| name == "end_line");
     let end_column_index = headers.iter().position(|name| name == "end_column");
-    let definition_file_path_index = headers.iter().position(|name| name == "definition_file_path");
+    let definition_file_path_index = headers
+        .iter()
+        .position(|name| name == "definition_file_path");
     let definition_line_index = headers.iter().position(|name| name == "definition_line");
     let definition_column_index = headers.iter().position(|name| name == "definition_column");
-    let definition_end_line_index = headers.iter().position(|name| name == "definition_end_line");
-    let definition_end_column_index = headers.iter().position(|name| name == "definition_end_column");
+    let definition_end_line_index = headers
+        .iter()
+        .position(|name| name == "definition_end_line");
+    let definition_end_column_index = headers
+        .iter()
+        .position(|name| name == "definition_end_column");
     let module_port_count_index = headers.iter().position(|name| name == "module_port_count");
     let module_logic_count_index = headers.iter().position(|name| name == "module_logic_count");
     let module_reg_count_index = headers.iter().position(|name| name == "module_reg_count");
     let module_wire_count_index = headers.iter().position(|name| name == "module_wire_count");
-    let module_variable_count_index = headers.iter().position(|name| name == "module_variable_count");
+    let module_variable_count_index = headers
+        .iter()
+        .position(|name| name == "module_variable_count");
     let module_net_count_index = headers.iter().position(|name| name == "module_net_count");
-    let module_signal_count_index = headers.iter().position(|name| name == "module_signal_count");
-    let module_variable_bits_index = headers.iter().position(|name| name == "module_variable_bits");
+    let module_signal_count_index = headers
+        .iter()
+        .position(|name| name == "module_signal_count");
+    let module_variable_bits_index = headers
+        .iter()
+        .position(|name| name == "module_variable_bits");
     let module_net_bits_index = headers.iter().position(|name| name == "module_net_bits");
     let module_signal_bits_index = headers.iter().position(|name| name == "module_signal_bits");
-    let module_internal_signal_count_index =
-        headers.iter().position(|name| name == "module_internal_signal_count");
-    let module_gen_signal_count_index =
-        headers.iter().position(|name| name == "module_gen_signal_count");
+    let module_internal_signal_count_index = headers
+        .iter()
+        .position(|name| name == "module_internal_signal_count");
+    let module_gen_signal_count_index = headers
+        .iter()
+        .position(|name| name == "module_gen_signal_count");
 
     let mut entries = Vec::new();
     for (row_index, record) in reader.records().enumerate() {
@@ -185,26 +199,118 @@ fn parse_csv_entries(input: &str) -> Result<Vec<Entry>, String> {
             source_href: None,
             definition_file_path: optional_csv_field(&record, definition_file_path_index),
             definition_source_href: None,
-            line: parse_optional_usize(optional_csv_field(&record, line_index).as_deref(), "line", row_index + 2)?,
-            column: parse_optional_usize(optional_csv_field(&record, column_index).as_deref(), "column", row_index + 2)?,
-            end_line: parse_optional_usize(optional_csv_field(&record, end_line_index).as_deref(), "end_line", row_index + 2)?,
-            end_column: parse_optional_usize(optional_csv_field(&record, end_column_index).as_deref(), "end_column", row_index + 2)?,
-            definition_line: parse_optional_usize(optional_csv_field(&record, definition_line_index).as_deref(), "definition_line", row_index + 2)?,
-            definition_column: parse_optional_usize(optional_csv_field(&record, definition_column_index).as_deref(), "definition_column", row_index + 2)?,
-            definition_end_line: parse_optional_usize(optional_csv_field(&record, definition_end_line_index).as_deref(), "definition_end_line", row_index + 2)?,
-            definition_end_column: parse_optional_usize(optional_csv_field(&record, definition_end_column_index).as_deref(), "definition_end_column", row_index + 2)?,
-            module_port_count: parse_optional_usize(optional_csv_field(&record, module_port_count_index).as_deref(), "module_port_count", row_index + 2)?.unwrap_or(0),
-            module_logic_count: parse_optional_usize(optional_csv_field(&record, module_logic_count_index).as_deref(), "module_logic_count", row_index + 2)?.unwrap_or(0),
-            module_reg_count: parse_optional_usize(optional_csv_field(&record, module_reg_count_index).as_deref(), "module_reg_count", row_index + 2)?.unwrap_or(0),
-            module_wire_count: parse_optional_usize(optional_csv_field(&record, module_wire_count_index).as_deref(), "module_wire_count", row_index + 2)?.unwrap_or(0),
-            module_variable_count: parse_optional_usize(optional_csv_field(&record, module_variable_count_index).as_deref(), "module_variable_count", row_index + 2)?.unwrap_or(0),
-            module_net_count: parse_optional_usize(optional_csv_field(&record, module_net_count_index).as_deref(), "module_net_count", row_index + 2)?.unwrap_or(0),
-            module_signal_count: parse_optional_usize(optional_csv_field(&record, module_signal_count_index).as_deref(), "module_signal_count", row_index + 2)?.unwrap_or(0),
-            module_variable_bits: parse_optional_usize(optional_csv_field(&record, module_variable_bits_index).as_deref(), "module_variable_bits", row_index + 2)?.unwrap_or(0),
-            module_net_bits: parse_optional_usize(optional_csv_field(&record, module_net_bits_index).as_deref(), "module_net_bits", row_index + 2)?.unwrap_or(0),
-            module_signal_bits: parse_optional_usize(optional_csv_field(&record, module_signal_bits_index).as_deref(), "module_signal_bits", row_index + 2)?.unwrap_or(0),
-            module_internal_signal_count: parse_optional_usize(optional_csv_field(&record, module_internal_signal_count_index).as_deref(), "module_internal_signal_count", row_index + 2)?.unwrap_or(0),
-            module_gen_signal_count: parse_optional_usize(optional_csv_field(&record, module_gen_signal_count_index).as_deref(), "module_gen_signal_count", row_index + 2)?.unwrap_or(0),
+            line: parse_optional_usize(
+                optional_csv_field(&record, line_index).as_deref(),
+                "line",
+                row_index + 2,
+            )?,
+            column: parse_optional_usize(
+                optional_csv_field(&record, column_index).as_deref(),
+                "column",
+                row_index + 2,
+            )?,
+            end_line: parse_optional_usize(
+                optional_csv_field(&record, end_line_index).as_deref(),
+                "end_line",
+                row_index + 2,
+            )?,
+            end_column: parse_optional_usize(
+                optional_csv_field(&record, end_column_index).as_deref(),
+                "end_column",
+                row_index + 2,
+            )?,
+            definition_line: parse_optional_usize(
+                optional_csv_field(&record, definition_line_index).as_deref(),
+                "definition_line",
+                row_index + 2,
+            )?,
+            definition_column: parse_optional_usize(
+                optional_csv_field(&record, definition_column_index).as_deref(),
+                "definition_column",
+                row_index + 2,
+            )?,
+            definition_end_line: parse_optional_usize(
+                optional_csv_field(&record, definition_end_line_index).as_deref(),
+                "definition_end_line",
+                row_index + 2,
+            )?,
+            definition_end_column: parse_optional_usize(
+                optional_csv_field(&record, definition_end_column_index).as_deref(),
+                "definition_end_column",
+                row_index + 2,
+            )?,
+            module_port_count: parse_optional_usize(
+                optional_csv_field(&record, module_port_count_index).as_deref(),
+                "module_port_count",
+                row_index + 2,
+            )?
+            .unwrap_or(0),
+            module_logic_count: parse_optional_usize(
+                optional_csv_field(&record, module_logic_count_index).as_deref(),
+                "module_logic_count",
+                row_index + 2,
+            )?
+            .unwrap_or(0),
+            module_reg_count: parse_optional_usize(
+                optional_csv_field(&record, module_reg_count_index).as_deref(),
+                "module_reg_count",
+                row_index + 2,
+            )?
+            .unwrap_or(0),
+            module_wire_count: parse_optional_usize(
+                optional_csv_field(&record, module_wire_count_index).as_deref(),
+                "module_wire_count",
+                row_index + 2,
+            )?
+            .unwrap_or(0),
+            module_variable_count: parse_optional_usize(
+                optional_csv_field(&record, module_variable_count_index).as_deref(),
+                "module_variable_count",
+                row_index + 2,
+            )?
+            .unwrap_or(0),
+            module_net_count: parse_optional_usize(
+                optional_csv_field(&record, module_net_count_index).as_deref(),
+                "module_net_count",
+                row_index + 2,
+            )?
+            .unwrap_or(0),
+            module_signal_count: parse_optional_usize(
+                optional_csv_field(&record, module_signal_count_index).as_deref(),
+                "module_signal_count",
+                row_index + 2,
+            )?
+            .unwrap_or(0),
+            module_variable_bits: parse_optional_usize(
+                optional_csv_field(&record, module_variable_bits_index).as_deref(),
+                "module_variable_bits",
+                row_index + 2,
+            )?
+            .unwrap_or(0),
+            module_net_bits: parse_optional_usize(
+                optional_csv_field(&record, module_net_bits_index).as_deref(),
+                "module_net_bits",
+                row_index + 2,
+            )?
+            .unwrap_or(0),
+            module_signal_bits: parse_optional_usize(
+                optional_csv_field(&record, module_signal_bits_index).as_deref(),
+                "module_signal_bits",
+                row_index + 2,
+            )?
+            .unwrap_or(0),
+            module_internal_signal_count: parse_optional_usize(
+                optional_csv_field(&record, module_internal_signal_count_index).as_deref(),
+                "module_internal_signal_count",
+                row_index + 2,
+            )?
+            .unwrap_or(0),
+            module_gen_signal_count: parse_optional_usize(
+                optional_csv_field(&record, module_gen_signal_count_index).as_deref(),
+                "module_gen_signal_count",
+                row_index + 2,
+            )?
+            .unwrap_or(0),
             snippet_start_line: None,
             snippet_end_line: None,
             snippet_text: None,

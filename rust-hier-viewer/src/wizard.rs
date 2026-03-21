@@ -110,12 +110,18 @@ impl Field {
     ];
 
     fn next(self) -> Self {
-        let index = Self::ALL.iter().position(|field| *field == self).unwrap_or(0);
+        let index = Self::ALL
+            .iter()
+            .position(|field| *field == self)
+            .unwrap_or(0);
         Self::ALL[(index + 1) % Self::ALL.len()]
     }
 
     fn prev(self) -> Self {
-        let index = Self::ALL.iter().position(|field| *field == self).unwrap_or(0);
+        let index = Self::ALL
+            .iter()
+            .position(|field| *field == self)
+            .unwrap_or(0);
         Self::ALL[(index + Self::ALL.len() - 1) % Self::ALL.len()]
     }
 }
@@ -244,8 +250,8 @@ pub(crate) fn run_startup_wizard(
             if event::poll(Duration::from_millis(200))
                 .map_err(|err| format!("failed to poll terminal events: {err}"))?
             {
-                let Event::Key(key) = event::read()
-                    .map_err(|err| format!("failed to read terminal event: {err}"))?
+                let Event::Key(key) =
+                    event::read().map_err(|err| format!("failed to read terminal event: {err}"))?
                 else {
                     continue;
                 };
@@ -500,7 +506,9 @@ fn add_source_entry(state: &mut WizardState, file_index: &FileIndex, kind: Sourc
     let value = active_source_input_mut(state, kind).trim().to_string();
     if value.is_empty() {
         state.status = match kind {
-            SourceEntryKind::RtlPath => "RTL path is empty. Type a path or pattern first.".to_string(),
+            SourceEntryKind::RtlPath => {
+                "RTL path is empty. Type a path or pattern first.".to_string()
+            }
             SourceEntryKind::Filelist => {
                 "Filelist path is empty. Type a filelist path first.".to_string()
             }
@@ -513,7 +521,11 @@ fn add_source_entry(state: &mut WizardState, file_index: &FileIndex, kind: Sourc
         .iter()
         .any(|entry| entry.kind == kind && entry.value == value)
     {
-        state.status = format!("{} '{}' is already in the source list.", kind.badge(), value);
+        state.status = format!(
+            "{} '{}' is already in the source list.",
+            kind.badge(),
+            value
+        );
         active_source_input_mut(state, kind).clear();
         return;
     }
@@ -665,7 +677,9 @@ fn remove_selected_source(state: &mut WizardState, file_index: &FileIndex) {
     if state.sources.is_empty() {
         return;
     }
-    let removed = state.sources.remove(state.source_index.min(state.sources.len() - 1));
+    let removed = state
+        .sources
+        .remove(state.source_index.min(state.sources.len() - 1));
     if state.source_index >= state.sources.len() && !state.sources.is_empty() {
         state.source_index = state.sources.len() - 1;
     } else if state.sources.is_empty() {
@@ -760,9 +774,7 @@ fn render_tabs(frame: &mut ratatui::Frame<'_>, area: Rect, active_tab: WizardTab
                 .bg(Color::Yellow)
                 .add_modifier(Modifier::BOLD)
         } else {
-            Style::default()
-                .fg(Color::White)
-                .bg(Color::Rgb(60, 60, 60))
+            Style::default().fg(Color::White).bg(Color::Rgb(60, 60, 60))
         };
         spans.push(Span::styled(
             format!(" {} {} ", tab.short_index(), tab.label()),
@@ -777,13 +789,13 @@ fn render_tabs(frame: &mut ratatui::Frame<'_>, area: Rect, active_tab: WizardTab
             Style::default().fg(Color::DarkGray),
         )]),
     ])
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray))
-                .title("Workflow"),
-        )
-        .wrap(Wrap { trim: false });
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::DarkGray))
+            .title("Workflow"),
+    )
+    .wrap(Wrap { trim: false });
     frame.render_widget(paragraph, area);
 }
 
@@ -902,11 +914,7 @@ fn render_active_suggestion_overlay(
     render_suggestion_dropdown(frame, dropdown_area, state, title);
 }
 
-fn render_pattern_mode_dropdown(
-    frame: &mut ratatui::Frame<'_>,
-    area: Rect,
-    state: &WizardState,
-) {
+fn render_pattern_mode_dropdown(frame: &mut ratatui::Frame<'_>, area: Rect, state: &WizardState) {
     if state.selected == Field::PatternMode && state.pattern_mode_open {
         let items = pattern_mode_options()
             .iter()
@@ -964,7 +972,10 @@ fn render_source_list(frame: &mut ratatui::Frame<'_>, area: Rect, state: &Wizard
             "No sources added yet. Add RTL paths or filelists above.",
             Style::default().fg(Color::DarkGray),
         )))
-        .block(block("Source List [Del/Backspace/D/X]", state.selected == Field::SourceList))
+        .block(block(
+            "Source List [Del/Backspace/D/X]",
+            state.selected == Field::SourceList,
+        ))
         .wrap(Wrap { trim: true });
         frame.render_widget(paragraph, area);
         return;
@@ -1035,7 +1046,11 @@ fn render_flags_tab(frame: &mut ratatui::Frame<'_>, area: Rect, state: &WizardSt
 fn render_output_tab(frame: &mut ratatui::Frame<'_>, area: Rect, state: &WizardState) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Length(3), Constraint::Min(6)])
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Min(6),
+        ])
         .split(area);
     render_input(
         frame,
@@ -1150,9 +1165,8 @@ fn render_suggestion_dropdown(
         })
         .collect::<Vec<_>>();
 
-    let mut list_state = ListState::default().with_selected(Some(
-        state.suggestion_index.saturating_sub(start),
-    ));
+    let mut list_state =
+        ListState::default().with_selected(Some(state.suggestion_index.saturating_sub(start)));
     let list = List::new(items)
         .highlight_style(
             Style::default()
@@ -1177,15 +1191,26 @@ fn block(title: &str, selected: bool) -> Block<'_> {
     } else {
         Style::default()
     };
-    Block::default().borders(Borders::ALL).border_style(style).title(title)
+    Block::default()
+        .borders(Borders::ALL)
+        .border_style(style)
+        .title(title)
 }
 
-fn cursor_position(content_area: Rect, state: &WizardState, active_tab: WizardTab) -> Option<(u16, u16)> {
+fn cursor_position(
+    content_area: Rect,
+    state: &WizardState,
+    active_tab: WizardTab,
+) -> Option<(u16, u16)> {
     match active_tab {
         WizardTab::Input => {
             let layout = input_tab_layout(content_area, state);
             let (area, text, should_show) = match state.selected {
-                Field::RtlPathInput => (layout.rtl_input, state.rtl_path_input.as_str(), state.rtl_path_editing),
+                Field::RtlPathInput => (
+                    layout.rtl_input,
+                    state.rtl_path_input.as_str(),
+                    state.rtl_path_editing,
+                ),
                 Field::FilelistInput => (
                     layout.filelist_input,
                     state.filelist_input.as_str(),
@@ -1216,7 +1241,11 @@ fn cursor_position(content_area: Rect, state: &WizardState, active_tab: WizardTa
         WizardTab::Output => {
             let layout = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Length(3), Constraint::Length(3), Constraint::Min(6)])
+                .constraints([
+                    Constraint::Length(3),
+                    Constraint::Length(3),
+                    Constraint::Min(6),
+                ])
                 .split(content_area);
             let (area, text) = match state.selected {
                 Field::OutputDir => (layout[0], state.output_dir.as_str()),
@@ -1245,7 +1274,11 @@ fn refresh_source_counts(state: &mut WizardState, file_index: &FileIndex) {
 }
 
 fn pattern_mode_options() -> [PatternMode; 3] {
-    [PatternMode::Literal, PatternMode::Wildcard, PatternMode::Regex]
+    [
+        PatternMode::Literal,
+        PatternMode::Wildcard,
+        PatternMode::Regex,
+    ]
 }
 
 fn pattern_mode_index(mode: PatternMode) -> usize {
@@ -1255,7 +1288,9 @@ fn pattern_mode_index(mode: PatternMode) -> usize {
         .unwrap_or(0)
 }
 
-fn spawn_suggestion_worker(file_index: FileIndex) -> (Sender<SuggestionRequest>, Receiver<SuggestionResponse>) {
+fn spawn_suggestion_worker(
+    file_index: FileIndex,
+) -> (Sender<SuggestionRequest>, Receiver<SuggestionResponse>) {
     let (request_tx, request_rx) = mpsc::channel::<SuggestionRequest>();
     let (response_tx, response_rx) = mpsc::channel::<SuggestionResponse>();
 

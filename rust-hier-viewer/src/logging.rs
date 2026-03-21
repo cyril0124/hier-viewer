@@ -46,11 +46,7 @@ pub(crate) fn error(target: &str, message: impl AsRef<str>) {
 }
 
 pub(crate) fn color_env_value() -> &'static str {
-    if supports_color() {
-        "always"
-    } else {
-        "never"
-    }
+    if supports_color() { "always" } else { "never" }
 }
 
 fn emit(level: LogLevel, target: &str, message: &str) {

@@ -1,15 +1,17 @@
 use std::collections::BTreeSet;
 use std::env;
 use std::fs;
+use std::fs::OpenOptions;
 use std::hash::{Hash, Hasher};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 use std::thread;
 use std::time::UNIX_EPOCH;
 
-use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
+use fuzzy_matcher::skim::SkimMatcherV2;
 use globset::{Glob, GlobSetBuilder};
 use regex::Regex;
 use shell_words::split as shell_split;
@@ -24,6 +26,9 @@ const EXPORTER_BINARY_NAME: &str = if cfg!(windows) {
 } else {
     "slang-hier-exporter"
 };
+const EMBEDDED_EXPORTER_BYTES: &[u8] = include_bytes!(env!("HIER_VIEWER_EMBEDDED_EXPORTER_PATH"));
+const EMBEDDED_EXPORTER_HASH: &str = env!("HIER_VIEWER_EMBEDDED_EXPORTER_HASH");
+static EMBEDDED_EXPORTER_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum PatternMode {
@@ -82,6 +87,12 @@ pub(crate) struct ExportResult {
 }
 
 #[derive(Clone, Debug)]
+struct HierarchyExporter {
+    path: PathBuf,
+    cache_fingerprint: String,
+}
+
+#[derive(Clone, Debug)]
 pub(crate) struct FileIndex {
     cwd: PathBuf,
     home_dir: Option<PathBuf>,
@@ -108,10 +119,12 @@ impl FileIndex {
             if !is_rtl_file(entry.path()) {
                 continue;
             }
-            let relative = entry
-                .path()
-                .strip_prefix(&cwd)
-                .map_err(|err| format!("failed to relativize path '{}': {err}", entry.path().display()))?;
+            let relative = entry.path().strip_prefix(&cwd).map_err(|err| {
+                format!(
+                    "failed to relativize path '{}': {err}",
+                    entry.path().display()
+                )
+            })?;
             rtl_files_relative.push(path_to_unix_string(relative));
             rtl_files_absolute.push(path_to_unix_string(entry.path()));
         }
@@ -145,7 +158,10 @@ impl FileIndex {
                     &token,
                     PathCompletionKind::RtlOnly,
                 );
-                extend_unique(&mut suggestions, fuzzy_suggestions(&display_candidates, &token));
+                extend_unique(
+                    &mut suggestions,
+                    fuzzy_suggestions(&display_candidates, &token),
+                );
                 suggestions
             }
             PatternMode::Wildcard => {
@@ -314,7 +330,8 @@ impl FileIndex {
             Vec::new()
         };
         let resolved_filelists = self.resolve_filelists(filelists)?;
-        let mut source_args_tokens = Vec::with_capacity(resolved_filelists.len() * 2 + resolved_files.len());
+        let mut source_args_tokens =
+            Vec::with_capacity(resolved_filelists.len() * 2 + resolved_files.len());
         for filelist in resolved_filelists {
             source_args_tokens.push("-f".to_string());
             source_args_tokens.push(filelist);
@@ -350,10 +367,7 @@ impl FileIndex {
         for filelist in normalize_patterns(filelists)? {
             let path = resolve_literal_path(&self.cwd, self.home_dir.as_deref(), &filelist);
             if !path.is_file() {
-                return Err(format!(
-                    "filelist '{}' does not exist as a file",
-                    filelist
-                ));
+                return Err(format!("filelist '{}' does not exist as a file", filelist));
             }
             resolved.push(path_to_unix_string(path));
         }
@@ -370,7 +384,7 @@ pub(crate) fn parse_extra_args(raw: &str) -> Result<Vec<String>, String> {
 }
 
 pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<ExportResult, String> {
-    let exporter_path = locate_hierarchy_exporter()?;
+    let exporter = locate_hierarchy_exporter()?;
     let cache_dir = sqlite_cache_dir(&selection.output_dir);
     fs::create_dir_all(&cache_dir).map_err(|err| {
         format!(
@@ -378,7 +392,7 @@ pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<Exp
             cache_dir.display()
         )
     })?;
-    let cache_key = compute_sqlite_cache_key(selection, &exporter_path)?;
+    let cache_key = compute_sqlite_cache_key(selection, &exporter)?;
     let export_path = cache_dir.join(format!("{cache_key}.sqlite"));
     if export_path.is_file() && !selection.rebuild_sqlite {
         info(
@@ -395,8 +409,7 @@ pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<Exp
     }
 
     let temp_export_path = export_path.with_extension("sqlite.tmp");
-    let rebuild_reason =
-        sqlite_rebuild_reason(&cache_dir, &export_path, selection.rebuild_sqlite)?;
+    let rebuild_reason = sqlite_rebuild_reason(&cache_dir, &export_path, selection.rebuild_sqlite)?;
     info(
         "launcher",
         format!(
@@ -406,12 +419,12 @@ pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<Exp
             } else {
                 "Running"
             },
-            exporter_path.display(),
+            exporter.path.display(),
             selection.source_args_tokens.len(),
             rebuild_reason
         ),
     );
-    let mut command = Command::new(&exporter_path);
+    let mut command = Command::new(&exporter.path);
     command.arg("--sqlite");
     command.arg("-o");
     command.arg(&temp_export_path);
@@ -424,7 +437,7 @@ pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<Exp
     let mut child = command.spawn().map_err(|err| {
         format!(
             "failed to run hierarchy exporter '{}': {err}",
-            exporter_path.display()
+            exporter.path.display()
         )
     })?;
 
@@ -501,35 +514,167 @@ fn sqlite_cache_dir(output_dir: &str) -> PathBuf {
     Path::new(output_dir).join(".hier-viewer-cache")
 }
 
-fn locate_hierarchy_exporter() -> Result<PathBuf, String> {
-    let mut candidates = Vec::new();
-
+fn locate_hierarchy_exporter() -> Result<HierarchyExporter, String> {
     if let Ok(current_exe) = env::current_exe()
         && let Some(dir) = current_exe.parent()
     {
-        candidates.push(dir.join(EXPORTER_BINARY_NAME));
-    }
-
-    candidates.push(PathBuf::from(env!("HIER_VIEWER_EXPORTER_BUILD_PATH")));
-
-    if let Ok(cwd) = env::current_dir() {
-        candidates.push(cwd.join(EXPORTER_BINARY_NAME));
-    }
-
-    if let Some(path_binary) = find_binary_in_path(EXPORTER_BINARY_NAME) {
-        candidates.push(path_binary);
-    }
-
-    for candidate in candidates {
-        if candidate.is_file() {
-            return Ok(candidate);
+        let sibling = dir.join(EXPORTER_BINARY_NAME);
+        if sibling.is_file() {
+            return external_hierarchy_exporter(sibling);
         }
     }
 
+    let embedded = ensure_embedded_hierarchy_exporter()?;
+    if embedded.is_file() {
+        return Ok(HierarchyExporter {
+            path: embedded,
+            cache_fingerprint: format!("embedded:{EMBEDDED_EXPORTER_HASH}"),
+        });
+    }
+
+    if let Ok(cwd) = env::current_dir() {
+        let local = cwd.join(EXPORTER_BINARY_NAME);
+        if local.is_file() {
+            return external_hierarchy_exporter(local);
+        }
+    }
+
+    if let Some(path_binary) = find_binary_in_path(EXPORTER_BINARY_NAME)
+        && path_binary.is_file()
+    {
+        return external_hierarchy_exporter(path_binary);
+    }
+
     Err(format!(
-        "could not locate '{}'; place it next to rust-hier-viewer or ensure it is available on PATH",
+        "could not locate or materialize '{}'",
         EXPORTER_BINARY_NAME
     ))
+}
+
+fn external_hierarchy_exporter(path: PathBuf) -> Result<HierarchyExporter, String> {
+    let cache_fingerprint = external_exporter_fingerprint(&path)?;
+    Ok(HierarchyExporter {
+        path,
+        cache_fingerprint,
+    })
+}
+
+fn external_exporter_fingerprint(path: &Path) -> Result<String, String> {
+    let metadata = fs::metadata(path)
+        .map_err(|err| format!("failed to stat exporter '{}': {err}", path.display()))?;
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|value| value.duration_since(UNIX_EPOCH).ok());
+    Ok(format!(
+        "external:{}:{}:{}:{}",
+        path_to_unix_string(path),
+        metadata.len(),
+        modified.map(|value| value.as_secs()).unwrap_or(0),
+        modified.map(|value| value.subsec_nanos()).unwrap_or(0)
+    ))
+}
+
+fn ensure_embedded_hierarchy_exporter() -> Result<PathBuf, String> {
+    if let Some(path) = EMBEDDED_EXPORTER_PATH.get() {
+        return Ok(path.clone());
+    }
+
+    let path = embedded_exporter_target_path();
+    materialize_embedded_hierarchy_exporter(&path)?;
+    let _ = EMBEDDED_EXPORTER_PATH.set(path.clone());
+    Ok(path)
+}
+
+fn embedded_exporter_target_path() -> PathBuf {
+    env::temp_dir()
+        .join("rust-hier-viewer")
+        .join("embedded-exporter")
+        .join(format!("{EMBEDDED_EXPORTER_HASH}-{EXPORTER_BINARY_NAME}"))
+}
+
+fn materialize_embedded_hierarchy_exporter(path: &Path) -> Result<(), String> {
+    if let Ok(metadata) = fs::metadata(path)
+        && metadata.len() == EMBEDDED_EXPORTER_BYTES.len() as u64
+    {
+        ensure_executable_permissions(path)?;
+        return Ok(());
+    }
+
+    let parent = path.parent().ok_or_else(|| {
+        format!(
+            "failed to derive parent directory for embedded exporter '{}'",
+            path.display()
+        )
+    })?;
+    fs::create_dir_all(parent).map_err(|err| {
+        format!(
+            "failed to create embedded exporter directory '{}': {err}",
+            parent.display()
+        )
+    })?;
+
+    let temp_path = parent.join(format!(
+        ".{}-{}.tmp",
+        EXPORTER_BINARY_NAME,
+        std::process::id()
+    ));
+    let mut file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&temp_path)
+        .map_err(|err| {
+            format!(
+                "failed to create temporary embedded exporter '{}': {err}",
+                temp_path.display()
+            )
+        })?;
+    file.write_all(EMBEDDED_EXPORTER_BYTES).map_err(|err| {
+        format!(
+            "failed to write embedded exporter '{}': {err}",
+            temp_path.display()
+        )
+    })?;
+    file.flush().map_err(|err| {
+        format!(
+            "failed to flush embedded exporter '{}': {err}",
+            temp_path.display()
+        )
+    })?;
+    ensure_executable_permissions(&temp_path)?;
+    fs::rename(&temp_path, path).or_else(|rename_err| {
+        if path.is_file() {
+            Ok(())
+        } else {
+            Err(format!(
+                "failed to place embedded exporter '{}' (temp '{}'): {rename_err}",
+                path.display(),
+                temp_path.display()
+            ))
+        }
+    })?;
+    ensure_executable_permissions(path)?;
+    info(
+        "launcher",
+        format!("Using embedded slang-hier-exporter at '{}'", path.display()),
+    );
+    Ok(())
+}
+
+fn ensure_executable_permissions(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut permissions = fs::metadata(path)
+            .map_err(|err| format!("failed to stat '{}': {err}", path.display()))?
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(path, permissions)
+            .map_err(|err| format!("failed to mark '{}' executable: {err}", path.display()))?;
+    }
+    Ok(())
 }
 
 fn find_binary_in_path(binary_name: &str) -> Option<PathBuf> {
@@ -591,12 +736,11 @@ fn sqlite_rebuild_reason(
 
 fn compute_sqlite_cache_key(
     selection: &StartupSelection,
-    exporter_path: &Path,
+    exporter: &HierarchyExporter,
 ) -> Result<String, String> {
     let mut hasher = StableHasher::default();
     hasher.write_str("slang-hier-exporter-sqlite-cache-v1");
-    hasher.write_str(&path_to_unix_string(exporter_path));
-    write_path_fingerprint(&mut hasher, exporter_path)?;
+    hasher.write_str(&exporter.cache_fingerprint);
     for token in &selection.extra_args_tokens {
         hasher.write_str("arg");
         hasher.write_str(token);
@@ -615,8 +759,8 @@ fn compute_sqlite_cache_key(
 }
 
 fn write_path_fingerprint(hasher: &mut StableHasher, path: &Path) -> Result<(), String> {
-    let metadata = fs::metadata(path)
-        .map_err(|err| format!("failed to stat '{}': {err}", path.display()))?;
+    let metadata =
+        fs::metadata(path).map_err(|err| format!("failed to stat '{}': {err}", path.display()))?;
     hasher.write_str(&path_to_unix_string(path));
     hasher.write_u64(metadata.len());
     let modified_secs = metadata
@@ -813,7 +957,11 @@ enum PathStyle {
     HomeTilde,
 }
 
-fn completion_context(cwd: &Path, home_dir: Option<&Path>, token: &str) -> (PathBuf, String, PathStyle) {
+fn completion_context(
+    cwd: &Path,
+    home_dir: Option<&Path>,
+    token: &str,
+) -> (PathBuf, String, PathStyle) {
     let normalized = token.replace('\\', "/");
     let path_style = if normalized.starts_with("~/") || normalized == "~" {
         PathStyle::HomeTilde
