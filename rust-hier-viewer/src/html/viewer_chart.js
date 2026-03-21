@@ -506,6 +506,7 @@
       chartAnalysisPatternInput.title = "Use ';' to combine multiple signal-name patterns. Example: _GEN* ; foo_*";
       chartAnalysisGrayThresholdInput.step =
         state.analysisMode === "count" || state.analysisMode === "loc" ? "1" : "0.01";
+      chartLevelSelect.title = "Level follows treemap semantics: descend from the current root up to this depth, and keep leaf nodes that end earlier.";
       syncLevelOptions();
       applyChartSplitRatio();
     }
@@ -600,11 +601,11 @@
         if (!isBranchIncluded(nodeId, nextMatchedAncestor)) {
           return;
         }
-        if (depth === relativeLevel) {
+        // Mirror treemap level semantics instead of exact-depth slicing.
+        // Once a branch reaches the requested depth, or it terminates early,
+        // that node becomes the frontier entry shown by chart views.
+        if (depth >= relativeLevel || !node.children.length) {
           result.push(nodeId);
-          return;
-        }
-        if (depth > relativeLevel || !node.children.length) {
           return;
         }
         for (const childId of node.children) {

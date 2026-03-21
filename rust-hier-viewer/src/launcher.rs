@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::env;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::io::{self, BufRead, BufReader, IsTerminal, Write};
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -15,8 +15,15 @@ use regex::Regex;
 use shell_words::split as shell_split;
 use walkdir::{DirEntry, WalkDir};
 
+use crate::logging::{color_env_value, info, warn};
+
 const RTL_EXTENSIONS: &[&str] = &["sv", "svh", "v", "vh"];
 const MAX_SUGGESTIONS: usize = 18;
+const EXPORTER_BINARY_NAME: &str = if cfg!(windows) {
+    "slang-hier-exporter.exe"
+} else {
+    "slang-hier-exporter"
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum PatternMode {
@@ -65,7 +72,6 @@ pub(crate) struct StartupSelection {
     pub(crate) title: Option<String>,
     pub(crate) source_args_tokens: Vec<String>,
     pub(crate) extra_args_tokens: Vec<String>,
-    pub(crate) install_pyslang: bool,
     pub(crate) rebuild_sqlite: bool,
 }
 
@@ -92,7 +98,7 @@ impl FileIndex {
         let walker = WalkDir::new(&cwd)
             .follow_links(false)
             .into_iter()
-            .filter_entry(|entry| should_visit(entry));
+            .filter_entry(should_visit);
 
         for entry in walker {
             let entry = entry.map_err(|err| format!("failed to scan filesystem: {err}"))?;
@@ -364,8 +370,7 @@ pub(crate) fn parse_extra_args(raw: &str) -> Result<Vec<String>, String> {
 }
 
 pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<ExportResult, String> {
-    let script_path = locate_hier_viewer_script()?;
-    let python_path = ensure_python_with_pyslang(&script_path, selection.install_pyslang)?;
+    let exporter_path = locate_hierarchy_exporter()?;
     let cache_dir = sqlite_cache_dir(&selection.output_dir);
     fs::create_dir_all(&cache_dir).map_err(|err| {
         format!(
@@ -373,12 +378,15 @@ pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<Exp
             cache_dir.display()
         )
     })?;
-    let cache_key = compute_sqlite_cache_key(selection, &script_path)?;
+    let cache_key = compute_sqlite_cache_key(selection, &exporter_path)?;
     let export_path = cache_dir.join(format!("{cache_key}.sqlite"));
     if export_path.is_file() && !selection.rebuild_sqlite {
-        eprintln!(
-            "Reusing cached sqlite export '{}'. Building HTML bundle...",
-            export_path.display()
+        info(
+            "launcher",
+            format!(
+                "Reusing cached sqlite export '{}'. Building HTML bundle...",
+                export_path.display()
+            ),
         );
         return Ok(ExportResult {
             sqlite_path: path_to_unix_string(&export_path),
@@ -387,45 +395,53 @@ pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<Exp
     }
 
     let temp_export_path = export_path.with_extension("sqlite.tmp");
-    let rebuild_reason = sqlite_rebuild_reason(
-        &cache_dir,
-        &export_path,
-        selection.rebuild_sqlite,
-    )?;
-    eprintln!(
-        "{} hier-viewer.py --sqlite with {} source arguments (reason: {})...",
-        if selection.rebuild_sqlite { "Force rebuilding" } else { "Running" },
-        selection.source_args_tokens.len(),
-        rebuild_reason
+    let rebuild_reason =
+        sqlite_rebuild_reason(&cache_dir, &export_path, selection.rebuild_sqlite)?;
+    info(
+        "launcher",
+        format!(
+            "{} {} --sqlite with {} source arguments (reason: {})...",
+            if selection.rebuild_sqlite {
+                "Force rebuilding"
+            } else {
+                "Running"
+            },
+            exporter_path.display(),
+            selection.source_args_tokens.len(),
+            rebuild_reason
+        ),
     );
-    let mut command = Command::new(&python_path);
-    command.arg(&script_path);
+    let mut command = Command::new(&exporter_path);
     command.arg("--sqlite");
     command.arg("-o");
     command.arg(&temp_export_path);
     command.args(&selection.extra_args_tokens);
     command.args(&selection.source_args_tokens);
+    command.env("HIER_VIEWER_LOG_COLOR", color_env_value());
     command.stdout(Stdio::null());
     command.stderr(Stdio::piped());
 
     let mut child = command.spawn().map_err(|err| {
         format!(
-            "failed to run hier-viewer.py via '{} {}': {err}",
-            python_path.display(),
-            script_path.display()
+            "failed to run hierarchy exporter '{}': {err}",
+            exporter_path.display()
         )
     })?;
 
     let stderr = child
         .stderr
         .take()
-        .ok_or_else(|| "failed to capture hier-viewer.py stderr".to_string())?;
+        .ok_or_else(|| "failed to capture exporter stderr".to_string())?;
     let stderr_handle = thread::spawn(move || -> Result<String, String> {
         let mut collected = String::new();
         let reader = BufReader::new(stderr);
         for line in reader.lines() {
-            let line = line.map_err(|err| format!("failed to read hier-viewer.py stderr: {err}"))?;
-            eprintln!("{line}");
+            let line = line.map_err(|err| format!("failed to read exporter stderr: {err}"))?;
+            if line.starts_with('[') || line.starts_with('\u{1b}') {
+                eprintln!("{line}");
+            } else if !line.trim().is_empty() {
+                warn("slang-hier-exporter", &line);
+            }
             collected.push_str(&line);
             collected.push('\n');
         }
@@ -434,7 +450,7 @@ pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<Exp
 
     let status = child
         .wait()
-        .map_err(|err| format!("failed to wait for hier-viewer.py: {err}"))?;
+        .map_err(|err| format!("failed to wait for hierarchy exporter: {err}"))?;
     let stderr = stderr_handle
         .join()
         .map_err(|_| "stderr forwarding thread panicked".to_string())??;
@@ -443,9 +459,9 @@ pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<Exp
         let _ = fs::remove_file(&temp_export_path);
         let detail = stderr.trim();
         return Err(if detail.is_empty() {
-            format!("hier-viewer.py exited with status {}", status)
+            format!("hierarchy exporter exited with status {}", status)
         } else {
-            format!("hier-viewer.py failed: {detail}")
+            format!("hierarchy exporter failed: {detail}")
         });
     }
 
@@ -468,9 +484,12 @@ pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<Exp
             .map(|_| ())
     })?;
     let _ = fs::remove_file(&temp_export_path);
-    eprintln!(
-        "hier-viewer.py finished, sqlite cached at '{}'. Building HTML bundle...",
-        export_path.display()
+    info(
+        "launcher",
+        format!(
+            "Hierarchy exporter finished, sqlite cached at '{}'. Building HTML bundle...",
+            export_path.display()
+        ),
     );
     Ok(ExportResult {
         sqlite_path: path_to_unix_string(&export_path),
@@ -482,158 +501,46 @@ fn sqlite_cache_dir(output_dir: &str) -> PathBuf {
     Path::new(output_dir).join(".hier-viewer-cache")
 }
 
-fn ensure_python_with_pyslang(
-    script_path: &Path,
-    force_install: bool,
-) -> Result<PathBuf, String> {
-    let venv_dir = project_venv_dir(script_path);
-    let venv_python = venv_python_path(&venv_dir);
-    if force_install {
-        install_pyslang_into_project_venv(&venv_dir, &venv_python)?;
-        return Ok(venv_python);
+fn locate_hierarchy_exporter() -> Result<PathBuf, String> {
+    let mut candidates = Vec::new();
+
+    if let Ok(current_exe) = env::current_exe()
+        && let Some(dir) = current_exe.parent()
+    {
+        candidates.push(dir.join(EXPORTER_BINARY_NAME));
     }
 
-    if venv_python.is_file() && python_has_pyslang(&venv_python)? {
-        eprintln!(
-            "Using project Python environment '{}'.",
-            venv_python.display()
-        );
-        return Ok(venv_python);
+    candidates.push(PathBuf::from(env!("HIER_VIEWER_EXPORTER_BUILD_PATH")));
+
+    if let Ok(cwd) = env::current_dir() {
+        candidates.push(cwd.join(EXPORTER_BINARY_NAME));
     }
 
-    let system_python = PathBuf::from("python3");
-    if python_has_pyslang(&system_python)? {
-        eprintln!("Using system Python interpreter 'python3'.");
-        return Ok(system_python);
+    if let Some(path_binary) = find_binary_in_path(EXPORTER_BINARY_NAME) {
+        candidates.push(path_binary);
     }
 
-    if should_offer_pyslang_install() && prompt_install_pyslang(&venv_dir)? {
-        install_pyslang_into_project_venv(&venv_dir, &venv_python)?;
-        return Ok(venv_python);
-    }
-
-    Err(format!(
-        "pyslang is not available. Install it with `python3 -m pip install pyslang`, or rerun with `--install-pyslang` to install it into '{}' and reuse it automatically.",
-        venv_dir.display()
-    ))
-}
-
-fn project_venv_dir(script_path: &Path) -> PathBuf {
-    script_path
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join(".hier-viewer-venv")
-}
-
-fn venv_python_path(venv_dir: &Path) -> PathBuf {
-    let python3 = venv_dir.join("bin").join("python3");
-    if python3.is_file() {
-        return python3;
-    }
-    venv_dir.join("bin").join("python")
-}
-
-fn python_has_pyslang(python_path: &Path) -> Result<bool, String> {
-    let status = Command::new(python_path)
-        .arg("-c")
-        .arg("import pyslang")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-    match status {
-        Ok(status) => Ok(status.success()),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
-        Err(err) => Err(format!(
-            "failed to check pyslang availability via '{}': {err}",
-            python_path.display()
-        )),
-    }
-}
-
-fn should_offer_pyslang_install() -> bool {
-    io::stdin().is_terminal() && io::stdout().is_terminal()
-}
-
-fn prompt_install_pyslang(venv_dir: &Path) -> Result<bool, String> {
-    eprintln!("pyslang is required to run internal hierarchy export.");
-    eprintln!(
-        "Install it now into the project-local virtual environment '{}' ? [Y/n]",
-        venv_dir.display()
-    );
-    eprint!("> ");
-    io::stderr()
-        .flush()
-        .map_err(|err| format!("failed to flush install prompt: {err}"))?;
-    let mut answer = String::new();
-    io::stdin()
-        .read_line(&mut answer)
-        .map_err(|err| format!("failed to read install choice: {err}"))?;
-    let trimmed = answer.trim().to_ascii_lowercase();
-    Ok(trimmed.is_empty() || trimmed == "y" || trimmed == "yes")
-}
-
-fn install_pyslang_into_project_venv(venv_dir: &Path, venv_python: &Path) -> Result<(), String> {
-    let system_python = PathBuf::from("python3");
-    if !venv_python.is_file() {
-        eprintln!(
-            "Creating project virtual environment at '{}'...",
-            venv_dir.display()
-        );
-        let status = Command::new(&system_python)
-            .arg("-m")
-            .arg("venv")
-            .arg(venv_dir)
-            .status()
-            .map_err(|err| {
-                format!(
-                    "failed to create project virtual environment with '{} -m venv {}': {err}",
-                    system_python.display(),
-                    venv_dir.display()
-                )
-            })?;
-        if !status.success() {
-            return Err(format!(
-                "failed to create project virtual environment at '{}'",
-                venv_dir.display()
-            ));
+    for candidate in candidates {
+        if candidate.is_file() {
+            return Ok(candidate);
         }
     }
 
-    eprintln!(
-        "Installing pyslang into '{}'...",
-        venv_dir.display()
-    );
-    let status = Command::new(venv_python)
-        .arg("-m")
-        .arg("pip")
-        .arg("install")
-        .arg("pyslang")
-        .status()
-        .map_err(|err| {
-            format!(
-                "failed to run '{} -m pip install pyslang': {err}",
-                venv_python.display()
-            )
-        })?;
-    if !status.success() {
-        return Err(format!(
-            "failed to install pyslang into '{}'",
-            venv_dir.display()
-        ));
-    }
+    Err(format!(
+        "could not locate '{}'; place it next to rust-hier-viewer or ensure it is available on PATH",
+        EXPORTER_BINARY_NAME
+    ))
+}
 
-    if !python_has_pyslang(venv_python)? {
-        return Err(format!(
-            "pyslang installation completed but '{}' still cannot import it",
-            venv_python.display()
-        ));
+fn find_binary_in_path(binary_name: &str) -> Option<PathBuf> {
+    let path_var = env::var_os("PATH")?;
+    for dir in env::split_paths(&path_var) {
+        let candidate = dir.join(binary_name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
     }
-
-    eprintln!(
-        "pyslang is ready in '{}'. Future internal exports will reuse this environment.",
-        venv_dir.display()
-    );
-    Ok(())
+    None
 }
 
 fn sqlite_rebuild_reason(
@@ -676,7 +583,7 @@ fn sqlite_rebuild_reason(
         Ok("no cached sqlite export exists in this output directory yet".to_string())
     } else {
         Ok(
-            "cache miss: source files, filelists, extra flags, or hier-viewer.py fingerprint changed"
+            "cache miss: source files, filelists, extra flags, or slang-hier-exporter fingerprint changed"
                 .to_string(),
         )
     }
@@ -684,12 +591,12 @@ fn sqlite_rebuild_reason(
 
 fn compute_sqlite_cache_key(
     selection: &StartupSelection,
-    script_path: &Path,
+    exporter_path: &Path,
 ) -> Result<String, String> {
     let mut hasher = StableHasher::default();
-    hasher.write_str("hier-viewer-sqlite-cache-v1");
-    hasher.write_str(&path_to_unix_string(script_path));
-    write_path_fingerprint(&mut hasher, script_path)?;
+    hasher.write_str("slang-hier-exporter-sqlite-cache-v1");
+    hasher.write_str(&path_to_unix_string(exporter_path));
+    write_path_fingerprint(&mut hasher, exporter_path)?;
     for token in &selection.extra_args_tokens {
         hasher.write_str("arg");
         hasher.write_str(token);
@@ -770,22 +677,6 @@ impl Hasher for StableHasher {
         }
         self.state = hash;
     }
-}
-
-fn locate_hier_viewer_script() -> Result<PathBuf, String> {
-    let bundled = Path::new(env!("CARGO_MANIFEST_DIR")).join("hier-viewer.py");
-    if bundled.is_file() {
-        return Ok(bundled);
-    }
-
-    let cwd = env::current_dir()
-        .map_err(|err| format!("failed to determine current directory: {err}"))?;
-    let local = cwd.join("hier-viewer.py");
-    if local.is_file() {
-        return Ok(local);
-    }
-
-    Err("could not locate hier-viewer.py".to_string())
 }
 
 fn normalize_patterns(raw_patterns: &[String]) -> Result<Vec<String>, String> {

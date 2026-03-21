@@ -222,7 +222,7 @@ pub(crate) fn run_startup_wizard(
             .unwrap_or_else(|| DEFAULT_OUTPUT_DIR.to_string()),
         title: config.title.clone().unwrap_or_default(),
         status: format!(
-            "Scanned {} RTL files from the current workspace. Add RTL paths and optional filelists into the source list, then run hier-viewer.py --sqlite internally.",
+            "Scanned {} RTL files from the current workspace. Add RTL paths and optional filelists into the source list, then run slang-hier-exporter --sqlite internally.",
             file_index.file_count()
         ),
         suggestions: Vec::new(),
@@ -383,7 +383,7 @@ fn handle_key(
                 handle_source_input_enter(state, request_tx, file_index, SourceEntryKind::Filelist);
                 return Ok(None);
             }
-            Field::Run => return Ok(build_selection(state, file_index)?),
+            Field::Run => return build_selection(state, file_index),
             _ => {
                 clear_transient_state(state);
                 state.selected = state.selected.next();
@@ -598,7 +598,6 @@ fn build_selection(
         title: trim_optional(&state.title),
         source_args_tokens,
         extra_args_tokens,
-        install_pyslang: false,
         rebuild_sqlite: false,
     }))
 }
@@ -700,7 +699,7 @@ fn render(frame: &mut ratatui::Frame<'_>, state: &WizardState) {
                 .add_modifier(Modifier::BOLD),
         )]),
         Line::from(vec![Span::raw(
-            "Start without --input. Build the source list here, then run hier-viewer.py --sqlite automatically.",
+            "Start without --input. Build the source list here, then run slang-hier-exporter --sqlite automatically.",
         )]),
         Line::from(vec![
             Span::styled("[Tab]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
@@ -826,7 +825,7 @@ fn render_input_tab(frame: &mut ratatui::Frame<'_>, area: Rect, state: &WizardSt
         layout.help,
         vec![
             "Add each RTL path or pattern as its own item. No comma or semicolon separators are needed.",
-            "Use the Filelist field for .f / filelist inputs. They will be passed to hier-viewer.py with -f.",
+            "Use the Filelist field for .f / filelist inputs. They will be passed to slang-hier-exporter with -f.",
             "While editing RTL Path or Filelist, Tab and Shift+Tab move through suggestions. Enter first accepts the highlighted suggestion, then adds the item to the list.",
             "Focus the source list and press Delete or Backspace to remove the selected item.",
         ],
@@ -1028,7 +1027,7 @@ fn render_flags_tab(frame: &mut ratatui::Frame<'_>, area: Rect, state: &WizardSt
         vec![
             "Pass any extra slang or project flags here.",
             "Examples: +incdir+/nfs/rtl/include ; +define+SYNTHESIS ; --top my_top",
-            "These flags are appended before the source paths and filelists when hier-viewer.py --sqlite is launched.",
+            "These flags are appended before the source paths and filelists when slang-hier-exporter --sqlite is launched.",
         ],
     );
 }
@@ -1058,7 +1057,7 @@ fn render_output_tab(frame: &mut ratatui::Frame<'_>, area: Rect, state: &WizardS
         frame,
         layout[2],
         vec![
-            "Output must be a directory. The viewer will write index.html and viewer-data.json into it.",
+            "Output must be a directory. The viewer will write index.html, viewer-meta.json, and viewer-core.bin into it.",
             "The title is optional and only changes the viewer header.",
             "Move to the Run field and press Enter when the source list is ready.",
         ],

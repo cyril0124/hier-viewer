@@ -19,4 +19,8 @@ rayon = "1.10.0"
 regex = "1.12.2"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 shell-words = "1.1.0"
+time = { version = "0.3.44", features = ["formatting", "local-offset", "macros"] }
 walkdir = "2.5.0"
+
+[build-dependencies]
+time = { version = "0.3.44", features = ["formatting", "local-offset", "macros"] }

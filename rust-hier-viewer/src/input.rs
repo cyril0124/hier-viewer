@@ -4,6 +4,7 @@ use std::io::{self, Read};
 use csv::StringRecord;
 use rusqlite::Connection;
 
+use crate::logging::info;
 use crate::model::{AnalysisDefinition, DefinitionSignalStat, Entry, InputData};
 
 const SQLITE_HEADER: &[u8] = b"SQLite format 3\0";
@@ -333,10 +334,13 @@ fn parse_sqlite_input(path: &str) -> Result<InputData, String> {
         }
     }
 
-    eprintln!(
-        "Loaded sqlite input: {} instances, {} analysis definition entries.",
-        entries.len(),
-        analysis_definitions.len()
+    info(
+        "input",
+        format!(
+            "Loaded sqlite input: {} instances, {} analysis definition entries.",
+            entries.len(),
+            analysis_definitions.len()
+        ),
     );
 
     Ok(InputData {

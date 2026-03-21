@@ -51,14 +51,11 @@ pub(crate) struct Entry {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Node {
-    pub(crate) id: usize,
     pub(crate) name: String,
     pub(crate) module: String,
-    pub(crate) path: String,
     pub(crate) definition_key: Option<usize>,
     pub(crate) parent: Option<usize>,
     pub(crate) children: Vec<usize>,
-    pub(crate) depth: usize,
     pub(crate) subtree_instances: usize,
     pub(crate) subtree_leaves: usize,
     pub(crate) subtree_signal_count: usize,
@@ -122,7 +119,6 @@ pub(crate) struct Config {
     pub(crate) output_path: Option<String>,
     pub(crate) title: Option<String>,
     pub(crate) no_wizard: bool,
-    pub(crate) install_pyslang: bool,
     pub(crate) rebuild_sqlite: bool,
     pub(crate) rtl_paths: Vec<String>,
     pub(crate) filelists: Vec<String>,

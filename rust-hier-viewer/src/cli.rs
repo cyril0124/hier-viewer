@@ -10,7 +10,6 @@ where
     let mut output_path = None;
     let mut title = None;
     let mut no_wizard = false;
-    let mut install_pyslang = false;
     let mut rebuild_sqlite = false;
     let mut rtl_paths = Vec::new();
     let mut filelists = Vec::new();
@@ -56,9 +55,6 @@ where
             "--no-wizard" => {
                 no_wizard = true;
             }
-            "--install-pyslang" => {
-                install_pyslang = true;
-            }
             "--rebuild-sqlite" => {
                 rebuild_sqlite = true;
             }
@@ -83,7 +79,7 @@ where
             }
             "--metric" => {
                 let value = iter.next().ok_or_else(|| {
-                    "--metric requires 'instances', 'leaves', 'signals', or 'weighted_signals'"
+                    "--metric requires 'instances', 'leaves', or 'weighted_signals' ('signals' is still accepted as a legacy alias)"
                         .to_string()
                 })?;
                 match value.as_str() {
@@ -97,7 +93,7 @@ where
                     }
                     _ => {
                         return Err(format!(
-                            "unsupported metric '{value}', expected 'instances', 'leaves', 'signals', or 'weighted_signals'"
+                            "unsupported metric '{value}', expected 'instances', 'leaves', or 'weighted_signals' ('signals' is still accepted as a legacy alias)"
                         ));
                     }
                 }
@@ -125,7 +121,6 @@ where
         output_path,
         title,
         no_wizard,
-        install_pyslang,
         rebuild_sqlite,
         rtl_paths,
         filelists,
@@ -155,9 +150,9 @@ fn print_help() {
         "\
 rust-hier-viewer
 
-Generate a static hierarchy viewer bundle from the output of hier-viewer.py.
-The input can be the legacy plain format, the CSV format from `hier-viewer.py --csv`, or the sqlite format from `hier-viewer.py --sqlite`.
-If `--input` is omitted on an interactive terminal, a ratatui startup wizard opens and lets you pick RTL paths plus extra compiler flags before `hier-viewer.py --sqlite` is launched internally.
+Generate a static hierarchy viewer bundle from RTL sources or prebuilt hierarchy exports.
+The input can be the legacy plain format, the CSV format from `slang-hier-exporter --csv`, or the sqlite format from `slang-hier-exporter --sqlite`.
+If `--input` is omitted on an interactive terminal, a ratatui startup wizard opens and lets you pick RTL paths plus extra compiler flags before `slang-hier-exporter --sqlite` is launched internally.
 
 Usage:
   rust-hier-viewer [OPTIONS]
@@ -166,16 +161,15 @@ Options:
   -i, --input <file>       Read plain / CSV / sqlite hierarchy input from a file
                            (default: stdin when piped, otherwise open startup wizard)
       --rtl-path <path>    Add an RTL source path directly; repeatable
-      --filelist <file>    Add a filelist for hier-viewer.py -f; repeatable
-      -- <args...>         Pass remaining args directly to hier-viewer.py / pyslang
+      --filelist <file>    Add a filelist for slang-hier-exporter -f; repeatable
+      -- <args...>         Pass remaining args directly to slang / slang-hier-exporter
                            Examples: `-I inc`, `-D FOO=1`, `+incdir+/rtl/inc`, `--top top_mod`
       --no-wizard          Never open the startup wizard; require explicit inputs instead
-      --install-pyslang   Install pyslang into ./.hier-viewer-venv and reuse it for internal exports
-      --rebuild-sqlite    Ignore cached sqlite exports and force rerun hier-viewer.py
+      --rebuild-sqlite    Ignore cached sqlite exports and force rerun slang-hier-exporter
   -o, --output <dir>       Write bundle files into a directory (required)
   -t, --title <text>       Override page title
-      --metric <name>      Initial metric: instances | leaves | signals | weighted_signals
-                           ('signals' uses subtree signal bits; 'weighted_signals' uses user-tunable variable/net weights; default: instances)
+      --metric <name>      Initial metric: instances | leaves | weighted_signals
+                           ('signals' is still accepted as a legacy alias; it maps to weighted_signals with Var=1 and Net=1)
       --exclude-wildcard <pattern>
                            Exclude matching hierarchy paths or module names; repeatable
       --exclude-regex <pattern>

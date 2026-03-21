@@ -8,7 +8,6 @@ Current metrics:
 
 - `instances`: size by subtree instance count
 - `leaves`: size by subtree leaf count
-- `signals`: size by subtree signal bits
 - `weighted_signals`: size by subtree weighted signal bits using user-configurable variable/net coefficients
 
 Current layout modes:
@@ -21,14 +20,14 @@ Current decomposition modes:
 - `subtree only`: render only child subtree blocks inside each hierarchy node
 - `subtree + local self`: reserve an explicit `self` block for the current node's local contribution
 
-The `signals` metric exists to reflect module implementation weight more directly than pure hierarchy fanout.
-It is now bit-aware, so wide arrays and buses contribute proportionally to their total bit width.
+The signal-bit sizing path exists to reflect module implementation weight more directly than pure hierarchy fanout.
+It is bit-aware, so wide arrays and buses contribute proportionally to their total bit width.
 
 ## Data Flow
 
 The sizing data flows through two stages:
 
-1. `hier-viewer.py`
+1. `slang-hier-exporter`
    Exports hierarchy CSV with per-module signal statistics and bit totals.
 2. `rust-hier-viewer`
    Parses those CSV fields, stores them on each node, and uses the selected metric to drive treemap area.
@@ -37,7 +36,7 @@ The sizing data flows through two stages:
 
 ## CSV Fields
 
-`hier-viewer.py --csv` emits these per-module columns:
+`slang-hier-exporter --csv` emits these per-module columns:
 
 - `module_port_count`
 - `module_logic_count`
@@ -53,7 +52,7 @@ The sizing data flows through two stages:
 Compatibility notes:
 
 - The count fields are retained for diagnostics and CSV compatibility.
-- The `signals` area metric now uses subtree-aggregated bit totals derived from the bit fields, not the raw count fields.
+- The legacy `signals` alias is still interpreted from the bit fields, not the raw count fields, and maps to `weighted_signals` with `Var=1` and `Net=1`.
 
 The core exported bit fields are:
 
@@ -74,20 +73,23 @@ The viewer then derives:
 - `subtree_signal_bits`
   Sum of `module_signal_bits` for the current node and all descendants
 
-## How Python Collects Metrics
+## How The Exporter Collects Metrics
 
-Implementation lives in [hier-viewer.py](/nfs/home/zhengchuyu/workspace/project/hier-viewer/hier-viewer.py).
+Implementation lives in:
+
+- [main.cpp](/nfs/home/zhengchuyu/workspace/project/hier-viewer/cpp-hier-exporter/src/main.cpp)
+- [exporter.cpp](/nfs/home/zhengchuyu/workspace/project/hier-viewer/cpp-hier-exporter/src/exporter.cpp)
 
 The exporter walks the elaborated instance hierarchy from `topInstances` downward and collects two kinds of data:
 
 1. Instance metadata
    Hierarchy path, module name, source location, definition location, and lightweight declaration-shape counts.
 2. Elaborated local signal symbols
-   Each instance body is scanned for local `pyslang.VariableSymbol` and `pyslang.NetSymbol` members, and nested scopes / child instances are traversed recursively.
+   Each instance body is scanned for local `slang::ast::VariableSymbol` and `slang::ast::NetSymbol` members, and nested scopes / child instances are traversed recursively.
 
 For bit sizing, the exporter uses:
 
-- `symbol.declaredType.type.bitstreamWidth`
+- `symbol.getType().getBitstreamWidth()`
 
 This is the important part of the bit-aware change:
 
@@ -150,11 +152,10 @@ The Rust viewer:
 - Parses both the legacy count fields and the bit fields from CSV
 - Stores local per-module values on each rendered `Node`
 - Computes subtree-aggregated variable bits, net bits, signal counts, and signal bits during tree stat propagation
-- Exposes `signals` and `weighted_signals` as selectable metrics in the UI and CLI
-- Uses `node.subtreeSignalBits` as the treemap weight when `signals` is selected
+- Exposes `weighted_signals` as the selectable signal-bit metric in the UI
 - Uses `node.subtreeVariableBits * variable_weight + node.subtreeNetBits * net_weight` when `weighted_signals` is selected
 
-Important: the metric name `signals` remains available for CLI / UI compatibility, and its weight is subtree-aggregated and bit-aware.
+Important: the legacy metric name `signals` is still accepted for compatibility, but it is now treated as an alias for `weighted_signals` with `Var=1` and `Net=1`.
 
 ## Weighted Signal Metric
 
@@ -169,7 +170,7 @@ Defaults:
 
 Why it exists:
 
-- plain `signals` treats variable bits and net bits equally
+- `Var=1` and `Net=1` reproduces the old subtree signal-bits behavior
 - some users want a rougher implementation-weight view where stored / variable-backed bits count more than pure connectivity bits
 
 How it is configured:
@@ -225,7 +226,7 @@ This mode is the more faithful bit-distribution view.
 - A node's interior is laid out using:
   - one synthetic `self` edge strip with weight equal to the node's local contribution
   - one block per child instance using each child's subtree weight in the remaining interior
-- For `signals`, the synthetic block weight is `module_signal_bits`
+- For `weighted_signals`, the synthetic block weight is local weighted bits
 - For `instances`, the synthetic block weight is `1`
 - For `leaves`, the synthetic block weight is `1` only for a leaf node, otherwise `0`
 
@@ -256,12 +257,12 @@ This is still a UI layout, not a mathematically perfect synthesis-area model, bu
 
 In the generated HTML:
 
-- The metric dropdown shows `Subtree Signal Bits`
-- The metric dropdown also shows `Weighted Signal Bits`
+- The metric dropdown shows `Weighted Signal Bits`
 - When `Weighted Signal Bits` is active, `Var` and `Net` coefficient inputs appear next to `Sizing`
 - The layout dropdown lets users switch between `Classic` and `Accurate`
 - The decomposition dropdown lets users choose between `Subtree Only` and `Subtree + Local Self`
-- The `--metric signals` and `--metric weighted_signals` CLI options still select these modes
+- The `--metric weighted_signals` CLI option selects this mode
+- The legacy `--metric signals` alias is still accepted and behaves like `weighted_signals` with `Var=1` and `Net=1`
 - The hover card shows both:
   - subtree totals: `subtree signal bits / subtree objects`
   - local totals: `local signal bits / local objects`
@@ -277,10 +278,8 @@ Different metrics answer different questions:
   Better for structural breadth / hierarchy fanout
 - `leaves`
   Better for endpoint density
-- `signals`
-  Better for rough implementation weight of a hierarchy region when wide buses and memories should matter
 - `weighted_signals`
-  Better when you want a user-tunable compromise between local state/storage pressure and connectivity pressure
+  Better when you want a user-tunable compromise between local state/storage pressure and connectivity pressure, while still being able to reproduce the old equal-weight subtree signal-bits mode with `Var=1` and `Net=1`
 
 No single metric is universally correct, so the viewer keeps this as a selectable option instead of replacing the old default.
 

@@ -1,6 +1,6 @@
 # rust-hier-viewer
 
-Generate a static hierarchy viewer bundle from RTL sources or from the output of `hier-viewer.py`.
+Generate a static hierarchy viewer bundle from RTL sources or from the output of `slang-hier-exporter`.
 
 Input format:
 
@@ -11,7 +11,7 @@ Top.u_sub.u_leaf <leaf>
 Top.u_other <leaf>
 ```
 
-Or richer CSV from `hier-viewer.py --csv`:
+Or richer CSV from `slang-hier-exporter --csv`:
 
 ```csv
 path,module,file_path,line,column,end_line,end_column
@@ -23,7 +23,7 @@ Usage:
 
 ```bash
 # Recommended: start directly, pick RTL paths in the built-in TUI, and let the tool call
-# hier-viewer.py --sqlite for you. The wizard supports literal / wildcard / regex path matching,
+# slang-hier-exporter --sqlite for you. The wizard supports literal / wildcard / regex path matching,
 # fuzzy suggestions for literal paths, plus extra flags like +incdir+, +define+, and --top.
 cargo run -- \
   --output hier-viewer-out
@@ -33,27 +33,27 @@ cargo run -- \
   --input hier.csv \
   --output hier-viewer-out
 
-# Pipe CSV from hier-viewer.py if you already have an existing flow
-python3 hier-viewer.py --csv rtl.sv | \
+# Pipe CSV from slang-hier-exporter if you already have an existing flow
+./target/debug/slang-hier-exporter --csv rtl.sv | \
   cargo run -- \
     --output hier-viewer-out
 
 # Legacy plain input is still supported
-python3 hier-viewer.py --plain rtl.sv | \
+./target/debug/slang-hier-exporter --plain rtl.sv | \
   cargo run -- \
     --output hier-viewer-out
 
 # Exclude by wildcard or regex; both options can be repeated
-python3 hier-viewer.py --csv rtl.sv | \
+./target/debug/slang-hier-exporter --csv rtl.sv | \
   cargo run -- \
     --exclude-wildcard 'Top.debug*' \
     --exclude-wildcard '*_tb' \
     --exclude-regex '^Top\\.u_dft(\\.|$)' \
     --output hier-viewer-out
 
-# When cargo run launches hier-viewer.py --sqlite internally, the sqlite export is cached
+# When cargo run launches slang-hier-exporter --sqlite internally, the sqlite export is cached
 # under <output>/.hier-viewer-cache/ and reused as long as the resolved source files,
-# filelists, extra flags, and hier-viewer.py itself do not change.
+# filelists, extra flags, and the exporter binary itself do not change.
 cargo run -- \
   --no-wizard \
   --rtl-path 'rtl/**/*.sv' \
@@ -66,22 +66,11 @@ cargo run -- \
   --rebuild-sqlite \
   --rtl-path 'rtl/**/*.sv' \
   --output hier-viewer-out
-
-# If pyslang is not installed, either install it yourself:
-python3 -m pip install pyslang
-
-# Or let rust-hier-viewer create ./\.hier-viewer-venv and install pyslang there.
-# Future internal exports will reuse that venv automatically.
-cargo run -- \
-  --install-pyslang \
-  --no-wizard \
-  --rtl-path 'rtl/**/*.sv' \
-  --output hier-viewer-out
 ```
 
-The generated bundle contains `index.html`, `viewer-data.json`, `viewer-chart.js`, `viewer-three.module.js`, `three.core.js`, and `.hier-viewer-sources/`.
+The generated bundle contains `index.html`, `viewer-meta.json`, `viewer-core.bin`, `viewer-chart.js`, `viewer-three.module.js`, `three.core.js`, and `.hier-viewer-sources/`. When signal analysis data is available, the bundle also includes `viewer-analysis.bin`.
 When the bundle is built from RTL inputs instead of a prebuilt `--input`, the output directory also contains `.hier-viewer-cache/` with reused sqlite exports.
-If you use `--install-pyslang`, the project root also gets a reusable `.hier-viewer-venv/`.
+`cargo build` / `cargo run` also builds a static `slang-hier-exporter` binary next to the Rust executable, so no separate Python / `pyslang` runtime is required for internal exports.
 Open the bundle directory through a static file server such as VSCode Live Server and load `index.html`.
 When the input is CSV, the viewer shows file locations in the detail card and opens source code from the bundled relative files with SystemVerilog-oriented syntax highlighting.
-The `signals` sizing metric is bit-aware and subtree-aware: it aggregates `module_signal_bits` over the current node and all descendants, while the hover card still shows both subtree totals and local totals for cross-checking.
+`Weighted Signal Bits` is bit-aware and subtree-aware. It sizes by subtree variable bits plus subtree net bits using user-configurable coefficients; setting `Var=1` and `Net=1` reproduces the old subtree signal-bits behavior.

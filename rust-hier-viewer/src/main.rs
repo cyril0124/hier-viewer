@@ -2,6 +2,7 @@ mod cli;
 mod html;
 mod input;
 mod launcher;
+mod logging;
 mod model;
 mod viewer;
 mod wizard;
@@ -12,20 +13,36 @@ use std::path::Path;
 use std::process;
 
 use cli::parse_args;
-use html::{render_chart_js, render_data_json, render_html, render_three_core_js, render_three_js};
+use html::{
+    render_analysis_bin, render_chart_js, render_core_bin, render_html, render_meta_json,
+    render_three_core_js, render_three_js,
+};
 use input::load_input_data;
 use launcher::{FileIndex, PatternMode, StartupSelection, run_hier_viewer_export};
+use logging::{error, info};
 use viewer::build_viewer_data;
 
 const INDEX_HTML_NAME: &str = "index.html";
-const VIEWER_DATA_NAME: &str = "viewer-data.json";
+const VIEWER_META_NAME: &str = "viewer-meta.json";
+const VIEWER_CORE_NAME: &str = "viewer-core.bin";
+const VIEWER_ANALYSIS_NAME: &str = "viewer-analysis.bin";
 const VIEWER_CHART_NAME: &str = "viewer-chart.js";
 const VIEWER_THREE_NAME: &str = "viewer-three.module.js";
 const VIEWER_THREE_CORE_NAME: &str = "three.core.js";
 
+struct BundleAssets<'a> {
+    index_html: &'a str,
+    meta_json: &'a str,
+    core_bin: &'a [u8],
+    analysis_bin: Option<&'a [u8]>,
+    chart_js: &'a str,
+    three_js: &'a str,
+    three_core_js: &'a str,
+}
+
 fn main() {
     if let Err(err) = run() {
-        eprintln!("error: {err}");
+        error("rust-hier-viewer", err);
         process::exit(1);
     }
 }
@@ -60,13 +77,11 @@ fn run() -> Result<(), String> {
                     &config.filelists,
                 )?,
                 extra_args_tokens: config.extra_args_tokens.clone(),
-                install_pyslang: config.install_pyslang,
                 rebuild_sqlite: config.rebuild_sqlite,
             };
             Some(selection)
         } else if !config.no_wizard {
             let mut selection = wizard::run_startup_wizard(&config, &file_index)?;
-            selection.install_pyslang = config.install_pyslang;
             selection.rebuild_sqlite = config.rebuild_sqlite;
             config.output_path = Some(selection.output_dir.clone());
             config.title = selection.title.clone();
@@ -94,7 +109,7 @@ fn run() -> Result<(), String> {
         ));
     }
 
-    eprintln!("Loading hierarchy input...");
+    info("rust-hier-viewer", "Loading hierarchy input...");
     let input_data = match startup_selection.as_ref() {
         Some(selection) => {
             let export = run_hier_viewer_export(selection)?;
@@ -106,17 +121,31 @@ fn run() -> Result<(), String> {
         }
         None => load_input_data(config.input_path.as_deref())?,
     };
-    eprintln!("Building viewer model...");
+    info("rust-hier-viewer", "Building viewer model...");
     let data = build_viewer_data(input_data, &config)?;
-    eprintln!("Rendering HTML bundle assets...");
+    info("rust-hier-viewer", "Rendering HTML bundle assets...");
     let html = render_html(&data);
-    let data_json = render_data_json(&data);
+    let meta_json = render_meta_json(&data);
+    let core_bin = render_core_bin(&data)?;
+    let analysis_bin = render_analysis_bin(&data)?;
     let chart_js = render_chart_js();
     let three_js = render_three_js();
     let three_core_js = render_three_core_js();
-    eprintln!("Writing bundle files into '{}'...", output_dir);
-    write_bundle(&output_dir, &html, &data_json, chart_js, three_js, three_core_js)?;
-    eprintln!("Bundle generation finished.");
+    info(
+        "rust-hier-viewer",
+        format!("Writing bundle files into '{}'", output_dir),
+    );
+    let assets = BundleAssets {
+        index_html: &html,
+        meta_json: &meta_json,
+        core_bin: &core_bin,
+        analysis_bin: analysis_bin.as_deref(),
+        chart_js,
+        three_js,
+        three_core_js,
+    };
+    write_bundle(&output_dir, &assets)?;
+    info("rust-hier-viewer", "Bundle generation finished.");
 
     Ok(())
 }
@@ -125,14 +154,7 @@ fn has_source_inputs(config: &model::Config) -> bool {
     !config.rtl_paths.is_empty() || !config.filelists.is_empty()
 }
 
-fn write_bundle(
-    output_dir: &str,
-    index_html: &str,
-    data_json: &str,
-    chart_js: &str,
-    three_js: &str,
-    three_core_js: &str,
-) -> Result<(), String> {
+fn write_bundle(output_dir: &str, assets: &BundleAssets<'_>) -> Result<(), String> {
     let output_dir = Path::new(output_dir);
     fs::create_dir_all(output_dir).map_err(|err| {
         format!(
@@ -142,23 +164,43 @@ fn write_bundle(
     })?;
 
     let index_path = output_dir.join(INDEX_HTML_NAME);
-    fs::write(&index_path, index_html).map_err(|err| {
+    fs::write(&index_path, assets.index_html).map_err(|err| {
         format!(
             "failed to write bundle index '{}': {err}",
             index_path.display()
         )
     })?;
 
-    let data_path = output_dir.join(VIEWER_DATA_NAME);
-    fs::write(&data_path, data_json).map_err(|err| {
+    let meta_path = output_dir.join(VIEWER_META_NAME);
+    fs::write(&meta_path, assets.meta_json).map_err(|err| {
         format!(
-            "failed to write viewer data '{}': {err}",
-            data_path.display()
+            "failed to write viewer metadata '{}': {err}",
+            meta_path.display()
         )
     })?;
 
+    let core_path = output_dir.join(VIEWER_CORE_NAME);
+    fs::write(&core_path, assets.core_bin).map_err(|err| {
+        format!(
+            "failed to write viewer core '{}': {err}",
+            core_path.display()
+        )
+    })?;
+
+    let analysis_path = output_dir.join(VIEWER_ANALYSIS_NAME);
+    if let Some(binary) = assets.analysis_bin {
+        fs::write(&analysis_path, binary).map_err(|err| {
+            format!(
+                "failed to write viewer analysis '{}': {err}",
+                analysis_path.display()
+            )
+        })?;
+    } else if analysis_path.exists() {
+        let _ = fs::remove_file(&analysis_path);
+    }
+
     let chart_path = output_dir.join(VIEWER_CHART_NAME);
-    fs::write(&chart_path, chart_js).map_err(|err| {
+    fs::write(&chart_path, assets.chart_js).map_err(|err| {
         format!(
             "failed to write chart asset '{}': {err}",
             chart_path.display()
@@ -166,7 +208,7 @@ fn write_bundle(
     })?;
 
     let three_path = output_dir.join(VIEWER_THREE_NAME);
-    fs::write(&three_path, three_js).map_err(|err| {
+    fs::write(&three_path, assets.three_js).map_err(|err| {
         format!(
             "failed to write Three.js asset '{}': {err}",
             three_path.display()
@@ -174,7 +216,7 @@ fn write_bundle(
     })?;
 
     let three_core_path = output_dir.join(VIEWER_THREE_CORE_NAME);
-    fs::write(&three_core_path, three_core_js).map_err(|err| {
+    fs::write(&three_core_path, assets.three_core_js).map_err(|err| {
         format!(
             "failed to write Three.js core asset '{}': {err}",
             three_core_path.display()

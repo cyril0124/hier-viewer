@@ -25,6 +25,7 @@
       --z-hover-card: 180;
       --z-source-panel: 220;
       --z-chart-panel: 210;
+      --z-zen-overlay: 520;
       --z-ui-annotations: 540;
       --z-loading-overlay: 960;
       --body-radial-a: rgba(245, 189, 122, 0.22);
@@ -511,6 +512,41 @@
       isolation: isolate;
     }
 
+    body.zen-active {
+      overflow: hidden;
+    }
+
+    .app.zen-active {
+      grid-template-rows: 1fr;
+      gap: 0;
+      padding: 0;
+    }
+
+    .app.zen-active > .toolbar,
+    .app.zen-active > .breadcrumb-row,
+    .app.zen-active > .statusbar {
+      display: none !important;
+    }
+
+    .app.zen-active > .canvas-panel {
+      position: fixed;
+      inset: 0;
+      z-index: var(--z-zen-overlay);
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .app.zen-active > .canvas-panel .tree-panel,
+    .app.zen-active > .canvas-panel .match-panel,
+    .app.zen-active > .canvas-panel .source-panel {
+      display: none !important;
+    }
+
+    .app.zen-active > .canvas-panel .hover-card {
+      top: 76px;
+    }
+
     .loading-overlay {
       position: fixed;
       inset: 0;
@@ -739,6 +775,53 @@
       background: var(--control-bg-active);
       color: var(--control-text-active);
       box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent);
+    }
+
+    .zen-overlay {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      z-index: var(--z-zen-overlay);
+      display: none;
+      pointer-events: none;
+    }
+
+    .app.zen-active .zen-overlay {
+      display: flex;
+      justify-content: flex-start;
+    }
+
+    .zen-overlay-shell {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 46px;
+      padding: 6px 8px;
+      border-radius: 14px;
+      pointer-events: auto;
+    }
+
+    .zen-overlay-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .zen-overlay-group,
+    .zen-overlay-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .zen-overlay-actions {
+      padding-left: 4px;
+      border-left: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
     }
 
     .title-block {
@@ -2200,6 +2283,16 @@
         bottom: 12px;
         max-width: none;
       }
+
+      .zen-overlay {
+        left: 12px;
+        right: 12px;
+        top: 12px;
+      }
+
+      .zen-overlay-shell {
+        width: min(100%, 100%);
+      }
     }
   </style>
 </head>
@@ -2213,7 +2306,7 @@
       <div class="loading-bar" aria-hidden="true">
         <div class="loading-bar-fill" id="loading-bar-fill"></div>
       </div>
-      <div class="loading-footnote">The first open can take longer on large hierarchy bundles because the browser still needs to fetch and parse <code>viewer-data.json</code>.</div>
+      <div class="loading-footnote">The first open can take longer on large hierarchy bundles because the browser still needs to fetch <code>viewer-meta.json</code>, decode <code>viewer-core.bin</code>, and lazy-load optional analysis data.</div>
     </div>
   </div>
   <div class="app">
@@ -2245,7 +2338,6 @@
               <select id="metric-select" aria-label="Treemap sizing strategy" data-ui-name="sizing-select">
                 <option value="instances">Subtree Instances</option>
                 <option value="leaves">Leaf Count</option>
-                <option value="signals">Subtree Signal Bits</option>
                 <option value="weighted_signals">Weighted Signal Bits</option>
               </select>
               <div class="metric-help-wrap" data-ui-name="sizing-help-wrap">
@@ -2261,13 +2353,9 @@
                       <div class="metric-tooltip-name">Leaf Count</div>
                       <div class="metric-tooltip-desc">Size by the number of leaf instances under this node. Good for endpoint density.</div>
                     </div>
-                    <div class="metric-tooltip-item" data-metric="signals">
-                      <div class="metric-tooltip-name">Subtree Signal Bits</div>
-                      <div class="metric-tooltip-desc">Size by this node plus all descendant modules' variable and net bit totals. Wide buses and memories count proportionally.</div>
-                    </div>
                     <div class="metric-tooltip-item" data-metric="weighted_signals">
                       <div class="metric-tooltip-name">Weighted Signal Bits</div>
-                      <div class="metric-tooltip-desc">Size by subtree variable bits plus subtree net bits, each scaled by user-configurable coefficients.</div>
+                      <div class="metric-tooltip-desc">Size by subtree variable bits plus subtree net bits, each scaled by user-configurable coefficients. Set Var=1 and Net=1 to match the legacy subtree signal-bits mode.</div>
                     </div>
                   </div>
                 </div>
@@ -2410,12 +2498,26 @@
             <button id="view-treemap-btn" class="view-switch-btn" type="button" data-ui-name="view-treemap-btn">Treemap</button>
             <button id="view-pie-btn" class="view-switch-btn" type="button" data-ui-name="view-pie-btn">2D Pie</button>
             <button id="view-three-btn" class="view-switch-btn" type="button" data-ui-name="view-three-btn">3D</button>
+            <button id="zen-toggle-btn" class="view-switch-btn" type="button" aria-pressed="false" data-ui-name="zen-toggle-btn">Zen</button>
           </div>
         </div>
       </div>
     </div>
 
     <section class="canvas-panel panel" data-ui-name="canvas-panel" data-ui-label="always">
+      <div class="zen-overlay" id="zen-overlay" data-ui-name="zen-overlay" data-ui-label="always">
+        <div class="zen-overlay-shell panel" data-ui-name="zen-overlay-shell">
+          <div class="zen-overlay-label">Zen</div>
+          <div class="zen-overlay-group" data-ui-name="zen-overlay-group">
+            <button id="zen-view-treemap-btn" class="view-switch-btn" type="button" data-ui-name="zen-view-treemap-btn">Treemap</button>
+            <button id="zen-view-pie-btn" class="view-switch-btn" type="button" data-ui-name="zen-view-pie-btn">2D Pie</button>
+            <button id="zen-view-three-btn" class="view-switch-btn" type="button" data-ui-name="zen-view-three-btn">3D</button>
+          </div>
+          <div class="zen-overlay-actions" data-ui-name="zen-overlay-actions">
+            <button id="zen-exit-btn" class="view-switch-btn" type="button" aria-pressed="true" data-ui-name="zen-exit-btn">Exit Zen</button>
+          </div>
+        </div>
+      </div>
       <div class="main-stage" id="main-stage" data-ui-name="main-stage">
         <div class="main-view-layer treemap-stage" id="treemap-stage" data-ui-name="treemap-stage">
           <canvas id="treemap" data-ui-name="treemap-canvas"></canvas>
@@ -2703,28 +2805,284 @@
       uiAnnotationLayer.replaceChildren(fragment);
     }
 
-    let DATA;
-    try {
-      setLoadingState(4, "Opening bundle...", "Preparing viewer-data.json request.");
-      await afterPaint();
-      const response = await fetch("./viewer-data.json", { cache: "no-store" });
+    const VIEWER_META_URL = "./viewer-meta.json";
+    const CORE_BUNDLE_MAGIC = "HVC1";
+    const ANALYSIS_BUNDLE_MAGIC = "HVA1";
+    const BUNDLE_FORMAT_VERSION = 1;
+    const utf8Decoder = new TextDecoder();
+
+    function decodeAscii(bytes, offset, length) {
+      let value = "";
+      for (let index = 0; index < length; index += 1) {
+        value += String.fromCharCode(bytes[offset + index]);
+      }
+      return value;
+    }
+
+    function createBinaryReader(buffer) {
+      return {
+        buffer,
+        bytes: new Uint8Array(buffer),
+        view: new DataView(buffer),
+        offset: 0,
+        ensure(byteLength, label) {
+          if (this.offset + byteLength > this.view.byteLength) {
+            throw new Error(`${label} truncated at byte ${this.offset}`);
+          }
+        },
+        readMagic(label) {
+          this.ensure(4, `${label} header`);
+          const magic = decodeAscii(this.bytes, this.offset, 4);
+          this.offset += 4;
+          return magic;
+        },
+        readU32(label) {
+          this.ensure(4, label);
+          const value = this.view.getUint32(this.offset, true);
+          this.offset += 4;
+          return value;
+        },
+        readOptionalU32(label) {
+          const value = this.readU32(label);
+          return value === 0xFFFFFFFF ? null : value;
+        },
+        readU64Number(label) {
+          const low = this.readU32(`${label} (low)`);
+          const high = this.readU32(`${label} (high)`);
+          return high * 4294967296 + low;
+        },
+        readOptionalU64Key(label) {
+          const low = this.readU32(`${label} (low)`);
+          const high = this.readU32(`${label} (high)`);
+          if (low === 0xFFFFFFFF && high === 0xFFFFFFFF) {
+            return null;
+          }
+          return ((BigInt(high) << 32n) | BigInt(low)).toString();
+        },
+        readU64Key(label) {
+          const low = this.readU32(`${label} (low)`);
+          const high = this.readU32(`${label} (high)`);
+          return ((BigInt(high) << 32n) | BigInt(low)).toString();
+        },
+        readStringTable(label) {
+          const stringCount = this.readU32(`${label} string count`);
+          const strings = new Array(stringCount);
+          for (let index = 0; index < stringCount; index += 1) {
+            const byteLength = this.readU32(`${label} string length`);
+            this.ensure(byteLength, `${label} string bytes`);
+            strings[index] = utf8Decoder.decode(
+              this.bytes.subarray(this.offset, this.offset + byteLength)
+            );
+            this.offset += byteLength;
+          }
+          return strings;
+        }
+      };
+    }
+
+    function readColumn(reader, count, label, readValue) {
+      const values = new Array(count);
+      for (let index = 0; index < count; index += 1) {
+        values[index] = readValue(reader, `${label}[${index}]`);
+      }
+      return values;
+    }
+
+    function stringAt(strings, index, label) {
+      if (index === null || index === undefined) {
+        return null;
+      }
+      const value = strings[index];
+      if (value === undefined) {
+        throw new Error(`${label} references missing string id ${index}`);
+      }
+      return value;
+    }
+
+    function defineLazyNodePath(node, nodeId, nodes, rootId, cache) {
+      Object.defineProperty(node, "path", {
+        enumerable: true,
+        configurable: true,
+        get() {
+          const cached = cache[nodeId];
+          if (cached !== undefined) {
+            return cached;
+          }
+          let value = "";
+          if (!(nodeId === rootId || node.parent === null || node.parent === undefined)) {
+            const parentPath = nodes[node.parent].path;
+            value = parentPath ? `${parentPath}.${node.name}` : node.name;
+          }
+          cache[nodeId] = value;
+          return value;
+        }
+      });
+    }
+
+    function decodeCoreBundle(buffer, meta) {
+      const reader = createBinaryReader(buffer);
+      const magic = reader.readMagic("viewer-core.bin");
+      if (magic !== CORE_BUNDLE_MAGIC) {
+        throw new Error(`viewer-core.bin has unsupported magic '${magic}'`);
+      }
+      const version = reader.readU32("viewer-core.bin version");
+      if (version !== BUNDLE_FORMAT_VERSION) {
+        throw new Error(`viewer-core.bin has unsupported version ${version}`);
+      }
+      const strings = reader.readStringTable("viewer-core.bin");
+      const nodeCount = reader.readU32("viewer-core.bin node count");
+
+      const nameIds = readColumn(reader, nodeCount, "name id", (stream, label) => stream.readU32(label));
+      const moduleIds = readColumn(reader, nodeCount, "module id", (stream, label) => stream.readU32(label));
+      const definitionKeys = readColumn(reader, nodeCount, "definition key", (stream, label) => stream.readOptionalU64Key(label));
+      const parents = readColumn(reader, nodeCount, "parent id", (stream, label) => stream.readOptionalU32(label));
+      const subtreeInstances = readColumn(reader, nodeCount, "subtree instances", (stream, label) => stream.readU32(label));
+      const subtreeLeaves = readColumn(reader, nodeCount, "subtree leaves", (stream, label) => stream.readU32(label));
+      const subtreeSignalCounts = readColumn(reader, nodeCount, "subtree signal count", (stream, label) => stream.readU32(label));
+      const subtreeInternalSignalCounts = readColumn(reader, nodeCount, "subtree internal signal count", (stream, label) => stream.readU32(label));
+      const subtreeVariableBits = readColumn(reader, nodeCount, "subtree variable bits", (stream, label) => stream.readU64Number(label));
+      const subtreeNetBits = readColumn(reader, nodeCount, "subtree net bits", (stream, label) => stream.readU64Number(label));
+      const moduleVariableCounts = readColumn(reader, nodeCount, "module variable count", (stream, label) => stream.readU32(label));
+      const moduleNetCounts = readColumn(reader, nodeCount, "module net count", (stream, label) => stream.readU32(label));
+      const moduleVariableBits = readColumn(reader, nodeCount, "module variable bits", (stream, label) => stream.readU64Number(label));
+      const moduleNetBits = readColumn(reader, nodeCount, "module net bits", (stream, label) => stream.readU64Number(label));
+      const moduleInternalSignalCounts = readColumn(reader, nodeCount, "module internal signal count", (stream, label) => stream.readU32(label));
+      const filePathIds = readColumn(reader, nodeCount, "file path id", (stream, label) => stream.readOptionalU32(label));
+      const sourceHrefIds = readColumn(reader, nodeCount, "source href id", (stream, label) => stream.readOptionalU32(label));
+      const definitionFilePathIds = readColumn(reader, nodeCount, "definition file path id", (stream, label) => stream.readOptionalU32(label));
+      const definitionSourceHrefIds = readColumn(reader, nodeCount, "definition source href id", (stream, label) => stream.readOptionalU32(label));
+      const lines = readColumn(reader, nodeCount, "line", (stream, label) => stream.readOptionalU32(label));
+      const columns = readColumn(reader, nodeCount, "column", (stream, label) => stream.readOptionalU32(label));
+      const endLines = readColumn(reader, nodeCount, "end line", (stream, label) => stream.readOptionalU32(label));
+      const endColumns = readColumn(reader, nodeCount, "end column", (stream, label) => stream.readOptionalU32(label));
+      const definitionLines = readColumn(reader, nodeCount, "definition line", (stream, label) => stream.readOptionalU32(label));
+      const definitionColumns = readColumn(reader, nodeCount, "definition column", (stream, label) => stream.readOptionalU32(label));
+      const definitionEndLines = readColumn(reader, nodeCount, "definition end line", (stream, label) => stream.readOptionalU32(label));
+      const definitionEndColumns = readColumn(reader, nodeCount, "definition end column", (stream, label) => stream.readOptionalU32(label));
+
+      const children = Array.from({ length: nodeCount }, () => []);
+      const depths = new Array(nodeCount).fill(0);
+      for (let nodeId = 0; nodeId < nodeCount; nodeId += 1) {
+        const parent = parents[nodeId];
+        if (parent !== null && parent !== undefined) {
+          if (parent < 0 || parent >= nodeCount) {
+            throw new Error(`viewer-core.bin parent id ${parent} is out of range for node ${nodeId}`);
+          }
+          children[parent].push(nodeId);
+          depths[nodeId] = depths[parent] + 1;
+        }
+      }
+
+      const rootId = Number(meta.rootId) || 0;
+      const nodes = new Array(nodeCount);
+      const pathCache = new Array(nodeCount);
+
+      for (let nodeId = 0; nodeId < nodeCount; nodeId += 1) {
+        const node = {
+          id: nodeId,
+          name: stringAt(strings, nameIds[nodeId], "name") || "",
+          module: stringAt(strings, moduleIds[nodeId], "module") || "",
+          definitionKey: definitionKeys[nodeId],
+          parent: parents[nodeId],
+          depth: depths[nodeId],
+          children: children[nodeId],
+          subtreeInstances: subtreeInstances[nodeId],
+          subtreeLeaves: subtreeLeaves[nodeId],
+          subtreeSignalCount: subtreeSignalCounts[nodeId],
+          subtreeInternalSignalCount: subtreeInternalSignalCounts[nodeId],
+          subtreeVariableBits: subtreeVariableBits[nodeId],
+          subtreeNetBits: subtreeNetBits[nodeId],
+          subtreeSignalBits: subtreeVariableBits[nodeId] + subtreeNetBits[nodeId],
+          moduleVariableCount: moduleVariableCounts[nodeId],
+          moduleNetCount: moduleNetCounts[nodeId],
+          moduleSignalCount: moduleVariableCounts[nodeId] + moduleNetCounts[nodeId],
+          moduleVariableBits: moduleVariableBits[nodeId],
+          moduleNetBits: moduleNetBits[nodeId],
+          moduleSignalBits: moduleVariableBits[nodeId] + moduleNetBits[nodeId],
+          moduleInternalSignalCount: moduleInternalSignalCounts[nodeId],
+          filePath: stringAt(strings, filePathIds[nodeId], "file path"),
+          sourceHref: stringAt(strings, sourceHrefIds[nodeId], "source href"),
+          definitionFilePath: stringAt(strings, definitionFilePathIds[nodeId], "definition file path"),
+          definitionSourceHref: stringAt(strings, definitionSourceHrefIds[nodeId], "definition source href"),
+          line: lines[nodeId],
+          column: columns[nodeId],
+          endLine: endLines[nodeId],
+          endColumn: endColumns[nodeId],
+          definitionLine: definitionLines[nodeId],
+          definitionColumn: definitionColumns[nodeId],
+          definitionEndLine: definitionEndLines[nodeId],
+          definitionEndColumn: definitionEndColumns[nodeId]
+        };
+        nodes[nodeId] = node;
+      }
+
+      for (let nodeId = 0; nodeId < nodeCount; nodeId += 1) {
+        defineLazyNodePath(nodes[nodeId], nodeId, nodes, rootId, pathCache);
+      }
+
+      return {
+        title: typeof meta.title === "string" ? meta.title : "",
+        builtAtUnixMs: Number(meta.builtAtUnixMs) || 0,
+        debugUiLabels: !!meta.debugUiLabels,
+        rootId,
+        defaultMetric: typeof meta.defaultMetric === "string" ? meta.defaultMetric : "instances",
+        analysisDefinitions: null,
+        analysisFile: typeof meta.analysisFile === "string" ? meta.analysisFile : null,
+        nodes
+      };
+    }
+
+    function decodeAnalysisBundle(buffer) {
+      const reader = createBinaryReader(buffer);
+      const magic = reader.readMagic("viewer-analysis.bin");
+      if (magic !== ANALYSIS_BUNDLE_MAGIC) {
+        throw new Error(`viewer-analysis.bin has unsupported magic '${magic}'`);
+      }
+      const version = reader.readU32("viewer-analysis.bin version");
+      if (version !== BUNDLE_FORMAT_VERSION) {
+        throw new Error(`viewer-analysis.bin has unsupported version ${version}`);
+      }
+      const strings = reader.readStringTable("viewer-analysis.bin");
+      const definitionCount = reader.readU32("viewer-analysis.bin definition count");
+      const definitions = new Array(definitionCount);
+      for (let definitionIndex = 0; definitionIndex < definitionCount; definitionIndex += 1) {
+        const definitionKey = reader.readU64Key("definition key");
+        const statCount = reader.readU32("signal stat count");
+        const signalStats = new Array(statCount);
+        for (let statIndex = 0; statIndex < statCount; statIndex += 1) {
+          const signalNameId = reader.readU32("signal name id");
+          const signalKindId = reader.readU32("signal kind id");
+          signalStats[statIndex] = {
+            signalName: stringAt(strings, signalNameId, "signal name") || "",
+            signalKind: stringAt(strings, signalKindId, "signal kind") || "",
+            signalCount: reader.readU32("signal count"),
+            totalBits: reader.readU64Number("total bits")
+          };
+        }
+        definitions[definitionIndex] = {
+          definitionKey,
+          signalStats
+        };
+      }
+      return definitions;
+    }
+
+    async function fetchBinaryFile(url, startPercent, endPercent, stageTitle, waitingMessage) {
+      const response = await fetch(url, { cache: "no-store" });
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw new Error(`HTTP ${response.status} while loading ${url}`);
       }
       const totalBytes = Number(response.headers.get("content-length")) || 0;
-      let rawText = "";
       let fetchedBytes = 0;
 
       if (response.body && typeof response.body.getReader === "function") {
         const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let receivedBytes = 0;
-        let binaryChunks = [];
-        let preallocatedBytes = totalBytes > 0 ? new Uint8Array(totalBytes) : null;
+        const chunks = [];
+        let preallocated = totalBytes > 0 ? new Uint8Array(totalBytes) : null;
         setLoadingState(
-          totalBytes > 0 ? 8 : 12,
-          "Downloading hierarchy data...",
-          totalBytes > 0 ? `0 / ${formatLoadingBytes(totalBytes)}` : "Receiving viewer-data.json..."
+          totalBytes > 0 ? startPercent : Math.min(endPercent, startPercent + 6),
+          stageTitle,
+          totalBytes > 0 ? `0 / ${formatLoadingBytes(totalBytes)}` : waitingMessage
         );
         await afterPaint();
         while (true) {
@@ -2732,54 +3090,76 @@
           if (done) {
             break;
           }
-          receivedBytes += value.byteLength;
-          if (preallocatedBytes) {
-            preallocatedBytes.set(value, receivedBytes - value.byteLength);
+          fetchedBytes += value.byteLength;
+          if (preallocated) {
+            preallocated.set(value, fetchedBytes - value.byteLength);
           } else {
-            binaryChunks.push(value);
+            chunks.push(value);
           }
-          const downloadPercent = totalBytes > 0
-            ? 8 + (receivedBytes / totalBytes) * 64
-            : Math.min(72, 12 + binaryChunks.length * 2.4);
+          const progress = totalBytes > 0
+            ? startPercent + (fetchedBytes / totalBytes) * (endPercent - startPercent)
+            : Math.min(endPercent, startPercent + chunks.length * 2.2);
           setLoadingState(
-            downloadPercent,
-            "Downloading hierarchy data...",
+            progress,
+            stageTitle,
             totalBytes > 0
-              ? `${formatLoadingBytes(receivedBytes)} / ${formatLoadingBytes(totalBytes)}`
-              : `${formatLoadingBytes(receivedBytes)} received`
+              ? `${formatLoadingBytes(fetchedBytes)} / ${formatLoadingBytes(totalBytes)}`
+              : `${formatLoadingBytes(fetchedBytes)} received`
           );
         }
-        fetchedBytes = receivedBytes;
-        if (preallocatedBytes) {
-          rawText = decoder.decode(preallocatedBytes.subarray(0, receivedBytes));
+
+        let bytes;
+        if (preallocated) {
+          bytes = fetchedBytes === preallocated.length ? preallocated : preallocated.slice(0, fetchedBytes);
         } else {
-          const mergedBytes = new Uint8Array(receivedBytes);
+          bytes = new Uint8Array(fetchedBytes);
           let offset = 0;
-          for (const chunk of binaryChunks) {
-            mergedBytes.set(chunk, offset);
+          for (const chunk of chunks) {
+            bytes.set(chunk, offset);
             offset += chunk.byteLength;
           }
-          rawText = decoder.decode(mergedBytes);
-          binaryChunks = [];
         }
-      } else {
-        setLoadingState(36, "Downloading hierarchy data...", "Streaming progress is unavailable in this browser.");
-        await afterPaint();
-        rawText = await response.text();
-        fetchedBytes = rawText.length;
+        return { buffer: bytes.buffer, fetchedBytes: bytes.byteLength };
       }
 
-      setLoadingState(82, "Parsing hierarchy data...", `${formatLoadingBytes(fetchedBytes || rawText.length)} fetched`);
+      setLoadingState(startPercent, stageTitle, "Streaming progress is unavailable in this browser.");
       await afterPaint();
-      DATA = JSON.parse(rawText);
+      const buffer = await response.arrayBuffer();
+      return { buffer, fetchedBytes: buffer.byteLength };
+    }
+
+    let DATA;
+    try {
+      setLoadingState(4, "Opening bundle...", "Loading viewer-meta.json.");
+      await afterPaint();
+      const metaResponse = await fetch(VIEWER_META_URL, { cache: "no-store" });
+      if (!metaResponse.ok) {
+        throw new Error(`HTTP ${metaResponse.status} while loading viewer-meta.json`);
+      }
+      const meta = await metaResponse.json();
+      const coreFile = typeof meta.coreFile === "string" ? meta.coreFile : "viewer-core.bin";
+
+      setLoadingState(10, "Opening bundle...", `Preparing ${coreFile} request.`);
+      await afterPaint();
+      const { buffer, fetchedBytes } = await fetchBinaryFile(
+        `./${coreFile}`,
+        12,
+        82,
+        "Downloading hierarchy data...",
+        `Receiving ${coreFile}...`
+      );
+      setLoadingState(86, "Decoding hierarchy data...", `${formatLoadingBytes(fetchedBytes)} fetched`);
+      await afterPaint();
+      DATA = decodeCoreBundle(buffer, meta);
       setLoadingState(91, "Preparing viewer...", `${(DATA.nodes || []).length} hierarchy nodes loaded`);
       await afterPaint();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      document.body.innerHTML = `<div style="padding: 32px; font: 16px/1.5 Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif; color: #26180e;"><h1 style="margin-top: 0;">Failed to load viewer data</h1><p>Open this bundle through a static server such as VSCode Live Server, and make sure <code>viewer-data.json</code> is next to <code>index.html</code>.</p><p><strong>Detail:</strong> ${escapeHtml(message)}</p></div>`;
+      document.body.innerHTML = `<div style="padding: 32px; font: 16px/1.5 Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif; color: #26180e;"><h1 style="margin-top: 0;">Failed to load viewer data</h1><p>Open this bundle through a static server such as VSCode Live Server, and make sure <code>viewer-meta.json</code> and <code>viewer-core.bin</code> are next to <code>index.html</code>.</p><p><strong>Detail:</strong> ${escapeHtml(message)}</p></div>`;
       return;
     }
     const nodes = DATA.nodes;
+    const app = document.querySelector(".app");
     const canvas = document.getElementById("treemap");
     const canvasPanel = canvas.closest(".canvas-panel");
     const treemapStage = document.getElementById("treemap-stage");
@@ -2787,6 +3167,11 @@
     const viewTreemapBtn = document.getElementById("view-treemap-btn");
     const viewPieBtn = document.getElementById("view-pie-btn");
     const viewThreeBtn = document.getElementById("view-three-btn");
+    const zenToggleBtn = document.getElementById("zen-toggle-btn");
+    const zenViewTreemapBtn = document.getElementById("zen-view-treemap-btn");
+    const zenViewPieBtn = document.getElementById("zen-view-pie-btn");
+    const zenViewThreeBtn = document.getElementById("zen-view-three-btn");
+    const zenExitBtn = document.getElementById("zen-exit-btn");
     const hoverCard = document.getElementById("hover-card");
     const hoverPath = document.getElementById("hover-path");
     const hoverTitle = document.getElementById("hover-title");
@@ -2851,8 +3236,10 @@
     const toolbar = document.getElementById("toolbar");
     const toggleToolbarBtn = document.getElementById("toggle-toolbar-btn");
     const ctx = canvas.getContext("2d");
-    const analysisDefinitions = DATA.analysisDefinitions || [];
+    let analysisDefinitions = Array.isArray(DATA.analysisDefinitions) ? DATA.analysisDefinitions : null;
     let analysisDefinitionMap = null;
+    let analysisDefinitionsPromise = null;
+    let analysisDefinitionsLoadError = "";
     const analysisHatchPatternCache = new Map();
     const subtreeDepthCache = new Array(nodes.length).fill(-1);
     const sourceTextCache = new Map();
@@ -2866,7 +3253,7 @@
     const state = {
       homeRoot: DATA.rootId,
       currentRoot: DATA.rootId,
-      theme: "warm-paper",
+      theme: "solarized-light",
       metric: DATA.defaultMetric,
       weightedVariableWeight: 1,
       weightedNetWeight: 0.15,
@@ -2945,6 +3332,7 @@
       chartRenderMode: "pie2d",
       chartLevel: null,
       chartPanelDirty: true,
+      zenMode: false,
       chartPanelWidth: 1080,
       chartPanelHeight: 760,
       chartPanelLeft: 16,
@@ -2973,13 +3361,33 @@
       return parsed;
     }
 
+    function applyLegacyMetricAlias() {
+      if (state.metric === "signals") {
+        state.metric = "weighted_signals";
+        state.weightedVariableWeight = 1;
+        state.weightedNetWeight = 1;
+      }
+    }
+
     function getAnalysisDefinitionMap() {
       if (analysisDefinitionMap === null) {
         analysisDefinitionMap = new Map(
-          analysisDefinitions.map((definition) => [definition.definitionKey, definition.signalStats || []])
+          (analysisDefinitions || []).map((definition) => [definition.definitionKey, definition.signalStats || []])
         );
       }
       return analysisDefinitionMap;
+    }
+
+    async function loadAnalysisDefinitions() {
+      if (!DATA.analysisFile) {
+        return [];
+      }
+      const response = await fetch(`./${DATA.analysisFile}`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} while loading ${DATA.analysisFile}`);
+      }
+      const buffer = await response.arrayBuffer();
+      return decodeAnalysisBundle(buffer);
     }
 
     function formatMetricValue(value) {
@@ -3152,7 +3560,7 @@
     };
 
     function currentThemeVisuals() {
-      return THEME_VISUALS[state.theme] || THEME_VISUALS["warm-paper"];
+      return THEME_VISUALS[state.theme] || THEME_VISUALS["solarized-light"];
     }
 
     function hexToRgb(hex) {
@@ -3484,12 +3892,14 @@
     }
 
     restorePersistedState();
+    applyLegacyMetricAlias();
     state.chartPanelOpen = state.mainViewMode !== "treemap";
     if (state.mainViewMode === "pie2d" || state.mainViewMode === "three3d") {
       state.chartRenderMode = state.mainViewMode;
     }
     applyTheme();
     applyToolbarCollapsedState();
+    applyZenModeState();
     pageTitle.textContent = "Hierarchy Viewer";
     pageSubtitle.textContent = buildSubtitleText(DATA.title, Number(DATA.builtAtUnixMs));
     metricSelect.value = state.metric;
@@ -3512,9 +3922,40 @@
       viewTreemapBtn.classList.toggle("active", state.mainViewMode === "treemap");
       viewPieBtn.classList.toggle("active", state.mainViewMode === "pie2d");
       viewThreeBtn.classList.toggle("active", state.mainViewMode === "three3d");
+      zenViewTreemapBtn.classList.toggle("active", state.mainViewMode === "treemap");
+      zenViewPieBtn.classList.toggle("active", state.mainViewMode === "pie2d");
+      zenViewThreeBtn.classList.toggle("active", state.mainViewMode === "three3d");
       viewTreemapBtn.setAttribute("aria-pressed", state.mainViewMode === "treemap" ? "true" : "false");
       viewPieBtn.setAttribute("aria-pressed", state.mainViewMode === "pie2d" ? "true" : "false");
       viewThreeBtn.setAttribute("aria-pressed", state.mainViewMode === "three3d" ? "true" : "false");
+      zenViewTreemapBtn.setAttribute("aria-pressed", state.mainViewMode === "treemap" ? "true" : "false");
+      zenViewPieBtn.setAttribute("aria-pressed", state.mainViewMode === "pie2d" ? "true" : "false");
+      zenViewThreeBtn.setAttribute("aria-pressed", state.mainViewMode === "three3d" ? "true" : "false");
+    }
+
+    function applyZenModeState() {
+      app.classList.toggle("zen-active", state.zenMode);
+      document.body.classList.toggle("zen-active", state.zenMode);
+      zenToggleBtn.classList.toggle("active", state.zenMode);
+      zenToggleBtn.setAttribute("aria-pressed", state.zenMode ? "true" : "false");
+      zenToggleBtn.textContent = state.zenMode ? "Zen On" : "Zen";
+      zenExitBtn.setAttribute("aria-pressed", state.zenMode ? "true" : "false");
+    }
+
+    function setZenMode(enabled) {
+      const next = !!enabled;
+      if (state.zenMode === next) {
+        return;
+      }
+      if (next && state.advancedPopoverOpen) {
+        setAdvancedPopoverOpen(false);
+      }
+      if (next && sourcePanel.classList.contains("visible")) {
+        closeSourcePanel();
+      }
+      state.zenMode = next;
+      applyZenModeState();
+      requestAnimationFrame(() => draw());
     }
 
     function setMainViewMode(mode) {
@@ -3656,6 +4097,9 @@
       const node = getNode(nodeId);
       if (!nodeHasSource(node)) {
         return;
+      }
+      if (state.zenMode) {
+        setZenMode(false);
       }
       cancelScheduledHoverUpdate();
 
@@ -4056,6 +4500,33 @@
       return { count: subtreeCount, loc: subtreeLoc };
     }
 
+    function ensureAnalysisDefinitionsRequested() {
+      if (Array.isArray(analysisDefinitions) || !DATA.analysisFile || analysisDefinitionsPromise) {
+        return;
+      }
+      analysisDefinitionsLoadError = "";
+      state.analysisError = `Loading signal analysis data from ${DATA.analysisFile}...`;
+      analysisDefinitionsPromise = loadAnalysisDefinitions()
+        .then((definitions) => {
+          analysisDefinitions = definitions;
+          analysisDefinitionMap = null;
+          state.analysisError = "";
+        })
+        .catch((error) => {
+          analysisDefinitions = [];
+          analysisDefinitionMap = null;
+          analysisDefinitionsLoadError = `Failed to load signal analysis data: ${error.message || error}`;
+          state.analysisError = analysisDefinitionsLoadError;
+        })
+        .finally(() => {
+          analysisDefinitionsPromise = null;
+          if (!state.analysisError && state.analysisMode !== "none") {
+            buildSignalAnalysis();
+          }
+          draw();
+        });
+    }
+
     function buildSignalAnalysis() {
       state.analysisError = "";
       state.analysisLocalCounts.fill(0);
@@ -4086,8 +4557,18 @@
         return;
       }
 
+      if (analysisDefinitionsLoadError) {
+        state.analysisError = analysisDefinitionsLoadError;
+        return;
+      }
+
+      if (!Array.isArray(analysisDefinitions)) {
+        ensureAnalysisDefinitionsRequested();
+        return;
+      }
+
       if (!analysisDefinitions.length) {
-        state.analysisError = "This bundle has no signal analysis data. Re-export from hier-viewer.py --sqlite.";
+        state.analysisError = "This bundle has no signal analysis data. Re-export from slang-hier-exporter --sqlite.";
         return;
       }
 
@@ -5447,6 +5928,7 @@
 
     function draw() {
       applyMainViewMode();
+      applyZenModeState();
       resizeCanvas();
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
@@ -5781,6 +6263,18 @@
         ? `${node.name} <${node.module}> · Local Self`
         : `${node.name} <${node.module}>`;
       const hoverMetaLines = [hoverMetaLine("Source", formatLocation(node))];
+      if (!DATA.debugUiLabels) {
+        hoverMetaLines.push(
+          hoverMetaLine(
+            "Signal Bits",
+            areaKind === "self"
+              ? `local ${formatMetricValue(node.moduleSignalBits)} (vars ${formatMetricValue(node.moduleVariableBits)}, nets ${formatMetricValue(node.moduleNetBits)})`
+              : node.children.length > 0
+                ? `subtree ${formatMetricValue(node.subtreeSignalBits)}, local ${formatMetricValue(node.moduleSignalBits)}`
+                : `local ${formatMetricValue(node.moduleSignalBits)} (vars ${formatMetricValue(node.moduleVariableBits)}, nets ${formatMetricValue(node.moduleNetBits)})`
+          )
+        );
+      }
       if (DATA.debugUiLabels) {
         hoverMetaLines.unshift(
           hoverMetaLine(
@@ -6074,6 +6568,26 @@
       setMainViewMode("three3d");
     });
 
+    zenToggleBtn.addEventListener("click", () => {
+      setZenMode(!state.zenMode);
+    });
+
+    zenViewTreemapBtn.addEventListener("click", () => {
+      setMainViewMode("treemap");
+    });
+
+    zenViewPieBtn.addEventListener("click", () => {
+      setMainViewMode("pie2d");
+    });
+
+    zenViewThreeBtn.addEventListener("click", () => {
+      setMainViewMode("three3d");
+    });
+
+    zenExitBtn.addEventListener("click", () => {
+      setZenMode(false);
+    });
+
     expandTreeBtn.addEventListener("click", () => {
       forEachVisibleTreeNode((nodeId) => {
         state.treeCollapsedIds.delete(nodeId);
@@ -6172,6 +6686,10 @@
       }
       if (sourcePanel.classList.contains("visible")) {
         closeSourcePanel();
+        return;
+      }
+      if (state.zenMode) {
+        setZenMode(false);
       }
     });
 
@@ -6221,7 +6739,7 @@
     });
 
     themeSelect.addEventListener("change", () => {
-      state.theme = validTheme(themeSelect.value) ? themeSelect.value : "warm-paper";
+      state.theme = validTheme(themeSelect.value) ? themeSelect.value : "solarized-light";
       applyTheme();
       savePersistedState();
       draw();

@@ -31,14 +31,11 @@ pub(crate) fn build_viewer_data(
 
     let mut nodes = Vec::new();
     nodes.push(Node {
-        id: 0,
         name: "(root)".to_string(),
         module: "(forest)".to_string(),
-        path: String::new(),
         definition_key: None,
         parent: None,
         children: Vec::new(),
-        depth: 0,
         subtree_instances: 0,
         subtree_leaves: 0,
         subtree_signal_count: 0,
@@ -150,18 +147,15 @@ pub(crate) fn build_viewer_data(
                 None => {
                     let id = nodes.len();
                     nodes.push(Node {
-                        id,
                         name: (*segment).to_string(),
                         module: if is_leaf {
                             entry.module.clone()
                         } else {
                             String::new()
                         },
-                        path: prefix.clone(),
                         definition_key: if is_leaf { entry.definition_key } else { None },
                         parent: Some(parent_id),
                         children: Vec::new(),
-                        depth: index,
                         subtree_instances: 0,
                         subtree_leaves: 0,
                         subtree_signal_count: 0,
@@ -712,9 +706,9 @@ fn wildcard_match(pattern: &str, text: &str) -> bool {
 }
 
 fn fill_missing_modules(nodes: &mut [Node]) {
-    for index in 1..nodes.len() {
-        if nodes[index].module.is_empty() {
-            nodes[index].module = "(unknown)".to_string();
+    for node in nodes.iter_mut().skip(1) {
+        if node.module.is_empty() {
+            node.module = "(unknown)".to_string();
         }
     }
 }
