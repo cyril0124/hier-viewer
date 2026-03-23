@@ -1602,6 +1602,31 @@
       api.requestDraw();
     });
 
+    if (typeof window.registerSearchHistoryInput === "function") {
+      window.registerSearchHistoryInput(chartAnalysisPatternInput, "analysis-pattern", {
+        apply: (value) => {
+          if (typeof window.applySharedAnalysisPatternValue === "function") {
+            window.applySharedAnalysisPatternValue(value, chartAnalysisPatternInput);
+            invalidate();
+            api.requestDraw();
+            return;
+          }
+          state.analysisPattern = value;
+          chartAnalysisPatternInput.value = value;
+          const peer = document.getElementById("analysis-pattern-input");
+          if (peer && peer !== chartAnalysisPatternInput) {
+            peer.value = value;
+          }
+          api.buildSignalAnalysis();
+          api.syncAnalysisControls();
+          invalidate();
+          api.savePersistedState();
+          api.requestDraw();
+        },
+        getValue: () => state.analysisPattern
+      });
+    }
+
     if (typeof ResizeObserver === "function") {
       chartResizeObserver = new ResizeObserver(() => {
         if (!state.chartPanelOpen) {

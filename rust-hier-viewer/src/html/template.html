@@ -1519,6 +1519,10 @@
       flex-wrap: wrap;
     }
 
+    .treemap-analysis-legend.dragging {
+      user-select: none;
+    }
+
     .treemap-analysis-legend.hidden {
       display: none;
     }
@@ -1529,6 +1533,12 @@
       gap: 6px;
       flex: 0 0 auto;
       min-width: 0;
+      cursor: grab;
+      user-select: none;
+    }
+
+    .treemap-analysis-legend.dragging .treemap-analysis-legend-head {
+      cursor: grabbing;
     }
 
     .treemap-analysis-legend-kicker {
@@ -2539,6 +2549,59 @@
       display: none;
     }
 
+    .source-load-progress {
+      display: grid;
+      gap: 6px;
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid color-mix(in srgb, var(--section-border) 92%, transparent);
+      background: color-mix(in srgb, var(--section-bg) 92%, transparent);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    }
+
+    .source-load-progress.hidden {
+      display: none;
+    }
+
+    .source-load-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .source-load-stage {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .source-load-detail {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .source-load-bar {
+      position: relative;
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: color-mix(in srgb, var(--text) 8%, transparent);
+      box-shadow: inset 0 1px 1px color-mix(in srgb, var(--text) 8%, transparent);
+    }
+
+    .source-load-bar-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background:
+        linear-gradient(90deg, var(--loading-fill-start) 0%, var(--loading-fill-mid) 52%, var(--loading-fill-end) 100%);
+      transition: width 120ms ease;
+    }
+
     .source-close {
       flex: 0 0 auto;
     }
@@ -2876,6 +2939,33 @@
       padding: 12px 0 18px;
     }
 
+    .source-code.plain-mode {
+      padding: 0;
+    }
+
+    .source-plain-text {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 100%;
+      margin: 0;
+      padding: 14px 18px 18px;
+      border: none;
+      border-radius: 0;
+      resize: none;
+      background: transparent;
+      color: var(--source-code-text);
+      font: 13.5px/1.58 "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      white-space: pre;
+      overflow: auto;
+      caret-color: transparent;
+      text-rendering: optimizeSpeed;
+    }
+
+    .source-plain-text:focus {
+      outline: none;
+    }
+
     .source-line {
       display: grid;
       grid-template-columns: 92px minmax(0, 1fr);
@@ -2940,12 +3030,45 @@
       text-rendering: optimizeSpeed;
     }
 
-    .source-code.lightweight-render .source-line {
+    .source-code.compact-mode .source-line {
       contain-intrinsic-size: 24px;
     }
 
-    .source-line.lightweight .source-code-text {
+    .source-virtual-shell,
+    .source-virtual-content {
+      min-width: max-content;
+    }
+
+    .source-virtual-spacer {
+      width: 1px;
+      pointer-events: none;
+    }
+
+    .source-line.compact {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr);
+    }
+
+    .source-line.compact .source-lineno {
+      position: static;
+      left: auto;
+      z-index: auto;
+      gap: 6px;
+      padding: 0 10px 0 0;
+      margin-right: 0;
+      background: transparent;
+    }
+
+    .source-line.compact .source-code-text {
+      display: block;
+      padding: 0 24px 0 14px;
       text-rendering: auto;
+    }
+
+    .source-line.compact:hover .source-lineno,
+    .source-line.compact.active .source-lineno,
+    .source-line.compact.search-current .source-lineno {
+      color: var(--text);
     }
 
     .source-lineno:hover {
@@ -3626,6 +3749,15 @@
               <div class="source-title" id="source-title" data-ui-name="source-title"></div>
               <div class="source-subtitle" id="source-subtitle" data-ui-name="source-subtitle"></div>
               <div class="source-status hidden" id="source-status" data-ui-name="source-status"></div>
+              <div class="source-load-progress hidden" id="source-load-progress" data-ui-name="source-load-progress">
+                <div class="source-load-row" data-ui-name="source-load-row">
+                  <div class="source-load-stage" id="source-load-stage">Loading source...</div>
+                  <div class="source-load-detail" id="source-load-detail"></div>
+                </div>
+                <div class="source-load-bar" aria-hidden="true" data-ui-name="source-load-bar">
+                  <div class="source-load-bar-fill" id="source-load-bar-fill"></div>
+                </div>
+              </div>
             </div>
             <div class="source-actions">
               <a class="source-open-link hidden" id="open-raw-source-link" href="#" target="_blank" rel="noopener noreferrer" data-ui-name="open-raw-source-link">Open Raw</a>
@@ -4190,6 +4322,9 @@
     const treemapAnalysisLegendTitle = document.getElementById("treemap-analysis-legend-title");
     const treemapAnalysisLegendSubtitle = document.getElementById("treemap-analysis-legend-subtitle");
     const treemapAnalysisLegendList = document.getElementById("treemap-analysis-legend-list");
+    const treemapAnalysisLegendHead = treemapAnalysisLegend
+      ? treemapAnalysisLegend.querySelector(".treemap-analysis-legend-head")
+      : null;
     const chartPanel = document.getElementById("chart-panel");
     const viewTreemapBtn = document.getElementById("view-treemap-btn");
     const viewPieBtn = document.getElementById("view-pie-btn");
@@ -4259,6 +4394,10 @@
     const sourceTitle = document.getElementById("source-title");
     const sourceSubtitle = document.getElementById("source-subtitle");
     const sourceStatus = document.getElementById("source-status");
+    const sourceLoadProgress = document.getElementById("source-load-progress");
+    const sourceLoadStage = document.getElementById("source-load-stage");
+    const sourceLoadDetail = document.getElementById("source-load-detail");
+    const sourceLoadBarFill = document.getElementById("source-load-bar-fill");
     const sourceCode = document.getElementById("source-code");
     const openRawSourceLink = document.getElementById("open-raw-source-link");
     const toggleSourceFullscreenBtn = document.getElementById("toggle-source-fullscreen-btn");
@@ -4279,23 +4418,29 @@
     const analysisHatchPatternCache = new Map();
     const subtreeDepthCache = new Array(nodes.length).fill(-1);
     const sourceTextCache = new Map();
-    const SOURCE_CONTEXT_LINES = 2;
-    const MAX_PREVIEW_SOURCE_LINES = 24;
-    const SOURCE_PROGRESSIVE_RENDER_LINE_THRESHOLD = 7000;
-    const SOURCE_PROGRESSIVE_RENDER_INITIAL_BATCH_LINES = 220;
-    const SOURCE_PROGRESSIVE_RENDER_INITIAL_BATCH_CHARS = 56000;
-    const SOURCE_PROGRESSIVE_RENDER_BATCH_LINES = 96;
-    const SOURCE_PROGRESSIVE_RENDER_BATCH_CHARS = 24000;
-    const SOURCE_LIGHTWEIGHT_RENDER_LINE_THRESHOLD = 2200;
     const SOURCE_SEARCH_INPUT_DEBOUNCE_MS = 120;
     const ADVANCED_POPOVER_MIN_VISIBLE_WIDTH = 160;
     const ADVANCED_POPOVER_MIN_VISIBLE_HEADER = 72;
+    const SEARCH_HISTORY_LIMIT = 24;
+    const SOURCE_VIRTUALIZED_LINE_THRESHOLD = 320;
+    const SOURCE_VIRTUALIZED_OVERSCAN_LINES = 120;
+    const SOURCE_COMPACT_RENDER_INSTANCE_LINE_THRESHOLD = 2200;
+    const SOURCE_COMPACT_RENDER_INSTANCE_CHAR_THRESHOLD = 320000;
+    const SOURCE_COMPACT_RENDER_DEFINITION_LINE_THRESHOLD = 1800;
+    const SOURCE_COMPACT_RENDER_DEFINITION_CHAR_THRESHOLD = 260000;
+    const SOURCE_PLAIN_TEXT_INSTANCE_LINE_THRESHOLD = 120000;
+    const SOURCE_PLAIN_TEXT_INSTANCE_CHAR_THRESHOLD = 20000000;
+    const SOURCE_PLAIN_TEXT_DEFINITION_LINE_THRESHOLD = 80000;
+    const SOURCE_PLAIN_TEXT_DEFINITION_CHAR_THRESHOLD = 12000000;
     const defaultHint = "Wheel to zoom. Drag to pan. Click to drill down. Filter supports text, wc:pattern, and re:regex. Signal analysis supports wildcard/text/regex over internal signal names. Press Escape to close source.";
     const STORAGE_KEY = `hier-viewer:${window.location.pathname}`;
     let currentSourceView = null;
     let sourceSearchMatchElements = [];
-    let sourceRenderJobToken = 0;
     let sourceSearchInputTimer = null;
+    const sourceLineHeightCache = new Map();
+    let sourceVirtualRenderQueued = false;
+    let sourceVirtualRenderForce = false;
+    const searchHistorySessions = new Map();
 
     const state = {
       homeRoot: DATA.rootId,
@@ -4321,7 +4466,7 @@
       analysisVisibleMaxLoc: 0,
       analysisVisibleMaxRatio: 0,
       analysisVisibleSubtreeQualified: new Array(nodes.length).fill(false),
-      analysisLegendFilter: "",
+      analysisLegendFilter: [],
       analysisLegendVisibleSubtree: new Array(nodes.length).fill(false),
       analysisHatchDisabledUntil: 0,
       advancedPopoverOpen: false,
@@ -4367,6 +4512,7 @@
       sourceBookmarkEditingLine: null,
       sourceBookmarkEditingDraft: "",
       sourceBookmarksByFile: {},
+      searchHistoryByField: {},
       treePanelOpen: false,
       treePanelWidth: 360,
       draggingTreePanelResize: false,
@@ -4401,6 +4547,11 @@
       draggingZenOverlay: false,
       zenOverlayDragOffsetX: 0,
       zenOverlayDragOffsetY: 0,
+      treemapAnalysisLegendLeft: null,
+      treemapAnalysisLegendTop: null,
+      draggingTreemapAnalysisLegend: false,
+      treemapAnalysisLegendDragOffsetX: 0,
+      treemapAnalysisLegendDragOffsetY: 0,
       chartPanelWidth: 1080,
       chartPanelHeight: 760,
       chartPanelLeft: 16,
@@ -4838,6 +4989,43 @@
       scheduleUiAnnotations();
     }
 
+    function clampTreemapAnalysisLegendPosition() {
+      if (
+        state.treemapAnalysisLegendLeft === null ||
+        state.treemapAnalysisLegendTop === null
+      ) {
+        return;
+      }
+      const stageWidth = treemapStage.clientWidth || canvasPanel.clientWidth || window.innerWidth;
+      const stageHeight = treemapStage.clientHeight || canvasPanel.clientHeight || window.innerHeight;
+      const legendWidth = treemapAnalysisLegend.offsetWidth || Math.min(stageWidth - 24, 520);
+      const legendHeight = treemapAnalysisLegend.offsetHeight || 52;
+      const minLeft = 12;
+      const minTop = 12;
+      const maxLeft = Math.max(minLeft, stageWidth - legendWidth - 12);
+      const maxTop = Math.max(minTop, stageHeight - legendHeight - 12);
+      state.treemapAnalysisLegendLeft = clamp(state.treemapAnalysisLegendLeft, minLeft, maxLeft);
+      state.treemapAnalysisLegendTop = clamp(state.treemapAnalysisLegendTop, minTop, maxTop);
+    }
+
+    function applyTreemapAnalysisLegendPosition() {
+      if (!treemapAnalysisLegend) {
+        return;
+      }
+      treemapAnalysisLegend.classList.toggle("dragging", state.draggingTreemapAnalysisLegend);
+      const floating = state.treemapAnalysisLegendLeft !== null && state.treemapAnalysisLegendTop !== null;
+      if (!floating) {
+        treemapAnalysisLegend.style.left = "";
+        treemapAnalysisLegend.style.top = "";
+        scheduleUiAnnotations();
+        return;
+      }
+      clampTreemapAnalysisLegendPosition();
+      treemapAnalysisLegend.style.left = `${state.treemapAnalysisLegendLeft}px`;
+      treemapAnalysisLegend.style.top = `${state.treemapAnalysisLegendTop}px`;
+      scheduleUiAnnotations();
+    }
+
     function applyToolbarCollapsedState() {
       toolbar.classList.toggle("collapsed", state.toolbarCollapsed);
       toggleToolbarBtn.setAttribute("aria-expanded", state.toolbarCollapsed ? "false" : "true");
@@ -4871,6 +5059,7 @@
           filterScope: state.filterScope,
           filterMode: state.filterMode,
           sourceBookmarksByFile: state.sourceBookmarksByFile,
+          searchHistoryByField: state.searchHistoryByField,
           treePanelOpen: state.treePanelOpen,
           matchPanelOpen: state.matchPanelOpen,
           mainViewMode: state.mainViewMode,
@@ -4891,7 +5080,9 @@
           hoverCardLeft: state.hoverCardLeft,
           hoverCardTop: state.hoverCardTop,
           zenOverlayLeft: state.zenOverlayLeft,
-          zenOverlayTop: state.zenOverlayTop
+          zenOverlayTop: state.zenOverlayTop,
+          treemapAnalysisLegendLeft: state.treemapAnalysisLegendLeft,
+          treemapAnalysisLegendTop: state.treemapAnalysisLegendTop
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
       } catch (_) {
@@ -4930,16 +5121,11 @@
         if (typeof saved.analysisPattern === "string") {
           state.analysisPattern = saved.analysisPattern;
         }
-        if (
-          saved.analysisLegendFilter === "" ||
-          saved.analysisLegendFilter === "descendant" ||
-          (typeof saved.analysisLegendFilter === "string" && /^bucket-[1-4]$/.test(saved.analysisLegendFilter))
-        ) {
-          state.analysisLegendFilter = saved.analysisLegendFilter || "";
-        }
+        state.analysisLegendFilter = normalizeAnalysisLegendFilter(saved.analysisLegendFilter);
         if (saved.sourceBookmarksByFile && typeof saved.sourceBookmarksByFile === "object") {
           state.sourceBookmarksByFile = normalizeSourceBookmarks(saved.sourceBookmarksByFile);
         }
+        state.searchHistoryByField = normalizeSearchHistoryMap(saved.searchHistoryByField);
         state.toolbarCollapsed = !!saved.toolbarCollapsed;
         if (typeof saved.advancedPopoverLeft === "number") state.advancedPopoverLeft = saved.advancedPopoverLeft;
         if (typeof saved.advancedPopoverTop === "number") state.advancedPopoverTop = saved.advancedPopoverTop;
@@ -4992,6 +5178,12 @@
         if (typeof saved.hoverCardTop === "number") state.hoverCardTop = saved.hoverCardTop;
         if (typeof saved.zenOverlayLeft === "number") state.zenOverlayLeft = saved.zenOverlayLeft;
         if (typeof saved.zenOverlayTop === "number") state.zenOverlayTop = saved.zenOverlayTop;
+        if (typeof saved.treemapAnalysisLegendLeft === "number") {
+          state.treemapAnalysisLegendLeft = saved.treemapAnalysisLegendLeft;
+        }
+        if (typeof saved.treemapAnalysisLegendTop === "number") {
+          state.treemapAnalysisLegendTop = saved.treemapAnalysisLegendTop;
+        }
         expandTreePath(state.currentRoot);
       } catch (_) {
       }
@@ -5031,6 +5223,53 @@
     searchInput.value = state.search;
     sourceSearchModeSelect.value = state.sourceSearchMode;
     sourceSearchInput.value = state.sourceSearch;
+
+    function syncLinkedAnalysisPatternInputs(value, source = null) {
+      analysisPatternInput.value = value;
+      const chartInput = document.getElementById("chart-analysis-pattern-input");
+      if (chartInput && chartInput !== source) {
+        chartInput.value = value;
+      }
+    }
+
+    function applySourceSearchValue(value, options = {}) {
+      state.sourceSearch = value;
+      sourceSearchInput.value = value;
+      state.sourceSearchMatchIndex = 0;
+      if (sourceSearchInputTimer !== null) {
+        clearTimeout(sourceSearchInputTimer);
+        sourceSearchInputTimer = null;
+      }
+      if (options.immediate) {
+        renderCurrentSourceView(false);
+        return;
+      }
+      sourceSearchInputTimer = setTimeout(() => {
+        sourceSearchInputTimer = null;
+        renderCurrentSourceView(false);
+      }, SOURCE_SEARCH_INPUT_DEBOUNCE_MS);
+    }
+
+    function applyFilterSearchValue(value) {
+      state.search = value;
+      searchInput.value = value;
+      buildMatches();
+      savePersistedState();
+      draw();
+    }
+
+    function applyAnalysisPatternValue(value, source = null) {
+      state.analysisPattern = value;
+      syncLinkedAnalysisPatternInputs(value, source);
+      buildSignalAnalysis();
+      syncAnalysisControls();
+      savePersistedState();
+      draw();
+    }
+
+    window.applySharedAnalysisPatternValue = (value, source = null) => {
+      applyAnalysisPatternValue(value, source);
+    };
 
     function applyMainViewMode() {
       state.chartPanelOpen = state.mainViewMode !== "treemap";
@@ -5244,11 +5483,280 @@
       sourceStatus.classList.remove("hidden");
     }
 
+    function setSourceLoadProgress(percent, stage, detail = "") {
+      if (!sourceLoadProgress) {
+        return;
+      }
+      const clamped = Math.max(0, Math.min(100, percent));
+      sourceLoadProgress.classList.remove("hidden");
+      sourceLoadBarFill.style.width = `${clamped}%`;
+      sourceLoadStage.textContent = stage;
+      sourceLoadDetail.textContent = detail;
+    }
+
+    function hideSourceLoadProgress() {
+      if (!sourceLoadProgress) {
+        return;
+      }
+      sourceLoadProgress.classList.add("hidden");
+      sourceLoadBarFill.style.width = "0%";
+      sourceLoadStage.textContent = "Loading source...";
+      sourceLoadDetail.textContent = "";
+    }
+
     function nextFrame() {
       return new Promise((resolve) => {
         requestAnimationFrame(() => resolve());
       });
     }
+
+    function normalizeSearchHistoryMap(raw) {
+      if (!raw || typeof raw !== "object") {
+        return {};
+      }
+      const normalized = {};
+      for (const [key, entries] of Object.entries(raw)) {
+        if (!Array.isArray(entries)) {
+          continue;
+        }
+        const seen = new Set();
+        const cleaned = [];
+        for (const entry of entries) {
+          if (typeof entry !== "string") {
+            continue;
+          }
+          const trimmed = entry.trim();
+          if (!trimmed || seen.has(trimmed)) {
+            continue;
+          }
+          seen.add(trimmed);
+          cleaned.push(trimmed);
+          if (cleaned.length >= SEARCH_HISTORY_LIMIT) {
+            break;
+          }
+        }
+        if (cleaned.length) {
+          normalized[key] = cleaned;
+        }
+      }
+      return normalized;
+    }
+
+    function normalizeAnalysisLegendFilter(raw) {
+      if (Array.isArray(raw)) {
+        const seen = new Set();
+        const normalized = [];
+        for (const entry of raw) {
+          if (typeof entry !== "string") {
+            continue;
+          }
+          if (entry !== "descendant" && !/^bucket-[1-4]$/.test(entry)) {
+            continue;
+          }
+          if (seen.has(entry)) {
+            continue;
+          }
+          seen.add(entry);
+          normalized.push(entry);
+        }
+        return normalized;
+      }
+      if (
+        raw === "descendant" ||
+        (typeof raw === "string" && /^bucket-[1-4]$/.test(raw))
+      ) {
+        return [raw];
+      }
+      return [];
+    }
+
+    function analysisLegendFilterSet() {
+      return new Set(normalizeAnalysisLegendFilter(state.analysisLegendFilter));
+    }
+
+    function hasAnalysisLegendFilter(filterKey) {
+      if (!filterKey) {
+        return false;
+      }
+      return analysisLegendFilterSet().has(filterKey);
+    }
+
+    function toggleAnalysisLegendFilter(filterKey) {
+      if (!filterKey) {
+        return;
+      }
+      const next = analysisLegendFilterSet();
+      if (next.has(filterKey)) {
+        next.delete(filterKey);
+      } else {
+        next.add(filterKey);
+      }
+      state.analysisLegendFilter = Array.from(next).sort();
+    }
+
+    function searchHistoryEntries(historyKey) {
+      return state.searchHistoryByField[historyKey] || [];
+    }
+
+    function commitSearchHistoryEntry(historyKey, value) {
+      if (!historyKey) {
+        return;
+      }
+      const trimmed = typeof value === "string" ? value.trim() : "";
+      if (!trimmed) {
+        return;
+      }
+      const nextEntries = [
+        trimmed,
+        ...searchHistoryEntries(historyKey).filter((entry) => entry !== trimmed),
+      ].slice(0, SEARCH_HISTORY_LIMIT);
+      state.searchHistoryByField[historyKey] = nextEntries;
+      savePersistedState();
+    }
+
+    function searchHistorySession(historyKey) {
+      if (!searchHistorySessions.has(historyKey)) {
+        searchHistorySessions.set(historyKey, {
+          index: -1,
+          draft: "",
+        });
+      }
+      return searchHistorySessions.get(historyKey);
+    }
+
+    function resetSearchHistorySession(historyKey, draft = "") {
+      const session = searchHistorySession(historyKey);
+      session.index = -1;
+      session.draft = draft;
+    }
+
+    function buildSourceLineOffsets(lines) {
+      const offsets = new Array(lines.length);
+      let cursor = 0;
+      for (let index = 0; index < lines.length; index += 1) {
+        offsets[index] = cursor;
+        cursor += lines[index].length;
+        if (index + 1 < lines.length) {
+          cursor += 1;
+        }
+      }
+      return offsets;
+    }
+
+    function ensureSourceLineOffsets(view) {
+      if (!view) {
+        return [];
+      }
+      if (!Array.isArray(view.lineOffsets)) {
+        view.lineOffsets = buildSourceLineOffsets(view.lines || []);
+      }
+      return view.lineOffsets;
+    }
+
+    function estimateSourceTextLength(view) {
+      if (!view) {
+        return 0;
+      }
+      if (Number.isInteger(view.textLength) && view.textLength >= 0) {
+        return view.textLength;
+      }
+      if (typeof view.text === "string") {
+        view.textLength = view.text.length;
+        return view.textLength;
+      }
+      const lines = Array.isArray(view.lines) ? view.lines : [];
+      let total = lines.length > 0 ? lines.length - 1 : 0;
+      for (let index = 0; index < lines.length; index += 1) {
+        total += lines[index].length;
+      }
+      view.textLength = total;
+      return total;
+    }
+
+    function ensureSourceText(view) {
+      if (!view) {
+        return "";
+      }
+      if (typeof view.text !== "string") {
+        view.text = Array.isArray(view.lines) ? view.lines.join("\n") : "";
+      }
+      view.textLength = view.text.length;
+      return view.text;
+    }
+
+    function currentStructuredSourceMatches() {
+      return currentSourceView?.searchMatchRecords || [];
+    }
+
+    function currentStructuredSourceMatchMap() {
+      return currentSourceView?.searchMatchRangesByLine || new Map();
+    }
+
+    function navigateSearchHistory(historyKey, direction, getCurrentValue, applyValue) {
+      const entries = searchHistoryEntries(historyKey);
+      if (!entries.length) {
+        return false;
+      }
+      const session = searchHistorySession(historyKey);
+      if (session.index === -1) {
+        session.draft = getCurrentValue();
+      }
+      if (direction < 0) {
+        if (session.index >= entries.length - 1) {
+          return false;
+        }
+        session.index += 1;
+      } else {
+        if (session.index === -1) {
+          return false;
+        }
+        session.index -= 1;
+      }
+      const nextValue = session.index === -1 ? session.draft : entries[session.index];
+      applyValue(nextValue, { fromHistory: true });
+      return true;
+    }
+
+    function registerSearchHistoryInput(input, historyKey, options = {}) {
+      if (!input || !historyKey || typeof options.apply !== "function") {
+        return;
+      }
+      const getCurrentValue = typeof options.getValue === "function"
+        ? options.getValue
+        : () => input.value;
+      const commit = (rawValue = getCurrentValue()) => {
+        commitSearchHistoryEntry(historyKey, rawValue);
+        resetSearchHistorySession(historyKey, getCurrentValue());
+      };
+      input.addEventListener("input", () => {
+        resetSearchHistorySession(historyKey, getCurrentValue());
+      });
+      input.addEventListener("blur", () => {
+        commit();
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.altKey || event.ctrlKey || event.metaKey) {
+          return;
+        }
+        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+          const moved = navigateSearchHistory(
+            historyKey,
+            event.key === "ArrowUp" ? -1 : 1,
+            getCurrentValue,
+            options.apply,
+          );
+          if (moved) {
+            event.preventDefault();
+          }
+          return;
+        }
+        if (event.key === "Enter") {
+          commit();
+        }
+      });
+    }
+
+    window.registerSearchHistoryInput = registerSearchHistoryInput;
 
     function currentSourceBookmarkKey() {
       if (currentSourceView && currentSourceView.bookmarkKey) {
@@ -5381,6 +5889,13 @@
         : `Bookmark line ${lineNo}`;
     }
 
+    function sourceBookmarkEmptyMessage() {
+      if (currentSourceView?.renderMode === "plain") {
+        return "Plain large-source mode disables inline line bookmarking.";
+      }
+      return "Click a line number to bookmark it.";
+    }
+
     function renderSourceBookmarkBar() {
       if (!sourceBookmarkList) {
         return;
@@ -5394,7 +5909,7 @@
       }
       const bookmarks = currentSourceBookmarks();
       if (!bookmarks.length) {
-        sourceBookmarkList.innerHTML = '<span class="source-bookmark-empty">Click a line number to bookmark it.</span>';
+        sourceBookmarkList.innerHTML = `<span class="source-bookmark-empty">${escapeHtml(sourceBookmarkEmptyMessage())}</span>`;
         return;
       }
       const fragment = document.createDocumentFragment();
@@ -5547,6 +6062,10 @@
     }
 
     function syncSourceBookmarksInView() {
+      if (isPlainTextSourceView()) {
+        renderSourceBookmarkBar();
+        return;
+      }
       const bookmarkSet = new Set(currentSourceBookmarkLines());
       for (const lineElement of sourceCode.querySelectorAll(".source-line[data-line]")) {
         const lineNo = Number(lineElement.dataset.line);
@@ -5556,9 +6075,22 @@
     }
 
     function focusSourceBookmark(lineNo) {
+      if (isPlainTextSourceView()) {
+        const range = plainSourceLineRange(currentSourceView, lineNo);
+        if (!range) {
+          showSourceStatus(`Bookmark line ${lineNo} is outside the current inline view. Use Open Raw for the full file.`);
+          renderSourceBookmarkBar();
+          return;
+        }
+        selectPlainSourceRange(range.start, range.end, true);
+        showSourceStatus(`Jumped to bookmark line ${lineNo}.`);
+        renderSourceBookmarkBar();
+        return;
+      }
       for (const element of sourceCode.querySelectorAll(".source-line.bookmark-jump")) {
         element.classList.remove("bookmark-jump");
       }
+      scrollSourceLineIntoView(lineNo, "center");
       const target = sourceCode.querySelector(`.source-line[data-line="${lineNo}"]`);
       if (!target) {
         showSourceStatus(`Bookmark line ${lineNo} is outside the current inline view. Use Open Raw for the full file.`);
@@ -5566,7 +6098,6 @@
         return;
       }
       target.classList.add("bookmark-jump");
-      target.scrollIntoView({ block: "center", inline: "nearest" });
       showSourceStatus(`Jumped to bookmark line ${lineNo}.`);
       renderSourceBookmarkBar();
     }
@@ -5689,7 +6220,12 @@
           out += renderSourceStyledSlice(text.slice(cursor, localStart), className);
         }
         if (localEnd > localStart) {
-          out += `<mark class="source-find-hit">${renderSourceStyledSlice(text.slice(localStart, localEnd), className)}</mark>`;
+          const matchIndex = Number.isInteger(range.matchIndex) ? range.matchIndex : null;
+          const currentClass = matchIndex !== null && matchIndex === state.sourceSearchMatchIndex
+            ? " current"
+            : "";
+          const matchAttr = matchIndex !== null ? ` data-match-index="${matchIndex}"` : "";
+          out += `<mark class="source-find-hit${currentClass}"${matchAttr}>${renderSourceStyledSlice(text.slice(localStart, localEnd), className)}</mark>`;
         }
         cursor = localEnd;
       }
@@ -5700,7 +6236,7 @@
     }
 
     function highlightVerilogLine(rawLine, matchRanges = []) {
-      const pattern = /"(?:\\.|[^"])*"|\/\/.*|`[A-Za-z_][A-Za-z0-9_]*|\b(?:module|endmodule|input|output|inout|wire|logic|reg|assign|always|always_ff|always_comb|always_latch|if|else|case|endcase|for|foreach|while|begin|end|generate|endgenerate|parameter|localparam|typedef|struct|union|enum|interface|modport|package|import|function|endfunction|task|endtask|class|endclass|virtual|const|static|automatic|return)\b|\b\d+(?:'[bdhoBDHO][0-9a-fA-F_xXzZ?]+)?\b/g;
+      const pattern = /"(?:\\.|[^"])*"|\/\/.*|`[A-Za-z_][A-Za-z0-9_]*|\b(?:alias|always|always_comb|always_ff|always_latch|assign|assume|assert|automatic|before|begin|bit|break|byte|case|casex|casez|checker|class|clocking|const|constraint|continue|cover|covergroup|coverpoint|cross|default|disable|do|else|end|endcase|endchecker|endclass|endclocking|endfunction|endgenerate|endgroup|endinterface|endmodule|endpackage|endprogram|endproperty|endsequence|endtask|enum|event|export|extends|final|for|force|foreach|forever|fork|function|genvar|generate|if|ignore_bins|illegal_bins|implements|import|inout|input|inside|int|integer|interface|join|join_any|join_none|local|localparam|logic|longint|modport|module|new|null|output|package|parameter|priority|program|property|protected|pure|rand|randc|randcase|randsequence|real|realtime|ref|reg|release|repeat|return|sequence|shortint|shortreal|signed|solve|static|string|struct|super|supply0|supply1|task|this|time|tri|typedef|union|unique|unsigned|uwire|var|virtual|void|wait|while|wire|with|within|wor|wand)\b|\b\d+(?:'[bdhoBDHO][0-9a-fA-F_xXzZ?]+)?\b/g;
       let out = "";
       let last = 0;
       for (const match of rawLine.matchAll(pattern)) {
@@ -5736,69 +6272,243 @@
 
     function updateSourceSearchStatus() {
       const activeQuery = state.sourceSearch.trim();
+      const totalMatches = currentSourceSearchTotalMatches();
       sourceSearchStatus.classList.toggle("error", !!state.sourceSearchError);
       if (state.sourceSearchError) {
         sourceSearchStatus.textContent = state.sourceSearchError;
       } else if (!activeQuery) {
         sourceSearchStatus.textContent = "Search current view";
-      } else if (!sourceSearchMatchElements.length) {
+      } else if (!totalMatches) {
         sourceSearchStatus.textContent = "0 matches";
       } else {
-        sourceSearchStatus.textContent = `${state.sourceSearchMatchIndex + 1}/${sourceSearchMatchElements.length} matches`;
+        sourceSearchStatus.textContent = `${state.sourceSearchMatchIndex + 1}/${totalMatches} matches`;
       }
-      const disabled = !sourceSearchMatchElements.length || !!state.sourceSearchError;
+      const disabled = !totalMatches || !!state.sourceSearchError;
       sourceSearchPrevBtn.disabled = disabled;
       sourceSearchNextBtn.disabled = disabled;
     }
 
-    function applyCurrentSourceSearchSelection(scrollIntoView = true) {
-      for (const element of sourceSearchMatchElements) {
-        element.classList.remove("current");
-        element.closest(".source-line")?.classList.remove("search-current");
+    function isPlainTextSourceView() {
+      return !!(currentSourceView && currentSourceView.renderMode === "plain");
+    }
+
+    function plainSourceTextarea() {
+      return sourceCode.querySelector(".source-plain-text");
+    }
+
+    function plainSourceLineRange(view, lineNo) {
+      if (!view || !Array.isArray(view.lines)) {
+        return null;
       }
+      const lineOffsets = ensureSourceLineOffsets(view);
+      const index = lineNo - view.firstLineNumber;
+      if (index < 0 || index >= view.lines.length) {
+        return null;
+      }
+      const start = lineOffsets[index];
+      const end = start + view.lines[index].length;
+      return { start, end, index };
+    }
+
+    function selectPlainSourceRange(start, end, scrollIntoView = true) {
+      const textarea = plainSourceTextarea();
+      if (!textarea) {
+        return;
+      }
+      try {
+        textarea.focus({ preventScroll: !scrollIntoView });
+      } catch (_) {
+        textarea.focus();
+      }
+      textarea.setSelectionRange(start, end);
+    }
+
+    function buildPlainSourceSearchMatches(view, search) {
+      if (!view || !search.regex || search.error) {
+        return [];
+      }
+      const lineOffsets = ensureSourceLineOffsets(view);
+      const matches = [];
+      for (let index = 0; index < view.lines.length; index += 1) {
+        const ranges = collectSourceSearchRanges(view.lines[index], search.regex);
+        if (!ranges.length) {
+          continue;
+        }
+        const lineOffset = lineOffsets[index];
+        const lineNo = view.firstLineNumber + index;
+        for (const range of ranges) {
+          matches.push({
+            lineNo,
+            start: lineOffset + range.start,
+            end: lineOffset + range.end,
+          });
+        }
+      }
+      return matches;
+    }
+
+    function buildStructuredSourceSearchMatches(view, search) {
+      const records = [];
+      const rangesByLine = new Map();
+      if (!view || !search.regex || search.error) {
+        return { records, rangesByLine };
+      }
+      for (let index = 0; index < view.lines.length; index += 1) {
+        const ranges = collectSourceSearchRanges(view.lines[index], search.regex);
+        if (!ranges.length) {
+          continue;
+        }
+        const lineNo = view.firstLineNumber + index;
+        const enrichedRanges = new Array(ranges.length);
+        for (let rangeIndex = 0; rangeIndex < ranges.length; rangeIndex += 1) {
+          const range = ranges[rangeIndex];
+          const enriched = {
+            start: range.start,
+            end: range.end,
+            lineNo,
+            matchIndex: records.length,
+          };
+          records.push(enriched);
+          enrichedRanges[rangeIndex] = enriched;
+        }
+        rangesByLine.set(lineNo, enrichedRanges);
+      }
+      return { records, rangesByLine };
+    }
+
+    function sourceSearchSignature(search) {
+      if (!search) {
+        return "";
+      }
+      if (search.error) {
+        return `error:${search.error}`;
+      }
+      if (!search.regex) {
+        return "";
+      }
+      return `${search.regex.source}/${search.regex.flags}`;
+    }
+
+    function ensureStructuredSourceSearchData(view, search) {
+      if (!view) {
+        return;
+      }
+      const signature = sourceSearchSignature(search);
+      if (view.searchSignature === signature) {
+        return;
+      }
+      const { records, rangesByLine } = buildStructuredSourceSearchMatches(view, search);
+      view.searchSignature = signature;
+      view.searchMatchRecords = records;
+      view.searchMatchRangesByLine = rangesByLine;
+    }
+
+    function currentSourceSearchTotalMatches() {
+      return isPlainTextSourceView()
+        ? (currentSourceView?.plainSearchMatches || []).length
+        : currentStructuredSourceMatches().length;
+    }
+
+    function applyCurrentSourceSearchSelection(scrollIntoView = true) {
+      if (isPlainTextSourceView()) {
+        const plainMatches = currentSourceView?.plainSearchMatches || [];
+        if (
+          state.sourceSearchMatchIndex < 0 ||
+          state.sourceSearchMatchIndex >= plainMatches.length
+        ) {
+          updateSourceSearchStatus();
+          return;
+        }
+        const current = plainMatches[state.sourceSearchMatchIndex];
+        selectPlainSourceRange(current.start, current.end, scrollIntoView);
+        updateSourceSearchStatus();
+        return;
+      }
+      clearVisibleSourceSearchSelection();
+      const structuredMatches = currentStructuredSourceMatches();
       if (
         state.sourceSearchMatchIndex < 0 ||
-        state.sourceSearchMatchIndex >= sourceSearchMatchElements.length
+        state.sourceSearchMatchIndex >= structuredMatches.length
       ) {
         updateSourceSearchStatus();
         return;
       }
-      const current = sourceSearchMatchElements[state.sourceSearchMatchIndex];
-      current.classList.add("current");
-      current.closest(".source-line")?.classList.add("search-current");
+      const current = structuredMatches[state.sourceSearchMatchIndex];
       if (scrollIntoView) {
-        current.scrollIntoView({ block: "center", inline: "nearest" });
+        scrollSourceLineIntoView(current.lineNo, "center");
+      }
+      const currentElement = sourceCode.querySelector(`.source-find-hit[data-match-index="${current.matchIndex}"]`);
+      if (currentElement) {
+        currentElement.classList.add("current");
+        currentElement.closest(".source-line")?.classList.add("search-current");
+        if (scrollIntoView && !currentSourceView?.virtualized) {
+          currentElement.scrollIntoView({ block: "center", inline: "nearest" });
+        }
       }
       updateSourceSearchStatus();
     }
 
     function moveSourceSearch(delta) {
-      if (!sourceSearchMatchElements.length) {
+      const total = currentSourceSearchTotalMatches();
+      if (!total) {
         return;
       }
-      const total = sourceSearchMatchElements.length;
       const current = state.sourceSearchMatchIndex < 0 ? 0 : state.sourceSearchMatchIndex;
       state.sourceSearchMatchIndex = (current + delta + total) % total;
       applyCurrentSourceSearchSelection(true);
     }
 
-    function shouldUseLightweightSourceRender(view, search) {
-      return !!(view && view.lines.length >= SOURCE_LIGHTWEIGHT_RENDER_LINE_THRESHOLD && !search.error);
+    function shouldUseCompactSourceRender(view) {
+      if (!view) {
+        return false;
+      }
+      const textLength = estimateSourceTextLength(view);
+      if (view.targetKind === "definition") {
+        return view.lines.length >= SOURCE_COMPACT_RENDER_DEFINITION_LINE_THRESHOLD
+          || textLength >= SOURCE_COMPACT_RENDER_DEFINITION_CHAR_THRESHOLD;
+      }
+      return view.lines.length >= SOURCE_COMPACT_RENDER_INSTANCE_LINE_THRESHOLD
+        || textLength >= SOURCE_COMPACT_RENDER_INSTANCE_CHAR_THRESHOLD;
     }
 
-    function renderSourceLineContent(line, matchRanges, lightweight) {
-      if (lightweight) {
-        const content = renderSourceSegmentWithSearch(line, 0, null, matchRanges);
-        return content.length ? content : "&nbsp;";
+    function shouldUsePlainTextSourceRender(view) {
+      if (!view) {
+        return false;
       }
+      const textLength = estimateSourceTextLength(view);
+      if (view.targetKind === "definition") {
+        return view.lines.length >= SOURCE_PLAIN_TEXT_DEFINITION_LINE_THRESHOLD
+          || textLength >= SOURCE_PLAIN_TEXT_DEFINITION_CHAR_THRESHOLD;
+      }
+      return view.lines.length >= SOURCE_PLAIN_TEXT_INSTANCE_LINE_THRESHOLD
+        || textLength >= SOURCE_PLAIN_TEXT_INSTANCE_CHAR_THRESHOLD;
+    }
+
+    function resolveSourceRenderMode(view) {
+      if (!view) {
+        return "full";
+      }
+      if (shouldUsePlainTextSourceRender(view)) {
+        return "plain";
+      }
+      if (shouldUseCompactSourceRender(view)) {
+        return "compact";
+      }
+      return "full";
+    }
+
+    function renderSourceLineContent(line, matchRanges) {
       return highlightVerilogLine(line, matchRanges);
     }
 
-    function buildSourceLineHtml(line, lineNo, focusStartLine, focusEndLine, bookmarkSet, search, lightweight = false) {
-      const matchRanges = search.error ? [] : collectSourceSearchRanges(line, search.regex);
+    function shouldVirtualizeSourceRender(view) {
+      return !!(view && view.lines.length >= SOURCE_VIRTUALIZED_LINE_THRESHOLD);
+    }
+
+    function buildSourceLineHtml(line, lineNo, focusStartLine, focusEndLine, bookmarkSet, matchRanges, renderMode = "full") {
       const classes = ["source-line"];
-      if (lightweight) {
-        classes.push("lightweight");
+      if (renderMode === "compact") {
+        classes.push("compact");
       }
       if (lineNo >= focusStartLine && lineNo <= focusEndLine) {
         classes.push("active");
@@ -5806,27 +6516,251 @@
       if (matchRanges.length > 0) {
         classes.push("search-match");
       }
+      if (matchRanges.some((range) => range.matchIndex === state.sourceSearchMatchIndex)) {
+        classes.push("search-current");
+      }
       if (bookmarkSet.has(lineNo)) {
         classes.push("bookmarked");
       }
       const bookmarkTitle = bookmarkSet.has(lineNo)
         ? `Remove bookmark at line ${lineNo}`
         : `Bookmark line ${lineNo}`;
-      return `<div class="${classes.join(" ")}" data-line="${lineNo}"><button class="source-lineno${bookmarkSet.has(lineNo) ? " bookmarked" : ""}" type="button" data-line="${lineNo}" aria-pressed="${bookmarkSet.has(lineNo) ? "true" : "false"}" title="${bookmarkTitle}"><span class="source-bookmark-dot" aria-hidden="true"></span><span class="source-lineno-value">${lineNo}</span></button><span class="source-code-text">${renderSourceLineContent(line, matchRanges, lightweight)}</span></div>`;
+      if (renderMode === "compact") {
+        return `<div class="${classes.join(" ")}" data-line="${lineNo}"><button class="source-lineno${bookmarkSet.has(lineNo) ? " bookmarked" : ""}" type="button" data-line="${lineNo}" aria-pressed="${bookmarkSet.has(lineNo) ? "true" : "false"}" title="${bookmarkTitle}"><span class="source-bookmark-dot" aria-hidden="true"></span><span class="source-lineno-value">${lineNo}</span></button><span class="source-code-text">${renderSourceLineContent(line, matchRanges)}</span></div>`;
+      }
+      return `<div class="${classes.join(" ")}" data-line="${lineNo}"><button class="source-lineno${bookmarkSet.has(lineNo) ? " bookmarked" : ""}" type="button" data-line="${lineNo}" aria-pressed="${bookmarkSet.has(lineNo) ? "true" : "false"}" title="${bookmarkTitle}"><span class="source-bookmark-dot" aria-hidden="true"></span><span class="source-lineno-value">${lineNo}</span></button><span class="source-code-text">${renderSourceLineContent(line, matchRanges)}</span></div>`;
+    }
+
+    function measureSourceLineHeight(renderMode) {
+      const cacheKey = renderMode === "compact" ? "compact" : "full";
+      const cached = sourceLineHeightCache.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+      const probe = document.createElement("div");
+      probe.className = renderMode === "compact" ? "source-line compact" : "source-line";
+      probe.dataset.line = "1";
+      probe.style.position = "absolute";
+      probe.style.visibility = "hidden";
+      probe.style.pointerEvents = "none";
+      probe.style.inset = "0 auto auto 0";
+      if (renderMode === "compact") {
+        probe.innerHTML = '<span class="source-code-text"><span class="tok-keyword">module</span> probe;</span>';
+      } else {
+        probe.innerHTML = '<button class="source-lineno" type="button" data-line="1" aria-pressed="false"><span class="source-bookmark-dot" aria-hidden="true"></span><span class="source-lineno-value">1</span></button><span class="source-code-text"><span class="tok-keyword">module</span> probe;</span>';
+      }
+      sourceCode.appendChild(probe);
+      const height = Math.max(20, Math.ceil(probe.getBoundingClientRect().height || 22));
+      probe.remove();
+      sourceLineHeightCache.set(cacheKey, height);
+      return height;
+    }
+
+    function sourceLineIndex(view, lineNo) {
+      if (!view) {
+        return -1;
+      }
+      const index = lineNo - view.firstLineNumber;
+      if (index < 0 || index >= view.lines.length) {
+        return -1;
+      }
+      return index;
+    }
+
+    function sourceScrollTopForLine(view, lineNo, block = "center") {
+      const index = sourceLineIndex(view, lineNo);
+      if (index < 0) {
+        return null;
+      }
+      const lineHeight = view.lineHeight || measureSourceLineHeight(view.renderMode);
+      view.lineHeight = lineHeight;
+      const viewportHeight = Math.max(sourceCode.clientHeight, lineHeight * 10);
+      const maxScrollTop = Math.max(0, view.lines.length * lineHeight - viewportHeight);
+      const lineTop = index * lineHeight;
+      if (block === "start") {
+        return Math.min(maxScrollTop, lineTop);
+      }
+      if (block === "nearest") {
+        const currentTop = sourceCode.scrollTop;
+        const currentBottom = currentTop + viewportHeight;
+        const lineBottom = lineTop + lineHeight;
+        if (lineTop >= currentTop && lineBottom <= currentBottom) {
+          return currentTop;
+        }
+      }
+      const centered = lineTop - Math.max(0, (viewportHeight - lineHeight) / 2);
+      return Math.max(0, Math.min(maxScrollTop, centered));
+    }
+
+    function clearVisibleSourceSearchSelection() {
+      for (const element of sourceCode.querySelectorAll(".source-find-hit.current")) {
+        element.classList.remove("current");
+      }
+      for (const lineElement of sourceCode.querySelectorAll(".source-line.search-current")) {
+        lineElement.classList.remove("search-current");
+      }
+    }
+
+    function applyVisibleSourceSearchSelection() {
+      clearVisibleSourceSearchSelection();
+      const matches = currentStructuredSourceMatches();
+      if (
+        state.sourceSearchMatchIndex < 0 ||
+        state.sourceSearchMatchIndex >= matches.length
+      ) {
+        return;
+      }
+      const current = matches[state.sourceSearchMatchIndex];
+      const currentElement = sourceCode.querySelector(`.source-find-hit[data-match-index="${current.matchIndex}"]`);
+      if (!currentElement) {
+        return;
+      }
+      currentElement.classList.add("current");
+      currentElement.closest(".source-line")?.classList.add("search-current");
+    }
+
+    function ensureSourceVirtualElements() {
+      let shell = sourceCode.querySelector(".source-virtual-shell");
+      let topSpacer = sourceCode.querySelector(".source-virtual-spacer-top");
+      let content = sourceCode.querySelector(".source-virtual-content");
+      let bottomSpacer = sourceCode.querySelector(".source-virtual-spacer-bottom");
+      if (shell && topSpacer && content && bottomSpacer) {
+        return { shell, topSpacer, content, bottomSpacer };
+      }
+      shell = document.createElement("div");
+      shell.className = "source-virtual-shell";
+      topSpacer = document.createElement("div");
+      topSpacer.className = "source-virtual-spacer source-virtual-spacer-top";
+      content = document.createElement("div");
+      content.className = "source-virtual-content";
+      bottomSpacer = document.createElement("div");
+      bottomSpacer.className = "source-virtual-spacer source-virtual-spacer-bottom";
+      shell.appendChild(topSpacer);
+      shell.appendChild(content);
+      shell.appendChild(bottomSpacer);
+      sourceCode.replaceChildren(shell);
+      return { shell, topSpacer, content, bottomSpacer };
+    }
+
+    function renderVisibleVirtualSourceWindow(force = false) {
+      const view = currentSourceView;
+      if (!view || !view.virtualized) {
+        return;
+      }
+      const { topSpacer, content, bottomSpacer } = ensureSourceVirtualElements();
+      const lineHeight = view.lineHeight || measureSourceLineHeight(view.renderMode);
+      view.lineHeight = lineHeight;
+      const viewportHeight = Math.max(sourceCode.clientHeight, lineHeight * 12);
+      const startIndex = Math.max(0, Math.floor(sourceCode.scrollTop / lineHeight) - SOURCE_VIRTUALIZED_OVERSCAN_LINES);
+      const endIndex = Math.min(
+        view.lines.length,
+        Math.ceil((sourceCode.scrollTop + viewportHeight) / lineHeight) + SOURCE_VIRTUALIZED_OVERSCAN_LINES,
+      );
+      if (!force && startIndex === view.virtualStart && endIndex === view.virtualEnd) {
+        applyVisibleSourceSearchSelection();
+        return;
+      }
+      view.virtualStart = startIndex;
+      view.virtualEnd = endIndex;
+      topSpacer.style.height = `${startIndex * lineHeight}px`;
+      bottomSpacer.style.height = `${Math.max(0, (view.lines.length - endIndex) * lineHeight)}px`;
+      const bookmarkSet = new Set(currentSourceBookmarkLines());
+      const matchMap = currentStructuredSourceMatchMap();
+      let html = "";
+      for (let index = startIndex; index < endIndex; index += 1) {
+        const lineNo = view.firstLineNumber + index;
+        html += buildSourceLineHtml(
+          view.lines[index],
+          lineNo,
+          view.focusStartLine,
+          view.focusEndLine,
+          bookmarkSet,
+          matchMap.get(lineNo) || [],
+          view.renderMode,
+        );
+      }
+      content.innerHTML = html;
+      sourceSearchMatchElements = Array.from(content.querySelectorAll(".source-find-hit"));
+      syncSourceBookmarksInView();
+      applyVisibleSourceSearchSelection();
+    }
+
+    function scheduleSourceVirtualRender(force = false) {
+      if (!currentSourceView?.virtualized) {
+        return;
+      }
+      sourceVirtualRenderForce = sourceVirtualRenderForce || force;
+      if (sourceVirtualRenderQueued) {
+        return;
+      }
+      sourceVirtualRenderQueued = true;
+      requestAnimationFrame(() => {
+        sourceVirtualRenderQueued = false;
+        const forceNow = sourceVirtualRenderForce;
+        sourceVirtualRenderForce = false;
+        renderVisibleVirtualSourceWindow(forceNow);
+      });
+    }
+
+    function scrollSourceLineIntoView(lineNo, block = "center") {
+      if (!currentSourceView) {
+        return;
+      }
+      if (currentSourceView.virtualized) {
+        const nextScrollTop = sourceScrollTopForLine(currentSourceView, lineNo, block);
+        if (nextScrollTop === null) {
+          return;
+        }
+        sourceCode.scrollTop = nextScrollTop;
+        renderVisibleVirtualSourceWindow(true);
+        return;
+      }
+      const focusElement = sourceCode.querySelector(`[data-line="${lineNo}"]`);
+      if (focusElement) {
+        focusElement.scrollIntoView({ block, inline: "nearest" });
+      }
     }
 
     function finalizeRenderedSource(preferFocusLine) {
-      sourceSearchMatchElements = Array.from(sourceCode.querySelectorAll(".source-find-hit"));
-      if (!sourceSearchMatchElements.length) {
+      if (isPlainTextSourceView()) {
+        sourceSearchMatchElements = [];
+        currentSourceView.plainSearchMatches = buildPlainSourceSearchMatches(
+          currentSourceView,
+          buildSourceSearchRegExp(),
+        );
+        if (!currentSourceView.plainSearchMatches.length) {
+          state.sourceSearchMatchIndex = -1;
+        } else if (
+          state.sourceSearchMatchIndex < 0 ||
+          state.sourceSearchMatchIndex >= currentSourceView.plainSearchMatches.length
+        ) {
+          state.sourceSearchMatchIndex = 0;
+        }
+        syncSourceBookmarksInView();
+        if (state.sourceSearch.trim().length > 0 && currentSourceView.plainSearchMatches.length > 0) {
+          applyCurrentSourceSearchSelection(true);
+          return;
+        }
+        updateSourceSearchStatus();
+        if (preferFocusLine && currentSourceView) {
+          const range = plainSourceLineRange(currentSourceView, currentSourceView.focusStartLine);
+          if (range) {
+            selectPlainSourceRange(range.start, range.end, true);
+          }
+        }
+        return;
+      }
+      const totalMatches = currentStructuredSourceMatches().length;
+      if (!totalMatches) {
         state.sourceSearchMatchIndex = -1;
       } else if (
         state.sourceSearchMatchIndex < 0 ||
-        state.sourceSearchMatchIndex >= sourceSearchMatchElements.length
+        state.sourceSearchMatchIndex >= totalMatches
       ) {
         state.sourceSearchMatchIndex = 0;
       }
 
-      const shouldFocusSearch = state.sourceSearch.trim().length > 0 && sourceSearchMatchElements.length > 0;
+      const shouldFocusSearch = state.sourceSearch.trim().length > 0 && totalMatches > 0;
       syncSourceBookmarksInView();
       if (shouldFocusSearch) {
         applyCurrentSourceSearchSelection(true);
@@ -5834,76 +6768,19 @@
       }
       updateSourceSearchStatus();
       if (preferFocusLine && currentSourceView) {
-        const focusElement = sourceCode.querySelector(`[data-line="${currentSourceView.focusStartLine}"]`);
-        if (focusElement) {
-          focusElement.scrollIntoView({ block: "center" });
-        }
+        scrollSourceLineIntoView(currentSourceView.focusStartLine, "center");
+        return;
       }
-    }
-
-    function renderCurrentSourceViewProgressively(view, search, preferFocusLine, bookmarkSet, renderToken, lightweight) {
-      sourceCode.innerHTML = "";
-      sourceSearchMatchElements = [];
-      state.sourceSearchMatchIndex = -1;
-      updateSourceSearchStatus();
-
-      let cursor = 0;
-      const total = view.lines.length;
-
-      function pump(maxLines, maxChars) {
-        if (renderToken !== sourceRenderJobToken || currentSourceView !== view) {
-          return;
-        }
-        let html = "";
-        let batchLines = 0;
-        let batchChars = 0;
-        while (cursor < total) {
-          const line = view.lines[cursor];
-          if (
-            batchLines > 0 &&
-            (batchLines >= maxLines || batchChars >= maxChars)
-          ) {
-            break;
-          }
-          const lineNo = view.firstLineNumber + cursor;
-          html += buildSourceLineHtml(
-            line,
-            lineNo,
-            view.focusStartLine,
-            view.focusEndLine,
-            bookmarkSet,
-            search,
-            lightweight,
-          );
-          batchLines += 1;
-          batchChars += line.length;
-          cursor += 1;
-        }
-        sourceCode.insertAdjacentHTML("beforeend", html);
-        if (cursor < total) {
-          requestAnimationFrame(() => {
-            pump(
-              SOURCE_PROGRESSIVE_RENDER_BATCH_LINES,
-              SOURCE_PROGRESSIVE_RENDER_BATCH_CHARS,
-            );
-          });
-          return;
-        }
-        finalizeRenderedSource(preferFocusLine);
-      }
-
-      pump(
-        SOURCE_PROGRESSIVE_RENDER_INITIAL_BATCH_LINES,
-        SOURCE_PROGRESSIVE_RENDER_INITIAL_BATCH_CHARS,
-      );
+      applyVisibleSourceSearchSelection();
     }
 
     function renderCurrentSourceView(preferFocusLine = true) {
-      sourceRenderJobToken += 1;
       if (!currentSourceView) {
         sourceCode.innerHTML = "";
         sourceSearchMatchElements = [];
         state.sourceSearchMatchIndex = -1;
+        sourceCode.classList.remove("compact-mode");
+        sourceCode.classList.remove("plain-mode");
         renderSourceBookmarkBar();
         updateSourceSearchStatus();
         return;
@@ -5913,19 +6790,41 @@
       const { lines, firstLineNumber, focusStartLine, focusEndLine } = currentSourceView;
       syncCurrentSourceBookmarkPreviews();
       const bookmarkSet = new Set(currentSourceBookmarkLines());
-      const lightweight = shouldUseLightweightSourceRender(currentSourceView, search);
-      sourceCode.classList.toggle("lightweight-render", lightweight);
-      if (lines.length > SOURCE_PROGRESSIVE_RENDER_LINE_THRESHOLD) {
-        renderCurrentSourceViewProgressively(
-          currentSourceView,
-          search,
-          preferFocusLine,
-          bookmarkSet,
-          sourceRenderJobToken,
-          lightweight,
-        );
+      const renderMode = resolveSourceRenderMode(currentSourceView);
+      const compactMode = renderMode === "compact";
+      const plainMode = renderMode === "plain";
+      currentSourceView.renderMode = renderMode;
+      currentSourceView.virtualized = !plainMode && shouldVirtualizeSourceRender(currentSourceView);
+      sourceCode.classList.toggle("compact-mode", compactMode);
+      sourceCode.classList.toggle("plain-mode", plainMode);
+      if (plainMode) {
+        const textarea = document.createElement("textarea");
+        textarea.className = "source-plain-text";
+        textarea.readOnly = true;
+        textarea.spellcheck = false;
+        textarea.wrap = "off";
+        textarea.value = ensureSourceText(currentSourceView);
+        sourceCode.replaceChildren(textarea);
+        finalizeRenderedSource(preferFocusLine);
         return;
       }
+      ensureStructuredSourceSearchData(currentSourceView, search);
+      if (currentSourceView.virtualized) {
+        currentSourceView.lineHeight = measureSourceLineHeight(renderMode);
+        currentSourceView.virtualStart = -1;
+        currentSourceView.virtualEnd = -1;
+        ensureSourceVirtualElements();
+        if (preferFocusLine) {
+          const focusScrollTop = sourceScrollTopForLine(currentSourceView, focusStartLine, "center");
+          if (focusScrollTop !== null) {
+            sourceCode.scrollTop = focusScrollTop;
+          }
+        }
+        renderVisibleVirtualSourceWindow(true);
+        finalizeRenderedSource(false);
+        return;
+      }
+      const matchMap = currentStructuredSourceMatchMap();
       sourceCode.innerHTML = lines
         .map((line, index) => buildSourceLineHtml(
           line,
@@ -5933,25 +6832,52 @@
           focusStartLine,
           focusEndLine,
           bookmarkSet,
-          search,
-          lightweight,
+          matchMap.get(firstLineNumber + index) || [],
+          renderMode,
         ))
         .join("");
+      sourceSearchMatchElements = Array.from(sourceCode.querySelectorAll(".source-find-hit"));
       finalizeRenderedSource(preferFocusLine);
     }
 
     function renderSourceLines(lines, firstLineNumber, focusStartLine, focusEndLine, options = {}) {
       currentSourceView = {
         lines,
+        text: typeof options.text === "string" ? options.text : null,
+        textLength: Number.isInteger(options.textLength) ? options.textLength : null,
+        lineOffsets: Array.isArray(options.lineOffsets) ? options.lineOffsets : null,
+        plainSearchMatches: [],
+        searchMatchRecords: [],
+        searchMatchRangesByLine: new Map(),
+        searchSignature: null,
         firstLineNumber,
         focusStartLine,
         focusEndLine,
+        renderMode: "full",
+        virtualized: false,
+        lineHeight: null,
+        virtualStart: -1,
+        virtualEnd: -1,
+        targetKind: options.targetKind || currentSourceView?.targetKind || "instance",
         bookmarkKey: options.bookmarkKey || currentSourceView?.bookmarkKey || null
       };
       if (state.sourceBookmarkEditingKey !== currentSourceView.bookmarkKey) {
         clearSourceBookmarkRename();
       }
       renderCurrentSourceView(true);
+    }
+
+    function sourceRenderModeStatusSuffix(view) {
+      if (!view) {
+        return "";
+      }
+      if (view.renderMode === "plain") {
+        return "Large-source mode keeps the viewer responsive; line-click bookmarking is unavailable in this mode.";
+      }
+      if (view.renderMode === "compact") {
+        return "Large-source highlighted mode keeps syntax colors while staying responsive.";
+      }
+      return "";
     }
 
     function applySourcePanelWindowState() {
@@ -5971,15 +6897,13 @@
       return `${target.filePath}:${line}:${column}`;
     }
 
-    function renderSourceText(text, firstLineNumber, focusStartLine, focusEndLine, options = {}) {
-      renderSourceLines(text.split("\n"), firstLineNumber, focusStartLine, focusEndLine, options);
-    }
-
-    function renderSourceExcerpt(node, target, sourceData, focusStartLine, focusEndLine, message, bookmarkKey) {
+    function renderSourceRange(node, target, sourceData, startLine, endLine, message, bookmarkKey) {
       const lines = sourceData.lines;
       if (!lines.length) {
         sourceSubtitle.textContent = `${node.module} · ${target.locationLabel} · ${formatSourceLocation(target)} · ${message}`;
         sourceCode.innerHTML = '<div class="source-line"><span class="source-lineno">-</span><span class="source-code-text">Source file is empty.</span></div>';
+        sourceCode.classList.remove("compact-mode");
+        sourceCode.classList.remove("plain-mode");
         currentSourceView = {
           firstLineNumber: 1,
           focusStartLine: 1,
@@ -5989,40 +6913,19 @@
         renderSourceBookmarkBar();
         return;
       }
-
-      const clampedFocusStart = Math.min(Math.max(1, focusStartLine), lines.length);
-      const clampedFocusEnd = Math.min(Math.max(clampedFocusStart, focusEndLine), lines.length);
-      const excerptStart = Math.max(1, clampedFocusStart - SOURCE_CONTEXT_LINES);
-      const excerptEnd = Math.min(
-        lines.length,
-        Math.max(clampedFocusEnd + SOURCE_CONTEXT_LINES, excerptStart + MAX_PREVIEW_SOURCE_LINES - 1),
-      );
-      const boundedEnd = Math.min(excerptEnd, excerptStart + MAX_PREVIEW_SOURCE_LINES - 1);
-      sourceSubtitle.textContent = `${node.module} · ${target.locationLabel} · ${formatSourceLocation(target)} · excerpt ${excerptStart}-${boundedEnd} · ${message}`;
-      renderSourceLines(
-        lines.slice(excerptStart - 1, boundedEnd),
-        excerptStart,
-        clampedFocusStart,
-        clampedFocusEnd,
-        { bookmarkKey },
-      );
-    }
-
-    function renderSourceRange(node, target, sourceData, startLine, endLine, message, bookmarkKey) {
-      const lines = sourceData.lines;
-      if (!lines.length) {
-        renderSourceExcerpt(node, target, sourceData, 1, 1, message, bookmarkKey);
-        return;
-      }
       const clampedStart = Math.min(Math.max(1, startLine), lines.length);
       const clampedEnd = Math.min(Math.max(clampedStart, endLine), lines.length);
+      const subsetLines = lines.slice(clampedStart - 1, clampedEnd);
       sourceSubtitle.textContent = `${node.module} · ${target.locationLabel} · ${formatSourceLocation(target)} · lines ${clampedStart}-${clampedEnd} · ${message}`;
       renderSourceLines(
-        lines.slice(clampedStart - 1, clampedEnd),
+        subsetLines,
         clampedStart,
         clampedStart,
         clampedEnd,
-        { bookmarkKey },
+        {
+          bookmarkKey,
+          targetKind: target.kind,
+        },
       );
     }
 
@@ -6035,14 +6938,51 @@
         return sourceTextCache.get(sourceUrl);
       }
 
-      const response = await fetch(sourceUrl, { signal });
+      const response = await fetch(sourceUrl, { signal, cache: "no-store" });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-
-      const text = await response.text();
+      const totalBytes = Number(response.headers.get("content-length")) || 0;
+      let fetchedBytes = 0;
+      let text = "";
+      if (response.body && typeof response.body.getReader === "function") {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        const parts = [];
+        setSourceLoadProgress(
+          totalBytes > 0 ? 2 : 8,
+          "Downloading source...",
+          totalBytes > 0 ? `0 / ${formatLoadingBytes(totalBytes)}` : "Receiving source bytes...",
+        );
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) {
+            break;
+          }
+          fetchedBytes += value.byteLength;
+          parts.push(decoder.decode(value, { stream: true }));
+          const percent = totalBytes > 0
+            ? (fetchedBytes / totalBytes) * 100
+            : Math.min(92, 10 + parts.length * 8);
+          setSourceLoadProgress(
+            percent,
+            "Downloading source...",
+            totalBytes > 0
+              ? `${formatLoadingBytes(fetchedBytes)} / ${formatLoadingBytes(totalBytes)}`
+              : `${formatLoadingBytes(fetchedBytes)} received`,
+          );
+        }
+        parts.push(decoder.decode());
+        text = parts.join("");
+      } else {
+        setSourceLoadProgress(12, "Downloading source...", "Streaming progress is unavailable in this browser.");
+        text = await response.text();
+        fetchedBytes = text.length;
+      }
       const sourceData = {
+        text,
         lines: text.split("\n"),
+        lineOffsets: null,
       };
       sourceTextCache.set(sourceUrl, sourceData);
       return sourceData;
@@ -6086,6 +7026,7 @@
 
       sourceSubtitle.textContent = `${node.module} · ${target.locationLabel} · ${formatSourceLocation(target)} · loading full file...`;
       sourceCode.innerHTML = '<div class="source-line"><span class="source-lineno">-</span><span class="source-code-text">Loading...</span></div>';
+      hideSourceLoadProgress();
       showSourceStatus(sourceUrl ? "Loading full file..." : "Source file unavailable.");
 
       if (!sourceUrl) {
@@ -6099,6 +7040,8 @@
           return;
         }
         const lineCount = sourceData.lines.length;
+        setSourceLoadProgress(100, "Rendering source...", `${lineCount} lines ready`);
+        await nextFrame();
         if (
           target.kind === "definition" &&
           Number.isFinite(target.line) &&
@@ -6114,23 +7057,46 @@
             "module definition",
             bookmarkKey,
           );
-          showSourceStatus(`Module source loaded (${Math.max(0, target.endLine - target.line + 1)} lines shown).`);
+          hideSourceLoadProgress();
+          const shownLineCount = Math.max(0, target.endLine - target.line + 1);
+          const modeSuffix = sourceRenderModeStatusSuffix(currentSourceView);
+          showSourceStatus(
+            modeSuffix
+              ? `Module source loaded (${shownLineCount} lines shown). ${modeSuffix}`
+              : `Module source loaded (${shownLineCount} lines shown).`
+          );
           return;
         }
         sourceSubtitle.textContent = `${node.module} · ${target.locationLabel} · ${formatSourceLocation(target)} · full file`;
-        showSourceStatus(`Full file loaded (${lineCount} lines).`);
-        renderSourceLines(sourceData.lines, 1, focusStartLine, focusEndLine, { bookmarkKey });
+        hideSourceLoadProgress();
+        renderSourceLines(sourceData.lines, 1, focusStartLine, focusEndLine, {
+          bookmarkKey,
+          text: sourceData.text,
+          textLength: sourceData.text.length,
+          lineOffsets: sourceData.lineOffsets,
+          targetKind: target.kind,
+        });
+        const modeSuffix = sourceRenderModeStatusSuffix(currentSourceView);
+        showSourceStatus(
+          modeSuffix
+            ? `Full file loaded (${lineCount} lines). ${modeSuffix}`
+            : `Full file loaded (${lineCount} lines).`
+        );
       } catch (error) {
         if (state.sourceNodeId !== nodeId || state.sourceRequestToken !== requestToken) {
           return;
         }
         if (error && typeof error === "object" && error.name === "AbortError") {
+          hideSourceLoadProgress();
           showSourceStatus("");
           return;
         }
         const message = error instanceof Error ? error.message : String(error);
         sourceSubtitle.textContent = `${node.module} · ${target.locationLabel} · ${formatSourceLocation(target)} · source unavailable`;
         sourceCode.innerHTML = `<div class="source-line"><span class="source-lineno">-</span><span class="source-code-text">${escapeHtml(`Full file unavailable in this browser session (${message}). Use Open Raw or serve the bundle over HTTP.`)}</span></div>`;
+        sourceCode.classList.remove("compact-mode");
+        sourceCode.classList.remove("plain-mode");
+        hideSourceLoadProgress();
         showSourceStatus("Full file load failed.");
       }
     }
@@ -6148,7 +7114,6 @@
       state.sourceNodeId = null;
       state.sourceTargetKind = "instance";
       state.sourceRequestToken += 1;
-      sourceRenderJobToken += 1;
       currentSourceView = null;
       sourceSearchMatchElements = [];
       state.sourceSearchMatchIndex = -1;
@@ -6156,7 +7121,9 @@
       state.sourcePanelFullscreen = false;
       clearSourceBookmarkRename();
       sourceCode.innerHTML = "";
-      sourceCode.classList.remove("lightweight-render");
+      sourceCode.classList.remove("compact-mode");
+      sourceCode.classList.remove("plain-mode");
+      hideSourceLoadProgress();
       showSourceStatus("");
       openRawSourceLink.href = "#";
       openRawSourceLink.classList.add("hidden");
@@ -6649,13 +7616,14 @@
       const row = document.createElement("button");
       row.type = "button";
       row.className = "treemap-analysis-legend-row";
-      if (filterKey && state.analysisLegendFilter === filterKey) {
+      const isActive = hasAnalysisLegendFilter(filterKey);
+      if (isActive) {
         row.classList.add("active");
       }
       row.title = meta;
-      row.setAttribute("aria-pressed", filterKey && state.analysisLegendFilter === filterKey ? "true" : "false");
+      row.setAttribute("aria-pressed", isActive ? "true" : "false");
       row.addEventListener("click", () => {
-        state.analysisLegendFilter = state.analysisLegendFilter === filterKey ? "" : filterKey;
+        toggleAnalysisLegendFilter(filterKey);
         savePersistedState();
         draw();
       });
@@ -6697,6 +7665,7 @@
       }
 
       if (!analysisActive()) {
+        state.draggingTreemapAnalysisLegend = false;
         treemapAnalysisLegend.classList.add("hidden");
         treemapAnalysisLegendList.innerHTML = "";
         return;
@@ -6745,6 +7714,7 @@
       });
 
       treemapAnalysisLegend.classList.remove("hidden");
+      applyTreemapAnalysisLegendPosition();
     }
 
     function updateAnalysisVisibleExtents() {
@@ -6828,23 +7798,26 @@
       return Math.max(0, Math.min(0.7, normalized * 0.7));
     }
 
-    function selectedAnalysisLegendBucket() {
-      if (typeof state.analysisLegendFilter !== "string") {
-        return null;
-      }
-      const match = /^bucket-([1-4])$/.exec(state.analysisLegendFilter);
-      return match ? Number(match[1]) : null;
+    function selectedAnalysisLegendBuckets() {
+      return normalizeAnalysisLegendFilter(state.analysisLegendFilter)
+        .map((entry) => {
+          const match = /^bucket-([1-4])$/.exec(entry);
+          return match ? Number(match[1]) : null;
+        })
+        .filter((bucket) => bucket !== null);
     }
 
     function analysisLegendLocalBucketMatches(nodeId) {
-      const bucket = selectedAnalysisLegendBucket();
-      return bucket !== null && analysisNodeQualified(nodeId) && analysisBucketIndex(nodeId) === bucket;
+      const buckets = selectedAnalysisLegendBuckets();
+      return buckets.length > 0
+        && analysisNodeQualified(nodeId)
+        && buckets.includes(analysisBucketIndex(nodeId));
     }
 
     function updateAnalysisLegendVisibleSubtree() {
       state.analysisLegendVisibleSubtree.fill(false);
-      const selectedBucket = selectedAnalysisLegendBucket();
-      if (!analysisActive() || selectedBucket === null) {
+      const selectedBuckets = selectedAnalysisLegendBuckets();
+      if (!analysisActive() || !selectedBuckets.length) {
         return;
       }
 
@@ -6875,16 +7848,22 @@
 
     function analysisNodeHighlightState(nodeId) {
       const baseState = analysisBaseHighlightState(nodeId);
-      if (!analysisActive() || !state.analysisLegendFilter) {
+      const activeFilters = normalizeAnalysisLegendFilter(state.analysisLegendFilter);
+      if (!analysisActive() || !activeFilters.length) {
         return baseState;
       }
-      if (state.analysisLegendFilter === "descendant") {
-        return baseState === "descendant" ? "descendant" : "none";
-      }
-      if (analysisLegendLocalBucketMatches(nodeId)) {
+      const descendantSelected = activeFilters.includes("descendant");
+      const localSelected = analysisLegendLocalBucketMatches(nodeId);
+      if (localSelected) {
         return "local";
       }
-      return state.analysisLegendVisibleSubtree[nodeId] ? "descendant" : "none";
+      if (descendantSelected && baseState === "descendant") {
+        return "descendant";
+      }
+      if (!descendantSelected && state.analysisLegendVisibleSubtree[nodeId]) {
+        return "descendant";
+      }
+      return "none";
     }
 
     function getAnalysisHatchPattern(kind) {
@@ -8573,6 +9552,29 @@
       event.preventDefault();
     });
 
+    if (treemapAnalysisLegendHead) {
+      treemapAnalysisLegendHead.addEventListener("mousedown", (event) => {
+        if (event.button !== 0) {
+          return;
+        }
+        if (treemapAnalysisLegend.classList.contains("hidden")) {
+          return;
+        }
+        const rect = treemapAnalysisLegend.getBoundingClientRect();
+        const stageRect = treemapStage.getBoundingClientRect();
+        if (state.treemapAnalysisLegendLeft === null || state.treemapAnalysisLegendTop === null) {
+          state.treemapAnalysisLegendLeft = rect.left - stageRect.left;
+          state.treemapAnalysisLegendTop = rect.top - stageRect.top;
+        }
+        state.draggingTreemapAnalysisLegend = true;
+        state.treemapAnalysisLegendDragOffsetX = event.clientX - stageRect.left - state.treemapAnalysisLegendLeft;
+        state.treemapAnalysisLegendDragOffsetY = event.clientY - stageRect.top - state.treemapAnalysisLegendTop;
+        applyTreemapAnalysisLegendPosition();
+        event.preventDefault();
+        event.stopPropagation();
+      });
+    }
+
     canvas.addEventListener("mousemove", (event) => {
       if (state.isDragging) {
         const dx = event.clientX - state.lastPointerX;
@@ -8922,6 +9924,7 @@
     toggleSourceFullscreenBtn.addEventListener("click", () => {
       state.sourcePanelFullscreen = !state.sourcePanelFullscreen;
       applySourcePanelWindowState();
+      scheduleSourceVirtualRender(true);
     });
 
     sourceSearchModeSelect.addEventListener("change", () => {
@@ -8931,15 +9934,7 @@
     });
 
     sourceSearchInput.addEventListener("input", () => {
-      state.sourceSearch = sourceSearchInput.value;
-      state.sourceSearchMatchIndex = 0;
-      if (sourceSearchInputTimer !== null) {
-        clearTimeout(sourceSearchInputTimer);
-      }
-      sourceSearchInputTimer = setTimeout(() => {
-        sourceSearchInputTimer = null;
-        renderCurrentSourceView(false);
-      }, SOURCE_SEARCH_INPUT_DEBOUNCE_MS);
+      applySourceSearchValue(sourceSearchInput.value);
     });
 
     sourceSearchInput.addEventListener("keydown", (event) => {
@@ -8969,6 +9964,10 @@
       }
       event.preventDefault();
       toggleSourceBookmark(lineNo);
+    });
+
+    sourceCode.addEventListener("scroll", () => {
+      scheduleSourceVirtualRender(false);
     });
 
     window.addEventListener("keydown", (event) => {
@@ -9075,10 +10074,7 @@
     });
 
     analysisPatternInput.addEventListener("input", () => {
-      state.analysisPattern = analysisPatternInput.value;
-      buildSignalAnalysis();
-      savePersistedState();
-      draw();
+      applyAnalysisPatternValue(analysisPatternInput.value, analysisPatternInput);
     });
 
     filterScopeSelect.addEventListener("change", () => {
@@ -9096,10 +10092,7 @@
     });
 
     searchInput.addEventListener("input", () => {
-      state.search = searchInput.value;
-      buildMatches();
-      savePersistedState();
-      draw();
+      applyFilterSearchValue(searchInput.value);
     });
 
     searchInput.addEventListener("keydown", (event) => {
@@ -9107,6 +10100,27 @@
       buildMatches();
       if (!state.matches.length) return;
       revealNodeInMainView(state.matches[0]);
+    });
+
+    registerSearchHistoryInput(sourceSearchInput, "source-search", {
+      apply: (value) => {
+        applySourceSearchValue(value, { immediate: true });
+      },
+      getValue: () => state.sourceSearch
+    });
+
+    registerSearchHistoryInput(searchInput, "filter-search", {
+      apply: (value) => {
+        applyFilterSearchValue(value);
+      },
+      getValue: () => state.search
+    });
+
+    registerSearchHistoryInput(analysisPatternInput, "analysis-pattern", {
+      apply: (value) => {
+        applyAnalysisPatternValue(value, analysisPatternInput);
+      },
+      getValue: () => state.analysisPattern
     });
 
     const observer = new ResizeObserver(() => draw());
@@ -9179,6 +10193,13 @@
         applyAdvancedPopoverPosition();
         return;
       }
+      if (state.draggingTreemapAnalysisLegend) {
+        const stageRect = treemapStage.getBoundingClientRect();
+        state.treemapAnalysisLegendLeft = event.clientX - stageRect.left - state.treemapAnalysisLegendDragOffsetX;
+        state.treemapAnalysisLegendTop = event.clientY - stageRect.top - state.treemapAnalysisLegendDragOffsetY;
+        applyTreemapAnalysisLegendPosition();
+        return;
+      }
       if (state.draggingZenOverlay) {
         const panelRect = canvasPanel.getBoundingClientRect();
         state.zenOverlayLeft = event.clientX - panelRect.left - state.zenOverlayDragOffsetX;
@@ -9223,6 +10244,11 @@
       if (state.draggingAdvancedPopover) {
         state.draggingAdvancedPopover = false;
         applyAdvancedPopoverPosition();
+        shouldPersist = true;
+      }
+      if (state.draggingTreemapAnalysisLegend) {
+        state.draggingTreemapAnalysisLegend = false;
+        applyTreemapAnalysisLegendPosition();
         shouldPersist = true;
       }
       if (state.draggingZenOverlay) {
@@ -9271,8 +10297,10 @@
 
     window.addEventListener("resize", () => {
       applyAdvancedPopoverPosition();
+      applyTreemapAnalysisLegendPosition();
       applyZenOverlayPosition();
       scheduleUiAnnotations();
+      scheduleSourceVirtualRender(true);
     });
 
     if (DATA.debugUiLabels) {
