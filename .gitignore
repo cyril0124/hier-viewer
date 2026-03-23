@@ -7,7 +7,6 @@ __pycache__/
 
 # Generated hierarchy viewer artifacts
 /.hier-viewer-sources/
-/.hier-viewer-venv/
 /hier.html
 /tmp-check.html
 **/.hier-viewer-cache/

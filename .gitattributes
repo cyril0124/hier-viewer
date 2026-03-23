@@ -1,0 +1,6 @@
+*.md linguist-documentation
+docs/** linguist-documentation
+
+rust-hier-viewer/src/html/vendor/** linguist-vendored
+rust-hier-viewer/src/html/template.html linguist-vendored
+rust-hier-viewer/src/html/viewer_chart.js linguist-vendored
