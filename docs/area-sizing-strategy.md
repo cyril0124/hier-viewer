@@ -2,13 +2,8 @@
 
 ## Goal
 
-The hierarchy treemap supports multiple sizing metrics so users can choose what "large" means for a node.
-
-Current metrics:
-
-- `instances`: size by subtree instance count
-- `leaves`: size by subtree leaf count
-- `weighted_signals`: size by subtree weighted signal bits using user-configurable variable/net coefficients
+The hierarchy treemap derives node area from hierarchy structure plus per-module signal statistics.
+This document focuses on how the signal-bit sizing data is collected, propagated, and visualized.
 
 Current layout modes:
 
@@ -25,18 +20,18 @@ It is bit-aware, so wide arrays and buses contribute proportionally to their tot
 
 ## Data Flow
 
-The sizing data flows through two stages:
+The sizing data flows through three stages:
 
 1. `slang-hier-exporter`
-   Exports hierarchy CSV with per-module signal statistics and bit totals.
+   Exports hierarchy sqlite data with per-module signal statistics and bit totals.
 2. `rust-hier-viewer`
-   Parses those CSV fields, stores them on each node, and uses the selected metric to drive treemap area.
+   Loads those sqlite rows, stores them on each node, and serializes the sizing data into the generated bundle.
 3. HTML viewer
-   Applies the selected layout mode and decomposition mode to decide how area should be visualized.
+   Applies the active sizing mode, layout mode, and decomposition mode to decide how area should be visualized.
 
-## CSV Fields
+## Stored Hierarchy Fields
 
-`slang-hier-exporter --csv` emits these per-module columns:
+The exporter persists these per-module fields on each hierarchy instance row:
 
 - `module_port_count`
 - `module_logic_count`
@@ -51,8 +46,7 @@ The sizing data flows through two stages:
 
 Compatibility notes:
 
-- The count fields are retained for diagnostics and CSV compatibility.
-- The legacy `signals` alias is still interpreted from the bit fields, not the raw count fields, and maps to `weighted_signals` with `Var=1` and `Net=1`.
+- The count fields are retained for diagnostics and for exporter output modes that still expose tabular data.
 
 The core exported bit fields are:
 
@@ -136,9 +130,9 @@ This matches the intended simplification:
 - `reg`, `logic`, explicit port syntax, and `wire` are useful for diagnostics
 - but the sizing model ultimately reduces everything to variable bits plus net bits
 
-That keeps the metric simple while preserving bit accuracy.
+That keeps the sizing model simple while preserving bit accuracy.
 
-## How Rust Uses Metrics
+## How Rust Uses Sizing Data
 
 Rust-side implementation lives in:
 
@@ -149,44 +143,18 @@ Rust-side implementation lives in:
 
 The Rust viewer:
 
-- Parses both the legacy count fields and the bit fields from CSV
+- Loads both the legacy count fields and the bit fields from sqlite
 - Stores local per-module values on each rendered `Node`
 - Computes subtree-aggregated variable bits, net bits, signal counts, and signal bits during tree stat propagation
-- Exposes `weighted_signals` as the selectable signal-bit metric in the UI
-- Uses `node.subtreeVariableBits * variable_weight + node.subtreeNetBits * net_weight` when `weighted_signals` is selected
-
-Important: the legacy metric name `signals` is still accepted for compatibility, but it is now treated as an alias for `weighted_signals` with `Var=1` and `Net=1`.
-
-## Weighted Signal Metric
-
-`weighted_signals` is a user-tunable heuristic:
-
-- `weighted_bits = variable_weight * subtree_variable_bits + net_weight * subtree_net_bits`
-
-Defaults:
-
-- `variable_weight = 1.00`
-- `net_weight = 0.15`
-
-Why it exists:
-
-- `Var=1` and `Net=1` reproduces the old subtree signal-bits behavior
-- some users want a rougher implementation-weight view where stored / variable-backed bits count more than pure connectivity bits
-
-How it is configured:
-
-- the HTML viewer exposes two numeric controls next to `Sizing` when `Weighted Signal Bits` is selected
-- users can change `Var` and `Net` interactively
-- the chosen values are persisted in local storage for that generated bundle path
-
-This metric is intentionally heuristic. It is not a synthesis-area estimator.
+- Serializes enough data for the HTML viewer to support subtree-instance sizing, leaf-count sizing, and weighted signal-bit sizing
+- Uses `node.subtreeVariableBits * variable_weight + node.subtreeNetBits * net_weight` when the viewer is in `Weighted Signal Bits` mode
 
 ## Decomposition Modes
 
 The viewer now separates three related questions:
 
-1. What is the node weight?
-   Controlled by the sizing metric.
+1. What node weight is currently being visualized?
+   Controlled by the active sizing mode in the viewer.
 2. Which treemap engine should be used?
    Controlled by the layout mode.
 3. How should the chosen weight be decomposed inside a parent node?
@@ -257,12 +225,9 @@ This is still a UI layout, not a mathematically perfect synthesis-area model, bu
 
 In the generated HTML:
 
-- The metric dropdown shows `Weighted Signal Bits`
 - When `Weighted Signal Bits` is active, `Var` and `Net` coefficient inputs appear next to `Sizing`
 - The layout dropdown lets users switch between `Classic` and `Accurate`
 - The decomposition dropdown lets users choose between `Subtree Only` and `Subtree + Local Self`
-- The `--metric weighted_signals` CLI option selects this mode
-- The legacy `--metric signals` alias is still accepted and behaves like `weighted_signals` with `Var=1` and `Net=1`
 - The hover card shows both:
   - subtree totals: `subtree signal bits / subtree objects`
   - local totals: `local signal bits / local objects`
@@ -270,29 +235,16 @@ In the generated HTML:
 
 This gives users a quick way to validate the new sizing behavior against the raw declaration counts.
 
-## Why This Metric Is Optional
-
-Different metrics answer different questions:
-
-- `instances`
-  Better for structural breadth / hierarchy fanout
-- `leaves`
-  Better for endpoint density
-- `weighted_signals`
-  Better when you want a user-tunable compromise between local state/storage pressure and connectivity pressure, while still being able to reproduce the old equal-weight subtree signal-bits mode with `Var=1` and `Net=1`
-
-No single metric is universally correct, so the viewer keeps this as a selectable option instead of replacing the old default.
-
 ## Known Limitations
 
 - This is still a hierarchy visualization heuristic, not a synthesis area estimator.
 - Two instances of the same module definition are expected to share the same local shape counts, while elaborated symbol widths still come from the actual elaborated symbols encountered under each instance.
-- Symbols that do not elaborate into `VariableSymbol` or `NetSymbol` are intentionally outside this metric.
-- `weighted_signals` depends on user-chosen coefficients, so different viewers may intentionally show different area emphasis for the same data set.
+- Symbols that do not elaborate into `VariableSymbol` or `NetSymbol` are intentionally outside this sizing path.
+- `Weighted Signal Bits` depends on user-chosen coefficients, so different viewers may intentionally show different area emphasis for the same data set.
 
 ## Future Extensions
 
 Possible next steps if needed:
 
-- Add separate metrics for `variable bits` vs `net bits`
-- Add user-facing legend text explaining the selected metric
+- Add separate sizing modes for `variable bits` vs `net bits`
+- Add user-facing legend text explaining the active sizing mode
