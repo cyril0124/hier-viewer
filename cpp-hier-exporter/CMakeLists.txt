@@ -20,6 +20,27 @@ set(SLANG_INCLUDE_PYLIB OFF CACHE BOOL "" FORCE)
 set(SLANG_USE_MIMALLOC OFF CACHE BOOL "" FORCE)
 set(SLANG_USE_CPPTRACE OFF CACHE BOOL "" FORCE)
 
+set(HIER_VIEWER_EXPORTER_FIND_STATIC_DEPS OFF)
+if(CMAKE_SYSTEM_NAME MATCHES "Linux" AND HIER_VIEWER_EXPORTER_FULLY_STATIC)
+  set(HIER_VIEWER_EXPORTER_FIND_STATIC_DEPS ON)
+endif()
+
+if(HIER_VIEWER_EXPORTER_FIND_STATIC_DEPS)
+  set(_HIER_VIEWER_EXPORTER_ORIG_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
+  set(_HIER_VIEWER_EXPORTER_ORIG_FIND_LIBRARY_PREFER_STATIC ${CMAKE_FIND_LIBRARY_PREFER_STATIC})
+  set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
+  set(CMAKE_FIND_LIBRARY_PREFER_STATIC TRUE)
+endif()
+
+find_package(SQLite3 REQUIRED)
+find_package(Threads REQUIRED)
+find_package(ZLIB REQUIRED)
+
+if(HIER_VIEWER_EXPORTER_FIND_STATIC_DEPS)
+  set(CMAKE_FIND_LIBRARY_SUFFIXES ${_HIER_VIEWER_EXPORTER_ORIG_FIND_LIBRARY_SUFFIXES})
+  set(CMAKE_FIND_LIBRARY_PREFER_STATIC ${_HIER_VIEWER_EXPORTER_ORIG_FIND_LIBRARY_PREFER_STATIC})
+endif()
+
 if(HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR)
   add_subdirectory(${HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR}
                    ${CMAKE_BINARY_DIR}/slang-build)
@@ -28,7 +49,7 @@ else()
   FetchContent_Declare(
     slang
     GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-    GIT_TAG 168f65fde67b89edbdbb2c49432cf792cf66e4e0
+    GIT_TAG v9.0
     GIT_SHALLOW ON)
   FetchContent_MakeAvailable(slang)
 endif()
@@ -43,7 +64,14 @@ add_executable(
   src/tree.cpp)
 
 target_include_directories(slang-hier-exporter PRIVATE src)
-target_link_libraries(slang-hier-exporter PRIVATE slang::slang sqlite3 z m pthread dl)
+target_link_libraries(
+  slang-hier-exporter
+  PRIVATE
+    slang::slang
+    SQLite::SQLite3
+    Threads::Threads
+    ZLIB::ZLIB
+    ${CMAKE_DL_LIBS})
 
 set_target_properties(
   slang-hier-exporter

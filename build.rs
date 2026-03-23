@@ -18,6 +18,7 @@ fn main() {
     emit_rerun_for_dir(Path::new("cpp-hier-exporter"));
     println!("cargo:rerun-if-env-changed=HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR");
     println!("cargo:rerun-if-env-changed=HIER_VIEWER_EXPORTER_FULLY_STATIC");
+    println!("cargo:rerun-if-env-changed=HIER_VIEWER_EXPORTER_CMAKE_TOOLCHAIN_FILE");
     println!("cargo:rerun-if-env-changed=HIER_VIEWER_LOG_COLOR");
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR is not set"));
@@ -35,6 +36,8 @@ fn main() {
 
     let mut configure = Command::new("cmake");
     configure
+        .arg("-USQLite3_*")
+        .arg("-UZLIB_*")
         .arg("-S")
         .arg(&source_dir)
         .arg("-B")
@@ -47,6 +50,11 @@ fn main() {
         && !value.trim().is_empty()
     {
         configure.arg(format!("-DHIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR={value}"));
+    }
+    if let Ok(value) = env::var("HIER_VIEWER_EXPORTER_CMAKE_TOOLCHAIN_FILE")
+        && !value.trim().is_empty()
+    {
+        configure.arg(format!("-DCMAKE_TOOLCHAIN_FILE={value}"));
     }
 
     let fully_static = env::var("HIER_VIEWER_EXPORTER_FULLY_STATIC")
@@ -61,7 +69,7 @@ fn main() {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| {
-            "FetchContent(https://github.com/MikePopoloski/slang.git @ 168f65f)".to_string()
+            "FetchContent(https://github.com/MikePopoloski/slang.git @ v9.0)".to_string()
         });
 
     emit_build_log(
@@ -105,7 +113,7 @@ fn main() {
     let built_binary = build_dir
         .join("out")
         .join("bin")
-        .join("slang-hier-exporter");
+        .join(EXPORTER_BINARY_NAME);
     if !built_binary.is_file() {
         panic!(
             "C++ slang exporter was built but '{}' does not exist",
@@ -142,7 +150,7 @@ fn main() {
         )
     });
 
-    let sibling_binary = profile_dir.join("slang-hier-exporter");
+    let sibling_binary = profile_dir.join(EXPORTER_BINARY_NAME);
     emit_build_log(
         "INFO ",
         format!(

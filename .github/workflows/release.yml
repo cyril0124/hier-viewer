@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  release-linux:
-    name: Release Linux Binary
+  lint-linux:
+    name: Lint Linux
     runs-on: ubuntu-22.04
 
     steps:
@@ -25,10 +25,71 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build g++ pkg-config
+          sudo apt-get install -y cmake ninja-build g++ pkg-config libsqlite3-dev zlib1g-dev
+
+      - name: Check
+        run: cargo check --locked
 
       - name: Lint
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+  build-release:
+    name: Build ${{ matrix.label }} Release Binary
+    needs: lint-linux
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            label: Linux
+            asset_name: rust-hier-viewer-${{ github.ref_name }}-x86_64-unknown-linux-gnu
+            binary_path: target/release/rust-hier-viewer
+          - os: macos-13
+            label: macOS Intel
+            asset_name: rust-hier-viewer-${{ github.ref_name }}-x86_64-apple-darwin
+            binary_path: target/release/rust-hier-viewer
+          - os: macos-14
+            label: macOS Apple Silicon
+            asset_name: rust-hier-viewer-${{ github.ref_name }}-aarch64-apple-darwin
+            binary_path: target/release/rust-hier-viewer
+          - os: windows-2022
+            label: Windows
+            asset_name: rust-hier-viewer-${{ github.ref_name }}-x86_64-pc-windows-msvc.exe
+            binary_path: target/release/rust-hier-viewer.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++ pkg-config libsqlite3-dev zlib1g-dev
+
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: Set up MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Windows build dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install ninja --no-progress -y
+          $vcpkgRoot = Join-Path $env:RUNNER_TEMP "vcpkg"
+          git clone --depth 1 https://github.com/microsoft/vcpkg $vcpkgRoot
+          & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
+          & "$vcpkgRoot\vcpkg.exe" install sqlite3:x64-windows-static-md zlib:x64-windows-static-md
+          "HIER_VIEWER_EXPORTER_CMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VCPKG_DEFAULT_TRIPLET=x64-windows-static-md" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build release binary
         run: cargo build --locked --release
@@ -37,18 +98,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
           DIST_DIR="dist"
-          BIN_NAME="rust-hier-viewer"
-          ASSET_BASENAME="${BIN_NAME}-${TAG}-x86_64-linux-gnu"
           mkdir -p "${DIST_DIR}"
-          cp "target/release/${BIN_NAME}" "${DIST_DIR}/${ASSET_BASENAME}"
-          chmod +x "${DIST_DIR}/${ASSET_BASENAME}"
-          strip "${DIST_DIR}/${ASSET_BASENAME}" || true
+          cp "${{ matrix.binary_path }}" "${DIST_DIR}/${{ matrix.asset_name }}"
+          chmod +x "${DIST_DIR}/${{ matrix.asset_name }}" || true
+          strip "${DIST_DIR}/${{ matrix.asset_name }}" || true
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: dist/${{ matrix.asset_name }}
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: build-release
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            dist/rust-hier-viewer-*
+            dist/*
