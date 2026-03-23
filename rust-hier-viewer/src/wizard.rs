@@ -713,7 +713,7 @@ fn render(frame: &mut ratatui::Frame<'_>, state: &WizardState) {
                 .add_modifier(Modifier::BOLD),
         )]),
         Line::from(vec![Span::raw(
-            "Start without --input. Build the source list here, then run slang-hier-exporter --sqlite automatically.",
+            "Start without --db. Build the RTL source list here, then run slang-hier-exporter --sqlite automatically.",
         )]),
         Line::from(vec![
             Span::styled("[Tab]", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),

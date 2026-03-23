@@ -5,10 +5,10 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rayon::prelude::*;
-use regex::Regex;
 
 use crate::model::{Config, Entry, InputData, Node, ViewerData};
 
+const DEFAULT_METRIC: &str = "instances";
 const SOURCE_CONTEXT_LINES: usize = 2;
 const MAX_SOURCE_SNIPPET_LINES: usize = 24;
 const MATERIALIZED_SOURCE_DIR: &str = ".hier-viewer-sources";
@@ -25,7 +25,7 @@ pub(crate) fn build_viewer_data(
         entries,
         analysis_definitions,
     } = input_data;
-    let mut entries = filter_entries(entries, config)?;
+    let mut entries = entries;
     attach_source_snippets(&mut entries)?;
     attach_source_hrefs(&mut entries, config)?;
 
@@ -288,7 +288,7 @@ pub(crate) fn build_viewer_data(
             debug_ui_labels: config.debug,
             nodes,
             root_id: 0,
-            default_metric: config.initial_metric,
+            default_metric: DEFAULT_METRIC,
             analysis_definitions,
         });
     }
@@ -305,7 +305,7 @@ pub(crate) fn build_viewer_data(
     let title = config
         .title
         .clone()
-        .or_else(|| derive_default_title(&nodes, root_id, config.input_path.as_deref()))
+        .or_else(|| derive_default_title(&nodes, root_id, config.db_path.as_deref()))
         .unwrap_or_else(|| "Hierarchy Viewer".to_string());
 
     Ok(ViewerData {
@@ -314,39 +314,9 @@ pub(crate) fn build_viewer_data(
         debug_ui_labels: config.debug,
         nodes,
         root_id,
-        default_metric: config.initial_metric,
+        default_metric: DEFAULT_METRIC,
         analysis_definitions,
     })
-}
-
-fn filter_entries(entries: Vec<Entry>, config: &Config) -> Result<Vec<Entry>, String> {
-    if config.exclude_wildcards.is_empty() && config.exclude_regexes.is_empty() {
-        return Ok(entries);
-    }
-
-    let regexes = compile_regexes(&config.exclude_regexes)?;
-    let mut entries = entries;
-    entries.sort_by(|a, b| a.path.cmp(&b.path));
-    let mut excluded_prefixes: Vec<String> = Vec::new();
-    let mut filtered = Vec::new();
-
-    for entry in entries {
-        if excluded_prefixes
-            .iter()
-            .any(|prefix| is_same_or_descendant_path(&entry.path, prefix))
-        {
-            continue;
-        }
-
-        if should_exclude_entry(&entry, &config.exclude_wildcards, &regexes) {
-            excluded_prefixes.push(entry.path);
-            continue;
-        }
-
-        filtered.push(entry);
-    }
-
-    Ok(filtered)
 }
 
 fn attach_source_snippets(entries: &mut [Entry]) -> Result<(), String> {
@@ -641,68 +611,6 @@ fn path_to_href(path: &Path) -> Option<String> {
     if href.is_empty() { None } else { Some(href) }
 }
 
-fn compile_regexes(patterns: &[String]) -> Result<Vec<Regex>, String> {
-    patterns
-        .iter()
-        .map(|pattern| {
-            Regex::new(pattern)
-                .map_err(|err| format!("invalid --exclude-regex pattern '{}': {err}", pattern))
-        })
-        .collect()
-}
-
-fn should_exclude_entry(entry: &Entry, wildcards: &[String], regexes: &[Regex]) -> bool {
-    wildcards.iter().any(|pattern| {
-        wildcard_match(pattern, &entry.path) || wildcard_match(pattern, &entry.module)
-    }) || regexes
-        .iter()
-        .any(|regex| regex.is_match(&entry.path) || regex.is_match(&entry.module))
-}
-
-fn is_same_or_descendant_path(path: &str, prefix: &str) -> bool {
-    path == prefix
-        || (path.len() > prefix.len()
-            && path.starts_with(prefix)
-            && path.as_bytes().get(prefix.len()) == Some(&b'.'))
-}
-
-fn wildcard_match(pattern: &str, text: &str) -> bool {
-    let pattern_chars: Vec<char> = pattern.chars().collect();
-    let text_chars: Vec<char> = text.chars().collect();
-    let mut dp = vec![vec![false; text_chars.len() + 1]; pattern_chars.len() + 1];
-    dp[0][0] = true;
-
-    for i in 0..pattern_chars.len() {
-        match pattern_chars[i] {
-            '*' => {
-                for j in 0..=text_chars.len() {
-                    if dp[i][j] {
-                        dp[i + 1][j] = true;
-                        if j < text_chars.len() {
-                            dp[i][j + 1] = true;
-                        }
-                    }
-                }
-            }
-            '?' => {
-                for j in 0..text_chars.len() {
-                    if dp[i][j] {
-                        dp[i + 1][j + 1] = true;
-                    }
-                }
-            }
-            ch => {
-                for j in 0..text_chars.len() {
-                    if dp[i][j] && text_chars[j] == ch {
-                        dp[i + 1][j + 1] = true;
-                    }
-                }
-            }
-        }
-    }
-
-    dp[pattern_chars.len()][text_chars.len()]
-}
 
 fn fill_missing_modules(nodes: &mut [Node]) {
     for node in nodes.iter_mut().skip(1) {
@@ -790,7 +698,7 @@ fn compute_stats(
 fn derive_default_title(
     nodes: &[Node],
     root_id: usize,
-    input_path: Option<&str>,
+    db_path: Option<&str>,
 ) -> Option<String> {
     if root_id != 0 {
         let root = &nodes[root_id];
@@ -802,7 +710,7 @@ fn derive_default_title(
         }
     }
 
-    input_path.and_then(derive_title_from_path)
+    db_path.and_then(derive_title_from_path)
 }
 
 fn derive_title_from_path(path: &str) -> Option<String> {

@@ -4,6 +4,7 @@ mod input;
 mod launcher;
 mod logging;
 mod model;
+mod preview;
 mod viewer;
 mod wizard;
 
@@ -20,6 +21,7 @@ use html::{
 use input::load_input_data;
 use launcher::{FileIndex, PatternMode, StartupSelection, run_hier_viewer_export};
 use logging::{error, info};
+use preview::serve_output_dir;
 use viewer::build_viewer_data;
 
 const INDEX_HTML_NAME: &str = "index.html";
@@ -50,28 +52,36 @@ fn main() {
 fn run() -> Result<(), String> {
     let mut config = parse_args(std::env::args().skip(1))?;
     let interactive_terminal = std::io::stdin().is_terminal();
-    if config.input_path.is_none()
+    if config.db_path.is_none()
         && !has_source_inputs(&config)
         && interactive_terminal
         && config.no_wizard
     {
         return Err(
-            "--no-wizard was set but no --input/--rtl-path/--filelist was provided".to_string(),
+            "--no-wizard was set but no --db, RTL positional input, or --filelist was provided"
+                .to_string(),
+        );
+    }
+    if config.db_path.is_none() && !has_source_inputs(&config) && !interactive_terminal {
+        return Err(
+            "no input source was provided; pass RTL positional inputs, --filelist, or --db"
+                .to_string(),
         );
     }
 
     let needs_export_selection =
-        config.input_path.is_none() && (interactive_terminal || has_source_inputs(&config));
+        config.db_path.is_none() && (interactive_terminal || has_source_inputs(&config));
     let startup_selection = if needs_export_selection {
         let file_index = FileIndex::build()?;
         if has_source_inputs(&config) {
             let selection = StartupSelection {
                 output_dir: config.output_path.clone().ok_or_else(|| {
-                    "--output <dir> is required when using --rtl-path/--filelist".to_string()
+                    "--output <dir> is required when using RTL positional inputs or --filelist"
+                        .to_string()
                 })?,
                 title: config.title.clone(),
                 source_args_tokens: file_index.build_source_args(
-                    &config.rtl_paths,
+                    &config.rtl_inputs,
                     PatternMode::Wildcard,
                     &config.filelists,
                 )?,
@@ -112,13 +122,18 @@ fn run() -> Result<(), String> {
     let input_data = match startup_selection.as_ref() {
         Some(selection) => {
             let export = run_hier_viewer_export(selection)?;
-            let result = load_input_data(Some(&export.sqlite_path));
+            let result = load_input_data(&export.sqlite_path);
             if export.temporary {
                 let _ = fs::remove_file(&export.sqlite_path);
             }
             result?
         }
-        None => load_input_data(config.input_path.as_deref())?,
+        None => load_input_data(
+            config
+                .db_path
+                .as_deref()
+                .ok_or_else(|| "missing --db path".to_string())?,
+        )?,
     };
     info("rust-hier-viewer", "Building viewer model...");
     let data = build_viewer_data(input_data, &config)?;
@@ -145,12 +160,29 @@ fn run() -> Result<(), String> {
     };
     write_bundle(&output_dir, &assets)?;
     info("rust-hier-viewer", "Bundle generation finished.");
+    if config.preview {
+        serve_output_dir(
+            &output_dir,
+            &config.preview_host,
+            config.preview_port,
+            interactive_terminal,
+        )?;
+    } else {
+        let entry_path = Path::new(&output_dir).join(INDEX_HTML_NAME);
+        info(
+            "rust-hier-viewer",
+            format!(
+                "Bundle entry point: '{}'. Re-run with --preview for built-in local serving.",
+                entry_path.display()
+            ),
+        );
+    }
 
     Ok(())
 }
 
 fn has_source_inputs(config: &model::Config) -> bool {
-    !config.rtl_paths.is_empty() || !config.filelists.is_empty()
+    !config.rtl_inputs.is_empty() || !config.filelists.is_empty()
 }
 
 fn write_bundle(output_dir: &str, assets: &BundleAssets<'_>) -> Result<(), String> {

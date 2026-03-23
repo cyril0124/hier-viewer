@@ -115,16 +115,16 @@ pub(crate) struct ViewerData {
 
 #[derive(Debug)]
 pub(crate) struct Config {
-    pub(crate) input_path: Option<String>,
+    pub(crate) db_path: Option<String>,
     pub(crate) output_path: Option<String>,
     pub(crate) title: Option<String>,
     pub(crate) no_wizard: bool,
     pub(crate) rebuild_sqlite: bool,
-    pub(crate) rtl_paths: Vec<String>,
+    pub(crate) preview: bool,
+    pub(crate) preview_host: String,
+    pub(crate) preview_port: u16,
+    pub(crate) rtl_inputs: Vec<String>,
     pub(crate) filelists: Vec<String>,
     pub(crate) extra_args_tokens: Vec<String>,
-    pub(crate) initial_metric: &'static str,
-    pub(crate) exclude_wildcards: Vec<String>,
-    pub(crate) exclude_regexes: Vec<String>,
     pub(crate) debug: bool,
 }
