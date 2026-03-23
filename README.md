@@ -424,6 +424,11 @@ Usually because the page was opened through `file://`, or because the static ser
 
 - [Area sizing strategy](docs/area-sizing-strategy.md)
 
+## AI Development
+
+This project was developed entirely with AI assistance using GPT-5.4.
+I defined the features, provided technical implementation details where needed, and guided the AI through the implementation of the project.
+
 ## Credits
 
 This project relies on [slang](https://github.com/MikePopoloski/slang) for hierarchy parsing, semantic analysis, and elaboration.

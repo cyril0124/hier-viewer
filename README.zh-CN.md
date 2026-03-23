@@ -424,6 +424,11 @@ cargo run -- --output out --preview
 
 - [面积策略说明](docs/area-sizing-strategy.md)
 
+## AI Development
+
+这个项目完全由 AI 协助开发，使用的是 GPT-5.4。
+我负责提出 feature、补充相关细节的技术实现方案，并持续指导 AI 完成整个项目的实现。
+
 ## Credits
 
 这个项目依赖 [slang](https://github.com/MikePopoloski/slang) 来完成 hierarchy 解析、语义分析和 elaboration。
