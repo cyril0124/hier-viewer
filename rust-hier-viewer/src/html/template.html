@@ -1051,6 +1051,8 @@
       right: 0;
       z-index: var(--z-toolbar-popover);
       width: min(760px, calc(100vw - 40px));
+      max-height: min(72vh, calc(100vh - 32px));
+      overflow: auto;
       display: grid;
       gap: 14px;
       padding: 16px;
@@ -1061,6 +1063,20 @@
       backdrop-filter: blur(16px);
       transform-origin: top right;
       animation: advanced-popover-in 140ms ease;
+    }
+
+    .advanced-popover.floating {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      right: auto;
+      transform-origin: top left;
+    }
+
+    .advanced-popover.dragging {
+      animation: none;
+      cursor: grabbing;
+      user-select: none;
     }
 
     .advanced-popover.hidden {
@@ -1082,6 +1098,8 @@
       display: grid;
       gap: 4px;
       padding-bottom: 2px;
+      cursor: grab;
+      user-select: none;
     }
 
     .advanced-popover-kicker {
@@ -2864,6 +2882,9 @@
       gap: 0;
       white-space: pre;
       min-width: max-content;
+      content-visibility: auto;
+      contain: layout paint style;
+      contain-intrinsic-size: 26px;
     }
 
     .source-line:hover {
@@ -2916,6 +2937,15 @@
       overflow: visible;
       color: var(--source-code-text);
       padding-right: 24px;
+      text-rendering: optimizeSpeed;
+    }
+
+    .source-code.lightweight-render .source-line {
+      contain-intrinsic-size: 24px;
+    }
+
+    .source-line.lightweight .source-code-text {
+      text-rendering: auto;
     }
 
     .source-lineno:hover {
@@ -3276,7 +3306,7 @@
             <div class="advanced-group" data-ui-name="advanced-group">
               <button id="advanced-controls-btn" class="advanced-toggle" type="button" aria-expanded="false" aria-haspopup="dialog" data-ui-name="advanced-btn">Advanced</button>
               <div class="advanced-popover hidden" id="advanced-popover" role="dialog" aria-label="Advanced viewer controls" data-ui-name="advanced-popover">
-                <div class="advanced-popover-header" data-ui-name="advanced-popover-header">
+                <div class="advanced-popover-header" id="advanced-popover-header" data-ui-name="advanced-popover-header">
                   <div class="advanced-popover-kicker">Workspace Controls</div>
                   <div class="advanced-popover-title">Advanced</div>
                   <div class="advanced-popover-description">Tune layout, theme, weighted sizing, and signal analysis without leaving the current hierarchy view.</div>
@@ -3584,7 +3614,8 @@
         <div class="hover-title" id="hover-title"></div>
         <div class="hover-meta" id="hover-meta"></div>
         <div class="hover-actions hidden" id="hover-actions">
-          <button id="open-source-btn" type="button" data-ui-name="open-source-btn">Open Source</button>
+          <button id="open-instance-source-btn" type="button" data-ui-name="open-instance-source-btn">Open Instance</button>
+          <button id="open-module-source-btn" type="button" data-ui-name="open-module-source-btn">Open Module</button>
         </div>
       </div>
       <aside class="source-panel" id="source-panel" data-ui-name="source-panel" data-ui-label="always">
@@ -4174,7 +4205,8 @@
     const hoverTitle = document.getElementById("hover-title");
     const hoverMeta = document.getElementById("hover-meta");
     const hoverActions = document.getElementById("hover-actions");
-    const openSourceBtn = document.getElementById("open-source-btn");
+    const openInstanceSourceBtn = document.getElementById("open-instance-source-btn");
+    const openModuleSourceBtn = document.getElementById("open-module-source-btn");
     const pageTitle = document.getElementById("page-title");
     const pageSubtitle = document.getElementById("page-subtitle");
     const breadcrumbs = document.getElementById("breadcrumbs");
@@ -4189,6 +4221,7 @@
     const toggleMatchBtn = document.getElementById("toggle-match-btn");
     const advancedControlsBtn = document.getElementById("advanced-controls-btn");
     const advancedPopover = document.getElementById("advanced-popover");
+    const advancedPopoverHeader = document.getElementById("advanced-popover-header");
     const filterScopeSelect = document.getElementById("filter-scope-select");
     const filterModeSelect = document.getElementById("filter-mode-select");
     const depthSelect = document.getElementById("depth-select");
@@ -4248,12 +4281,21 @@
     const sourceTextCache = new Map();
     const SOURCE_CONTEXT_LINES = 2;
     const MAX_PREVIEW_SOURCE_LINES = 24;
-    const MAX_INLINE_SOURCE_BYTES = 512 * 1024;
-    const MAX_INLINE_SOURCE_LINES = 4000;
+    const SOURCE_PROGRESSIVE_RENDER_LINE_THRESHOLD = 7000;
+    const SOURCE_PROGRESSIVE_RENDER_INITIAL_BATCH_LINES = 220;
+    const SOURCE_PROGRESSIVE_RENDER_INITIAL_BATCH_CHARS = 56000;
+    const SOURCE_PROGRESSIVE_RENDER_BATCH_LINES = 96;
+    const SOURCE_PROGRESSIVE_RENDER_BATCH_CHARS = 24000;
+    const SOURCE_LIGHTWEIGHT_RENDER_LINE_THRESHOLD = 2200;
+    const SOURCE_SEARCH_INPUT_DEBOUNCE_MS = 120;
+    const ADVANCED_POPOVER_MIN_VISIBLE_WIDTH = 160;
+    const ADVANCED_POPOVER_MIN_VISIBLE_HEADER = 72;
     const defaultHint = "Wheel to zoom. Drag to pan. Click to drill down. Filter supports text, wc:pattern, and re:regex. Signal analysis supports wildcard/text/regex over internal signal names. Press Escape to close source.";
     const STORAGE_KEY = `hier-viewer:${window.location.pathname}`;
     let currentSourceView = null;
     let sourceSearchMatchElements = [];
+    let sourceRenderJobToken = 0;
+    let sourceSearchInputTimer = null;
 
     const state = {
       homeRoot: DATA.rootId,
@@ -4283,6 +4325,11 @@
       analysisLegendVisibleSubtree: new Array(nodes.length).fill(false),
       analysisHatchDisabledUntil: 0,
       advancedPopoverOpen: false,
+      advancedPopoverLeft: null,
+      advancedPopoverTop: null,
+      draggingAdvancedPopover: false,
+      advancedPopoverDragOffsetX: 0,
+      advancedPopoverDragOffsetY: 0,
       toolbarCollapsed: false,
       depthLimit: null,
       zoom: 1,
@@ -4299,6 +4346,7 @@
       hoverCardDragOffsetY: 0,
       hoverUpdateTimer: null,
       sourceNodeId: null,
+      sourceTargetKind: "instance",
       search: "",
       filterScope: "both",
       filterMode: "text",
@@ -4747,6 +4795,47 @@
       advancedPopover.classList.toggle("hidden", !state.advancedPopoverOpen);
       advancedControlsBtn.classList.toggle("active", state.advancedPopoverOpen);
       advancedControlsBtn.setAttribute("aria-expanded", state.advancedPopoverOpen ? "true" : "false");
+      if (!state.advancedPopoverOpen) {
+        state.draggingAdvancedPopover = false;
+      }
+      applyAdvancedPopoverPosition();
+    }
+
+    function clampAdvancedPopoverPosition() {
+      if (
+        state.advancedPopoverLeft === null ||
+        state.advancedPopoverLeft === undefined ||
+        state.advancedPopoverTop === null ||
+        state.advancedPopoverTop === undefined
+      ) {
+        return;
+      }
+      const panelWidth = advancedPopover.offsetWidth || Math.min(760, Math.max(280, window.innerWidth - 24));
+      const panelHeight = advancedPopover.offsetHeight || Math.min(window.innerHeight - 24, 720);
+      const minLeft = ADVANCED_POPOVER_MIN_VISIBLE_WIDTH - panelWidth;
+      const maxLeft = window.innerWidth - ADVANCED_POPOVER_MIN_VISIBLE_WIDTH;
+      const minTop = ADVANCED_POPOVER_MIN_VISIBLE_HEADER - panelHeight;
+      const maxTop = window.innerHeight - ADVANCED_POPOVER_MIN_VISIBLE_HEADER;
+      state.advancedPopoverLeft = clamp(state.advancedPopoverLeft, minLeft, maxLeft);
+      state.advancedPopoverTop = clamp(state.advancedPopoverTop, minTop, maxTop);
+    }
+
+    function applyAdvancedPopoverPosition() {
+      advancedPopover.classList.toggle("dragging", state.draggingAdvancedPopover);
+      const floating = state.advancedPopoverLeft !== null && state.advancedPopoverTop !== null;
+      advancedPopover.classList.toggle("floating", floating);
+      if (!floating) {
+        advancedPopover.style.left = "";
+        advancedPopover.style.top = "";
+        advancedPopover.style.right = "";
+        scheduleUiAnnotations();
+        return;
+      }
+      clampAdvancedPopoverPosition();
+      advancedPopover.style.left = `${state.advancedPopoverLeft}px`;
+      advancedPopover.style.top = `${state.advancedPopoverTop}px`;
+      advancedPopover.style.right = "auto";
+      scheduleUiAnnotations();
     }
 
     function applyToolbarCollapsedState() {
@@ -4775,6 +4864,8 @@
           analysisPattern: state.analysisPattern,
           analysisLegendFilter: state.analysisLegendFilter,
           toolbarCollapsed: state.toolbarCollapsed,
+          advancedPopoverLeft: state.advancedPopoverLeft,
+          advancedPopoverTop: state.advancedPopoverTop,
           depthLimit: state.depthLimit,
           search: state.search,
           filterScope: state.filterScope,
@@ -4850,6 +4941,8 @@
           state.sourceBookmarksByFile = normalizeSourceBookmarks(saved.sourceBookmarksByFile);
         }
         state.toolbarCollapsed = !!saved.toolbarCollapsed;
+        if (typeof saved.advancedPopoverLeft === "number") state.advancedPopoverLeft = saved.advancedPopoverLeft;
+        if (typeof saved.advancedPopoverTop === "number") state.advancedPopoverTop = saved.advancedPopoverTop;
         state.depthLimit = saved.depthLimit === null
           ? null
           : Number.isInteger(saved.depthLimit) && saved.depthLimit > 0
@@ -5000,8 +5093,68 @@
       draw();
     }
 
-    function nodeHasSource(node) {
-      return !!(node.filePath && node.sourceHref);
+    function nodeHasInstanceSource(node) {
+      return !!(node && node.filePath && node.sourceHref);
+    }
+
+    function nodeHasDefinitionSource(node) {
+      return !!(node && node.definitionFilePath && node.definitionSourceHref);
+    }
+
+    function nodeHasAnySource(node) {
+      return nodeHasInstanceSource(node) || nodeHasDefinitionSource(node);
+    }
+
+    function buildSourceTarget(node, kind) {
+      if (!node) {
+        return null;
+      }
+      if (kind === "definition") {
+        if (!nodeHasDefinitionSource(node)) {
+          return null;
+        }
+        return {
+          kind: "definition",
+          filePath: node.definitionFilePath,
+          sourceHref: node.definitionSourceHref,
+          line: node.definitionLine || 1,
+          column: node.definitionColumn || 1,
+          endLine: node.definitionEndLine || node.definitionLine || 1,
+          endColumn: node.definitionEndColumn || node.definitionColumn || 1,
+          snippetText: node.definitionSnippetText || "",
+          snippetStartLine: node.definitionSnippetStartLine || node.definitionLine || 1,
+          snippetEndLine: node.definitionSnippetEndLine || node.definitionEndLine || node.definitionLine || 1,
+          titleSuffix: "Module Source",
+          locationLabel: "module source"
+        };
+      }
+      if (!nodeHasInstanceSource(node)) {
+        return null;
+      }
+      return {
+        kind: "instance",
+        filePath: node.filePath,
+        sourceHref: node.sourceHref,
+        line: node.line || 1,
+        column: node.column || 1,
+        endLine: node.endLine || node.line || 1,
+        endColumn: node.endColumn || node.column || 1,
+        snippetText: node.snippetText || "",
+        snippetStartLine: node.snippetStartLine || node.line || 1,
+        snippetEndLine: node.snippetEndLine || node.endLine || node.line || 1,
+        titleSuffix: "Instantiation",
+        locationLabel: "instantiation"
+      };
+    }
+
+    function preferredSourceTargetKind(node) {
+      if (nodeHasDefinitionSource(node)) {
+        return "definition";
+      }
+      if (nodeHasInstanceSource(node)) {
+        return "instance";
+      }
+      return null;
     }
 
     function normalizeSourceBookmarkPreview(text, useBlankFallback = false) {
@@ -5057,27 +5210,27 @@
       return normalized;
     }
 
-    function sourceBookmarkKeyForNode(node) {
-      if (!node) {
+    function sourceBookmarkKeyForTarget(target) {
+      if (!target) {
         return null;
       }
-      if (node.sourceHref) {
-        return `href:${node.sourceHref}`;
+      if (target.sourceHref) {
+        return `${target.kind}:href:${target.sourceHref}`;
       }
-      if (node.filePath) {
-        return `path:${node.filePath}`;
+      if (target.filePath) {
+        return `${target.kind}:path:${target.filePath}`;
       }
       return null;
     }
 
-    function resolveSourceUrl(node) {
-      if (!node.sourceHref) {
+    function resolveSourceUrl(target) {
+      if (!target || !target.sourceHref) {
         return null;
       }
       try {
-        return new URL(node.sourceHref, window.location.href).href;
+        return new URL(target.sourceHref, window.location.href).href;
       } catch (_) {
-        return node.sourceHref;
+        return target.sourceHref;
       }
     }
 
@@ -5104,7 +5257,9 @@
       if (state.sourceNodeId === null || state.sourceNodeId === undefined) {
         return null;
       }
-      return sourceBookmarkKeyForNode(getNode(state.sourceNodeId));
+      return sourceBookmarkKeyForTarget(
+        buildSourceTarget(getNode(state.sourceNodeId), state.sourceTargetKind || "instance")
+      );
     }
 
     function currentSourceBookmarkLines() {
@@ -5627,41 +5782,40 @@
       applyCurrentSourceSearchSelection(true);
     }
 
-    function renderCurrentSourceView(preferFocusLine = true) {
-      if (!currentSourceView) {
-        sourceCode.innerHTML = "";
-        sourceSearchMatchElements = [];
-        state.sourceSearchMatchIndex = -1;
-        renderSourceBookmarkBar();
-        updateSourceSearchStatus();
-        return;
-      }
-      const search = buildSourceSearchRegExp();
-      state.sourceSearchError = search.error;
-      const { lines, firstLineNumber, focusStartLine, focusEndLine } = currentSourceView;
-      syncCurrentSourceBookmarkPreviews();
-      const bookmarkSet = new Set(currentSourceBookmarkLines());
-      sourceCode.innerHTML = lines
-        .map((line, index) => {
-          const lineNo = firstLineNumber + index;
-          const matchRanges = search.error ? [] : collectSourceSearchRanges(line, search.regex);
-          const classes = ["source-line"];
-          if (lineNo >= focusStartLine && lineNo <= focusEndLine) {
-            classes.push("active");
-          }
-          if (matchRanges.length > 0) {
-            classes.push("search-match");
-          }
-          if (bookmarkSet.has(lineNo)) {
-            classes.push("bookmarked");
-          }
-          const bookmarkTitle = bookmarkSet.has(lineNo)
-            ? `Remove bookmark at line ${lineNo}`
-            : `Bookmark line ${lineNo}`;
-          return `<div class="${classes.join(" ")}" data-line="${lineNo}"><button class="source-lineno${bookmarkSet.has(lineNo) ? " bookmarked" : ""}" type="button" data-line="${lineNo}" aria-pressed="${bookmarkSet.has(lineNo) ? "true" : "false"}" title="${bookmarkTitle}"><span class="source-bookmark-dot" aria-hidden="true"></span><span class="source-lineno-value">${lineNo}</span></button><span class="source-code-text">${highlightVerilogLine(line, matchRanges)}</span></div>`;
-        })
-        .join("");
+    function shouldUseLightweightSourceRender(view, search) {
+      return !!(view && view.lines.length >= SOURCE_LIGHTWEIGHT_RENDER_LINE_THRESHOLD && !search.error);
+    }
 
+    function renderSourceLineContent(line, matchRanges, lightweight) {
+      if (lightweight) {
+        const content = renderSourceSegmentWithSearch(line, 0, null, matchRanges);
+        return content.length ? content : "&nbsp;";
+      }
+      return highlightVerilogLine(line, matchRanges);
+    }
+
+    function buildSourceLineHtml(line, lineNo, focusStartLine, focusEndLine, bookmarkSet, search, lightweight = false) {
+      const matchRanges = search.error ? [] : collectSourceSearchRanges(line, search.regex);
+      const classes = ["source-line"];
+      if (lightweight) {
+        classes.push("lightweight");
+      }
+      if (lineNo >= focusStartLine && lineNo <= focusEndLine) {
+        classes.push("active");
+      }
+      if (matchRanges.length > 0) {
+        classes.push("search-match");
+      }
+      if (bookmarkSet.has(lineNo)) {
+        classes.push("bookmarked");
+      }
+      const bookmarkTitle = bookmarkSet.has(lineNo)
+        ? `Remove bookmark at line ${lineNo}`
+        : `Bookmark line ${lineNo}`;
+      return `<div class="${classes.join(" ")}" data-line="${lineNo}"><button class="source-lineno${bookmarkSet.has(lineNo) ? " bookmarked" : ""}" type="button" data-line="${lineNo}" aria-pressed="${bookmarkSet.has(lineNo) ? "true" : "false"}" title="${bookmarkTitle}"><span class="source-bookmark-dot" aria-hidden="true"></span><span class="source-lineno-value">${lineNo}</span></button><span class="source-code-text">${renderSourceLineContent(line, matchRanges, lightweight)}</span></div>`;
+    }
+
+    function finalizeRenderedSource(preferFocusLine) {
       sourceSearchMatchElements = Array.from(sourceCode.querySelectorAll(".source-find-hit"));
       if (!sourceSearchMatchElements.length) {
         state.sourceSearchMatchIndex = -1;
@@ -5679,18 +5833,116 @@
         return;
       }
       updateSourceSearchStatus();
-      if (preferFocusLine) {
-        const focusElement = sourceCode.querySelector(`[data-line="${focusStartLine}"]`);
+      if (preferFocusLine && currentSourceView) {
+        const focusElement = sourceCode.querySelector(`[data-line="${currentSourceView.focusStartLine}"]`);
         if (focusElement) {
           focusElement.scrollIntoView({ block: "center" });
         }
       }
     }
 
-    function renderSourceText(text, firstLineNumber, focusStartLine, focusEndLine, options = {}) {
+    function renderCurrentSourceViewProgressively(view, search, preferFocusLine, bookmarkSet, renderToken, lightweight) {
+      sourceCode.innerHTML = "";
+      sourceSearchMatchElements = [];
+      state.sourceSearchMatchIndex = -1;
+      updateSourceSearchStatus();
+
+      let cursor = 0;
+      const total = view.lines.length;
+
+      function pump(maxLines, maxChars) {
+        if (renderToken !== sourceRenderJobToken || currentSourceView !== view) {
+          return;
+        }
+        let html = "";
+        let batchLines = 0;
+        let batchChars = 0;
+        while (cursor < total) {
+          const line = view.lines[cursor];
+          if (
+            batchLines > 0 &&
+            (batchLines >= maxLines || batchChars >= maxChars)
+          ) {
+            break;
+          }
+          const lineNo = view.firstLineNumber + cursor;
+          html += buildSourceLineHtml(
+            line,
+            lineNo,
+            view.focusStartLine,
+            view.focusEndLine,
+            bookmarkSet,
+            search,
+            lightweight,
+          );
+          batchLines += 1;
+          batchChars += line.length;
+          cursor += 1;
+        }
+        sourceCode.insertAdjacentHTML("beforeend", html);
+        if (cursor < total) {
+          requestAnimationFrame(() => {
+            pump(
+              SOURCE_PROGRESSIVE_RENDER_BATCH_LINES,
+              SOURCE_PROGRESSIVE_RENDER_BATCH_CHARS,
+            );
+          });
+          return;
+        }
+        finalizeRenderedSource(preferFocusLine);
+      }
+
+      pump(
+        SOURCE_PROGRESSIVE_RENDER_INITIAL_BATCH_LINES,
+        SOURCE_PROGRESSIVE_RENDER_INITIAL_BATCH_CHARS,
+      );
+    }
+
+    function renderCurrentSourceView(preferFocusLine = true) {
+      sourceRenderJobToken += 1;
+      if (!currentSourceView) {
+        sourceCode.innerHTML = "";
+        sourceSearchMatchElements = [];
+        state.sourceSearchMatchIndex = -1;
+        renderSourceBookmarkBar();
+        updateSourceSearchStatus();
+        return;
+      }
+      const search = buildSourceSearchRegExp();
+      state.sourceSearchError = search.error;
+      const { lines, firstLineNumber, focusStartLine, focusEndLine } = currentSourceView;
+      syncCurrentSourceBookmarkPreviews();
+      const bookmarkSet = new Set(currentSourceBookmarkLines());
+      const lightweight = shouldUseLightweightSourceRender(currentSourceView, search);
+      sourceCode.classList.toggle("lightweight-render", lightweight);
+      if (lines.length > SOURCE_PROGRESSIVE_RENDER_LINE_THRESHOLD) {
+        renderCurrentSourceViewProgressively(
+          currentSourceView,
+          search,
+          preferFocusLine,
+          bookmarkSet,
+          sourceRenderJobToken,
+          lightweight,
+        );
+        return;
+      }
+      sourceCode.innerHTML = lines
+        .map((line, index) => buildSourceLineHtml(
+          line,
+          firstLineNumber + index,
+          focusStartLine,
+          focusEndLine,
+          bookmarkSet,
+          search,
+          lightweight,
+        ))
+        .join("");
+      finalizeRenderedSource(preferFocusLine);
+    }
+
+    function renderSourceLines(lines, firstLineNumber, focusStartLine, focusEndLine, options = {}) {
       currentSourceView = {
-        text,
-        lines: text.split("\n"),
+        lines,
         firstLineNumber,
         focusStartLine,
         focusEndLine,
@@ -5710,17 +5962,29 @@
       scheduleUiAnnotations();
     }
 
-    function renderSourceExcerpt(node, text, focusStartLine, focusEndLine, message, bookmarkKey) {
-      const lines = text.split("\n");
+    function formatSourceLocation(target) {
+      if (!target || !target.filePath) {
+        return "Source location unavailable";
+      }
+      const line = target.line || 1;
+      const column = target.column || 1;
+      return `${target.filePath}:${line}:${column}`;
+    }
+
+    function renderSourceText(text, firstLineNumber, focusStartLine, focusEndLine, options = {}) {
+      renderSourceLines(text.split("\n"), firstLineNumber, focusStartLine, focusEndLine, options);
+    }
+
+    function renderSourceExcerpt(node, target, sourceData, focusStartLine, focusEndLine, message, bookmarkKey) {
+      const lines = sourceData.lines;
       if (!lines.length) {
-        sourceSubtitle.textContent = `${node.module} · ${formatLocation(node)} · ${message}`;
+        sourceSubtitle.textContent = `${node.module} · ${target.locationLabel} · ${formatSourceLocation(target)} · ${message}`;
         sourceCode.innerHTML = '<div class="source-line"><span class="source-lineno">-</span><span class="source-code-text">Source file is empty.</span></div>';
         currentSourceView = {
-          text: "",
           firstLineNumber: 1,
           focusStartLine: 1,
           focusEndLine: 1,
-          bookmarkKey: bookmarkKey || sourceBookmarkKeyForNode(node)
+          bookmarkKey: bookmarkKey || sourceBookmarkKeyForTarget(target)
         };
         renderSourceBookmarkBar();
         return;
@@ -5734,13 +5998,36 @@
         Math.max(clampedFocusEnd + SOURCE_CONTEXT_LINES, excerptStart + MAX_PREVIEW_SOURCE_LINES - 1),
       );
       const boundedEnd = Math.min(excerptEnd, excerptStart + MAX_PREVIEW_SOURCE_LINES - 1);
-      const excerptText = lines.slice(excerptStart - 1, boundedEnd).join("\n");
-      sourceSubtitle.textContent = `${node.module} · ${formatLocation(node)} · excerpt ${excerptStart}-${boundedEnd} · ${message}`;
-      renderSourceText(excerptText, excerptStart, clampedFocusStart, clampedFocusEnd, { bookmarkKey });
+      sourceSubtitle.textContent = `${node.module} · ${target.locationLabel} · ${formatSourceLocation(target)} · excerpt ${excerptStart}-${boundedEnd} · ${message}`;
+      renderSourceLines(
+        lines.slice(excerptStart - 1, boundedEnd),
+        excerptStart,
+        clampedFocusStart,
+        clampedFocusEnd,
+        { bookmarkKey },
+      );
     }
 
-    async function loadFullSource(node, signal) {
-      const sourceUrl = resolveSourceUrl(node);
+    function renderSourceRange(node, target, sourceData, startLine, endLine, message, bookmarkKey) {
+      const lines = sourceData.lines;
+      if (!lines.length) {
+        renderSourceExcerpt(node, target, sourceData, 1, 1, message, bookmarkKey);
+        return;
+      }
+      const clampedStart = Math.min(Math.max(1, startLine), lines.length);
+      const clampedEnd = Math.min(Math.max(clampedStart, endLine), lines.length);
+      sourceSubtitle.textContent = `${node.module} · ${target.locationLabel} · ${formatSourceLocation(target)} · lines ${clampedStart}-${clampedEnd} · ${message}`;
+      renderSourceLines(
+        lines.slice(clampedStart - 1, clampedEnd),
+        clampedStart,
+        clampedStart,
+        clampedEnd,
+        { bookmarkKey },
+      );
+    }
+
+    async function loadFullSource(target, signal) {
+      const sourceUrl = resolveSourceUrl(target);
       if (!sourceUrl) {
         throw new Error("relative source path unavailable");
       }
@@ -5754,23 +6041,28 @@
       }
 
       const text = await response.text();
-      sourceTextCache.set(sourceUrl, text);
-      return text;
+      const sourceData = {
+        lines: text.split("\n"),
+      };
+      sourceTextCache.set(sourceUrl, sourceData);
+      return sourceData;
     }
 
-    async function renderSource(nodeId) {
+    async function renderSource(nodeId, targetKind = null) {
       const node = getNode(nodeId);
-      if (!nodeHasSource(node)) {
+      const resolvedKind = targetKind || preferredSourceTargetKind(node);
+      const target = buildSourceTarget(node, resolvedKind);
+      if (!target) {
         return;
       }
       cancelScheduledHoverUpdate();
 
-      const focusStartLine = node.line || 1;
-      const focusEndLine = node.endLine || focusStartLine;
-      const sourceUrl = resolveSourceUrl(node);
-      const bookmarkKey = sourceBookmarkKeyForNode(node);
+      const focusStartLine = target.line || 1;
+      const focusEndLine = target.endLine || focusStartLine;
+      const sourceUrl = resolveSourceUrl(target);
+      const bookmarkKey = sourceBookmarkKeyForTarget(target);
 
-      sourceTitle.textContent = node.path;
+      sourceTitle.textContent = `${node.path} · ${target.titleSuffix}`;
       if (sourceUrl) {
         openRawSourceLink.href = sourceUrl;
         openRawSourceLink.classList.remove("hidden");
@@ -5784,6 +6076,7 @@
       sourcePanel.classList.add("visible");
       applySourcePanelWindowState();
       state.sourceNodeId = nodeId;
+      state.sourceTargetKind = target.kind;
       const requestToken = state.sourceRequestToken + 1;
       state.sourceRequestToken = requestToken;
       if (state.sourceAbortController) {
@@ -5791,7 +6084,7 @@
       }
       state.sourceAbortController = new AbortController();
 
-      sourceSubtitle.textContent = `${node.module} · ${formatLocation(node)} · loading full file...`;
+      sourceSubtitle.textContent = `${node.module} · ${target.locationLabel} · ${formatSourceLocation(target)} · loading full file...`;
       sourceCode.innerHTML = '<div class="source-line"><span class="source-lineno">-</span><span class="source-code-text">Loading...</span></div>';
       showSourceStatus(sourceUrl ? "Loading full file..." : "Source file unavailable.");
 
@@ -5801,26 +6094,32 @@
 
       try {
         await nextFrame();
-        const text = await loadFullSource(node, state.sourceAbortController.signal);
+        const sourceData = await loadFullSource(target, state.sourceAbortController.signal);
         if (state.sourceNodeId !== nodeId || state.sourceRequestToken !== requestToken) {
           return;
         }
-        const lineCount = text.split("\n").length;
-        if (text.length > MAX_INLINE_SOURCE_BYTES || lineCount > MAX_INLINE_SOURCE_LINES) {
-          renderSourceExcerpt(
+        const lineCount = sourceData.lines.length;
+        if (
+          target.kind === "definition" &&
+          Number.isFinite(target.line) &&
+          Number.isFinite(target.endLine) &&
+          target.endLine >= target.line
+        ) {
+          renderSourceRange(
             node,
-            text,
-            focusStartLine,
-            focusEndLine,
-            `full file loaded but too large to render inline (${lineCount} lines, ${text.length} bytes); use Open Raw`,
+            target,
+            sourceData,
+            target.line,
+            target.endLine,
+            "module definition",
             bookmarkKey,
           );
-          showSourceStatus("Full file loaded. Inline render skipped to keep the page responsive.");
+          showSourceStatus(`Module source loaded (${Math.max(0, target.endLine - target.line + 1)} lines shown).`);
           return;
         }
-        sourceSubtitle.textContent = `${node.module} · ${formatLocation(node)} · full file`;
+        sourceSubtitle.textContent = `${node.module} · ${target.locationLabel} · ${formatSourceLocation(target)} · full file`;
         showSourceStatus(`Full file loaded (${lineCount} lines).`);
-        renderSourceText(text, 1, focusStartLine, focusEndLine, { bookmarkKey });
+        renderSourceLines(sourceData.lines, 1, focusStartLine, focusEndLine, { bookmarkKey });
       } catch (error) {
         if (state.sourceNodeId !== nodeId || state.sourceRequestToken !== requestToken) {
           return;
@@ -5830,20 +6129,26 @@
           return;
         }
         const message = error instanceof Error ? error.message : String(error);
-        sourceSubtitle.textContent = `${node.module} · ${formatLocation(node)} · source unavailable`;
+        sourceSubtitle.textContent = `${node.module} · ${target.locationLabel} · ${formatSourceLocation(target)} · source unavailable`;
         sourceCode.innerHTML = `<div class="source-line"><span class="source-lineno">-</span><span class="source-code-text">${escapeHtml(`Full file unavailable in this browser session (${message}). Use Open Raw or serve the bundle over HTTP.`)}</span></div>`;
         showSourceStatus("Full file load failed.");
       }
     }
 
     function closeSourcePanel() {
+      if (sourceSearchInputTimer !== null) {
+        clearTimeout(sourceSearchInputTimer);
+        sourceSearchInputTimer = null;
+      }
       cancelScheduledHoverUpdate();
       if (state.sourceAbortController) {
         state.sourceAbortController.abort();
         state.sourceAbortController = null;
       }
       state.sourceNodeId = null;
+      state.sourceTargetKind = "instance";
       state.sourceRequestToken += 1;
+      sourceRenderJobToken += 1;
       currentSourceView = null;
       sourceSearchMatchElements = [];
       state.sourceSearchMatchIndex = -1;
@@ -5851,6 +6156,7 @@
       state.sourcePanelFullscreen = false;
       clearSourceBookmarkRename();
       sourceCode.innerHTML = "";
+      sourceCode.classList.remove("lightweight-render");
       showSourceStatus("");
       openRawSourceLink.href = "#";
       openRawSourceLink.classList.add("hidden");
@@ -6751,7 +7057,7 @@
 
     function focusNodeInMainView(nodeId) {
       const node = getNode(nodeId);
-      if (!node.children.length && nodeHasSource(node)) {
+      if (!node.children.length && nodeHasAnySource(node)) {
         revealNodeInMainView(nodeId);
         renderSource(nodeId);
         return;
@@ -8142,7 +8448,16 @@
       hoverTitle.textContent = areaKind === "self"
         ? `${node.name} <${node.module}> · Local Self`
         : `${node.name} <${node.module}>`;
-      const hoverMetaLines = [hoverMetaLine("Source", formatLocation(node))];
+      const hoverMetaLines = [];
+      if (nodeHasInstanceSource(node)) {
+        hoverMetaLines.push(hoverMetaLine("Instantiation", formatLocation(node)));
+      }
+      if (nodeHasDefinitionSource(node)) {
+        hoverMetaLines.push(hoverMetaLine("Module Source", formatSourceLocation(buildSourceTarget(node, "definition"))));
+      }
+      if (!hoverMetaLines.length) {
+        hoverMetaLines.push(hoverMetaLine("Source", "Source location unavailable"));
+      }
       if (!DATA.debugUiLabels) {
         hoverMetaLines.push(
           hoverMetaLine(
@@ -8188,7 +8503,11 @@
         );
       }
       hoverMeta.innerHTML = hoverMetaLines.join("");
-      if (nodeHasSource(node)) {
+      const hasInstanceSource = nodeHasInstanceSource(node);
+      const hasDefinitionSource = nodeHasDefinitionSource(node);
+      openInstanceSourceBtn.hidden = !hasInstanceSource;
+      openModuleSourceBtn.hidden = !hasDefinitionSource;
+      if (hasInstanceSource || hasDefinitionSource) {
         hoverActions.classList.remove("hidden");
       } else {
         hoverActions.classList.add("hidden");
@@ -8316,7 +8635,7 @@
           setRootAndReset(nodeId);
           return;
         }
-        if (nodeHasSource(node)) {
+        if (nodeHasAnySource(node)) {
           renderSource(nodeId);
         }
         return;
@@ -8325,7 +8644,7 @@
         setRootAndReset(nodeId);
         return;
       }
-      if (nodeHasSource(node)) {
+      if (nodeHasAnySource(node)) {
         renderSource(nodeId);
       }
     });
@@ -8543,9 +8862,14 @@
       }
     });
 
-    openSourceBtn.addEventListener("click", () => {
+    openInstanceSourceBtn.addEventListener("click", () => {
       if (state.hoverId === null || state.hoverId === undefined) return;
-      renderSource(state.hoverId);
+      renderSource(state.hoverId, "instance");
+    });
+
+    openModuleSourceBtn.addEventListener("click", () => {
+      if (state.hoverId === null || state.hoverId === undefined) return;
+      renderSource(state.hoverId, "definition");
     });
 
     advancedControlsBtn.addEventListener("click", (event) => {
@@ -8561,6 +8885,23 @@
     });
 
     advancedPopover.addEventListener("mousedown", (event) => {
+      event.stopPropagation();
+    });
+
+    advancedPopoverHeader.addEventListener("mousedown", (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+      const rect = advancedPopover.getBoundingClientRect();
+      if (state.advancedPopoverLeft === null || state.advancedPopoverTop === null) {
+        state.advancedPopoverLeft = rect.left;
+        state.advancedPopoverTop = rect.top;
+      }
+      state.draggingAdvancedPopover = true;
+      state.advancedPopoverDragOffsetX = event.clientX - state.advancedPopoverLeft;
+      state.advancedPopoverDragOffsetY = event.clientY - state.advancedPopoverTop;
+      applyAdvancedPopoverPosition();
+      event.preventDefault();
       event.stopPropagation();
     });
 
@@ -8592,7 +8933,13 @@
     sourceSearchInput.addEventListener("input", () => {
       state.sourceSearch = sourceSearchInput.value;
       state.sourceSearchMatchIndex = 0;
-      renderCurrentSourceView(false);
+      if (sourceSearchInputTimer !== null) {
+        clearTimeout(sourceSearchInputTimer);
+      }
+      sourceSearchInputTimer = setTimeout(() => {
+        sourceSearchInputTimer = null;
+        renderCurrentSourceView(false);
+      }, SOURCE_SEARCH_INPUT_DEBOUNCE_MS);
     });
 
     sourceSearchInput.addEventListener("keydown", (event) => {
@@ -8826,6 +9173,12 @@
     });
 
     window.addEventListener("mousemove", (event) => {
+      if (state.draggingAdvancedPopover) {
+        state.advancedPopoverLeft = event.clientX - state.advancedPopoverDragOffsetX;
+        state.advancedPopoverTop = event.clientY - state.advancedPopoverDragOffsetY;
+        applyAdvancedPopoverPosition();
+        return;
+      }
       if (state.draggingZenOverlay) {
         const panelRect = canvasPanel.getBoundingClientRect();
         state.zenOverlayLeft = event.clientX - panelRect.left - state.zenOverlayDragOffsetX;
@@ -8867,6 +9220,11 @@
     window.addEventListener("mouseup", () => {
       let shouldPersist = false;
 
+      if (state.draggingAdvancedPopover) {
+        state.draggingAdvancedPopover = false;
+        applyAdvancedPopoverPosition();
+        shouldPersist = true;
+      }
       if (state.draggingZenOverlay) {
         state.draggingZenOverlay = false;
         applyZenOverlayPosition();
@@ -8912,6 +9270,7 @@
     });
 
     window.addEventListener("resize", () => {
+      applyAdvancedPopoverPosition();
       applyZenOverlayPosition();
       scheduleUiAnnotations();
     });

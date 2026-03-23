@@ -294,7 +294,6 @@ pub(crate) fn build_viewer_data(
     }
 
     fill_missing_modules(&mut nodes);
-    prefer_definition_source_for_leaf_nodes(&mut nodes);
     compute_stats(&mut nodes, 0);
 
     let root_id = if nodes[0].children.len() == 1 {
@@ -710,27 +709,6 @@ fn fill_missing_modules(nodes: &mut [Node]) {
         if node.module.is_empty() {
             node.module = "(unknown)".to_string();
         }
-    }
-}
-
-fn prefer_definition_source_for_leaf_nodes(nodes: &mut [Node]) {
-    for node in nodes.iter_mut().skip(1) {
-        if !node.children.is_empty() {
-            continue;
-        }
-        if node.definition_file_path.is_none() {
-            continue;
-        }
-
-        node.file_path = node.definition_file_path.clone();
-        node.source_href = node.definition_source_href.clone();
-        node.line = node.definition_line;
-        node.column = node.definition_column;
-        node.end_line = node.definition_end_line;
-        node.end_column = node.definition_end_column;
-        node.snippet_start_line = node.definition_snippet_start_line;
-        node.snippet_end_line = node.definition_snippet_end_line;
-        node.snippet_text = node.definition_snippet_text.clone();
     }
 }
 
