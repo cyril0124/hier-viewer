@@ -17,3 +17,9 @@
 
 - Do not use `cargo:warning=` for normal informational progress logs in `build.rs`.
 - Reserve real Cargo warnings for actual warning conditions. Regular build progress should go to normal stderr logging so `cargo check` / `cargo clippy` stay warning-free.
+
+## Changelog Hygiene
+
+- When making user-visible changes, update `CHANGELOG.md` in the same turn before finishing.
+- Treat feature additions, behavior changes, fixes, docs-visible workflow changes, and shipped example changes as changelog-worthy by default.
+- Pure refactors, local cleanup, or invisible internal maintenance do not require a changelog entry unless the user explicitly asks for one.
