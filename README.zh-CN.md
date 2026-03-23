@@ -14,6 +14,58 @@
 - filter、analysis pattern、LOC、weighted signal bits
 - 本地持久化 UI 配置、bookmark、折叠状态
 
+## 功能展示
+
+下面这些图片不是单纯的截图堆砌，而是在 README 里按功能点展示 `hier-viewer` 的主要能力，从顶层 hierarchy 浏览一直到源码级调试。
+
+### 经典 Treemap 总览
+
+![Classic treemap overview](docs/screenshots/treemap-classic-overview.png)
+
+这是最适合先看整个 chip hierarchy 的视图，能先把顶层大模块的分布看清楚，再继续往下 drill down。
+
+### 按面积重定尺寸的 Accurate Treemap
+
+![Weighted accurate treemap](docs/screenshots/treemap-weighted-accurate.png)
+
+这个视图更强调模块“面积贡献”，而不只是层级分组，所以 SRAM、cache 之类的大块会马上凸显出来。
+
+### 可交互的 2D Pie 图
+
+![2D pie chart](docs/screenshots/chart-2d-pie.png)
+
+它把当前 hierarchy root / level 下的面积组成换一种方式展示，适合比较谁占比最大。
+
+### 3D 加权统计图
+
+![3D weighted chart](docs/screenshots/chart-3d-weighted-bits.png)
+
+同一套 sizing 数据会被渲染成可拖动的 3D 柱状视图，方便从另一种视觉角度比较深层模块分布。
+
+### Instance Wildcard 过滤
+
+![Instance wildcard filter](docs/screenshots/filter-instance-wildcard.png)
+
+这里筛的是 `sram_*`，匹配到的节点被突出显示，其他不相关节点会被弱化，适合快速定位某类实例。
+
+### 高级控制面板与主题切换
+
+![Advanced controls and theme switching](docs/screenshots/advanced-theme-controls.png)
+
+这里可以调 layout、decomp、weighted bit 系数、analysis overlay，以及内置主题，例如 Tokyo Night。
+
+### Zen 模式
+
+![Zen mode treemap](docs/screenshots/zen-mode-treemap.png)
+
+这个模式会尽量去掉界面上的干扰元素，只保留主要图形区域，适合专注查看或者做展示。
+
+### 带 Bookmark 的源码阅读器
+
+![Source reader with bookmarks](docs/screenshots/source-reader-bookmarks.png)
+
+可以直接看 module 源码，做书签、搜索当前文件、打开 raw 文件，以及切到 fullscreen 阅读。
+
 如果你第一次使用，优先看下面的“快速开始”和“常见命令”。
 
 下面大部分命令示例默认都假设 `hier-viewer` 已经在你的 `PATH` 里。

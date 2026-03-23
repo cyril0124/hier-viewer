@@ -14,6 +14,58 @@ The generated viewer supports:
 - filter, analysis pattern, LOC, and weighted signal bits
 - persisted UI settings, bookmarks, and collapse state
 
+## Feature Showcase
+
+The images below highlight the main capabilities of `hier-viewer`, from top-level hierarchy exploration to deep source inspection.
+
+### Classic Treemap Overview
+
+![Classic treemap overview](docs/screenshots/treemap-classic-overview.png)
+
+This is the main chip-level view for fast hierarchy exploration. It shows how the design is decomposed into large top-level regions before you drill further into specific instances.
+
+### Weighted Accurate Treemap
+
+![Weighted accurate treemap](docs/screenshots/treemap-weighted-accurate.png)
+
+This view emphasizes relative module footprint instead of only hierarchy grouping, which makes SRAM-heavy and cache-heavy blocks stand out immediately.
+
+### Interactive 2D Pie Chart
+
+![2D pie chart](docs/screenshots/chart-2d-pie.png)
+
+This is the same hierarchy context rendered as area composition, useful when you want to compare which modules dominate the current root or depth level.
+
+### 3D Weighted Chart
+
+![3D weighted chart](docs/screenshots/chart-3d-weighted-bits.png)
+
+This view turns the same sizing data into draggable 3D bars so deep module distributions can be compared from another angle.
+
+### Instance Wildcard Filtering
+
+![Instance wildcard filter](docs/screenshots/filter-instance-wildcard.png)
+
+Here the viewer is isolating `sram_*` instances, highlighting matches while fading unrelated nodes so SRAM structures are easy to spot.
+
+### Advanced Controls And Themes
+
+![Advanced controls and theme switching](docs/screenshots/advanced-theme-controls.png)
+
+This panel exposes layout mode, decomposition mode, weighted-bit coefficients, analysis overlays, and built-in themes such as Tokyo Night.
+
+### Zen Mode
+
+![Zen mode treemap](docs/screenshots/zen-mode-treemap.png)
+
+This strips away most of the chrome and leaves the visualization itself, which is useful for presentations or uninterrupted hierarchy inspection.
+
+### Source Reader With Bookmarks
+
+![Source reader with bookmarks](docs/screenshots/source-reader-bookmarks.png)
+
+This view shows module source code, bookmark chips with custom labels, in-file search, raw-file opening, and fullscreen reading for real debug work.
+
 If you are using it for the first time, read `Quick Start` and `Common Commands` first.
 
 Unless noted otherwise, the command examples below assume `hier-viewer` is already available on your `PATH`.
