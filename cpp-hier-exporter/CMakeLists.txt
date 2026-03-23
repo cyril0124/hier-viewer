@@ -49,7 +49,7 @@ else()
   FetchContent_Declare(
     slang
     GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-    GIT_TAG v9.0
+    GIT_TAG v10.0
     GIT_SHALLOW ON)
   FetchContent_MakeAvailable(slang)
 endif()

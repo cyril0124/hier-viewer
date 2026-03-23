@@ -69,7 +69,7 @@ fn main() {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| {
-            "FetchContent(https://github.com/MikePopoloski/slang.git @ v9.0)".to_string()
+            "FetchContent(https://github.com/MikePopoloski/slang.git @ v10.0)".to_string()
         });
 
     emit_build_log(
