@@ -43,20 +43,24 @@ jobs:
         include:
           - os: ubuntu-22.04
             label: Linux
-            asset_name: hier-viewer-${{ github.ref_name }}-x86_64-unknown-linux-gnu
+            asset_name: hier-viewer-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz
             binary_path: target/release/hier-viewer
+            packaged_binary_name: hier-viewer
           - os: macos-15-intel
             label: macOS Intel
-            asset_name: hier-viewer-${{ github.ref_name }}-x86_64-apple-darwin
+            asset_name: hier-viewer-${{ github.ref_name }}-x86_64-apple-darwin.tar.gz
             binary_path: target/release/hier-viewer
+            packaged_binary_name: hier-viewer
           - os: macos-15
             label: macOS Apple Silicon
-            asset_name: hier-viewer-${{ github.ref_name }}-aarch64-apple-darwin
+            asset_name: hier-viewer-${{ github.ref_name }}-aarch64-apple-darwin.tar.gz
             binary_path: target/release/hier-viewer
+            packaged_binary_name: hier-viewer
           - os: windows-2022
             label: Windows
-            asset_name: hier-viewer-${{ github.ref_name }}-x86_64-pc-windows-msvc.exe
+            asset_name: hier-viewer-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip
             binary_path: target/release/hier-viewer.exe
+            packaged_binary_name: hier-viewer.exe
 
     steps:
       - name: Checkout
@@ -69,7 +73,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build g++ pkg-config libsqlite3-dev zlib1g-dev
+          sudo apt-get install -y cmake ninja-build g++ pkg-config libsqlite3-dev zlib1g-dev binutils
 
       - name: Install macOS build dependencies
         if: runner.os == 'macOS'
@@ -96,15 +100,31 @@ jobs:
       - name: Build release binary
         run: cargo build --locked --release
 
-      - name: Prepare release binary
+      - name: Prepare Unix release archive
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           set -euo pipefail
           DIST_DIR="dist"
-          mkdir -p "${DIST_DIR}"
-          cp "${{ matrix.binary_path }}" "${DIST_DIR}/${{ matrix.asset_name }}"
-          chmod +x "${DIST_DIR}/${{ matrix.asset_name }}" || true
-          strip "${DIST_DIR}/${{ matrix.asset_name }}" || true
+          PACKAGE_DIR="${DIST_DIR}/package"
+          mkdir -p "${PACKAGE_DIR}"
+          cp "${{ matrix.binary_path }}" "${PACKAGE_DIR}/${{ matrix.packaged_binary_name }}"
+          chmod +x "${PACKAGE_DIR}/${{ matrix.packaged_binary_name }}"
+          strip "${PACKAGE_DIR}/${{ matrix.packaged_binary_name }}" || true
+          tar -C "${PACKAGE_DIR}" -czf "${DIST_DIR}/${{ matrix.asset_name }}" "${{ matrix.packaged_binary_name }}"
+
+      - name: Prepare Windows release archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $distDir = "dist"
+          $packageDir = Join-Path $distDir "package"
+          New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
+          Copy-Item "${{ matrix.binary_path }}" (Join-Path $packageDir "${{ matrix.packaged_binary_name }}")
+          if (Test-Path "dist\\${{ matrix.asset_name }}") {
+            Remove-Item "dist\\${{ matrix.asset_name }}" -Force
+          }
+          Compress-Archive -Path (Join-Path $packageDir "${{ matrix.packaged_binary_name }}") -DestinationPath "dist\\${{ matrix.asset_name }}"
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4

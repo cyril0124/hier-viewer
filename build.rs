@@ -19,6 +19,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR");
     println!("cargo:rerun-if-env-changed=HIER_VIEWER_EXPORTER_FULLY_STATIC");
     println!("cargo:rerun-if-env-changed=HIER_VIEWER_EXPORTER_CMAKE_TOOLCHAIN_FILE");
+    println!("cargo:rerun-if-env-changed=HIER_VIEWER_EXPORTER_CMAKE_GENERATOR");
     println!("cargo:rerun-if-env-changed=HIER_VIEWER_EXPORTER_VCPKG_TARGET_TRIPLET");
     println!("cargo:rerun-if-env-changed=VCPKG_TARGET_TRIPLET");
     println!("cargo:rerun-if-env-changed=HIER_VIEWER_LOG_COLOR");
@@ -35,6 +36,10 @@ fn main() {
     } else {
         "RelWithDebInfo"
     };
+    let cmake_generator = env::var("HIER_VIEWER_EXPORTER_CMAKE_GENERATOR")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "Ninja".to_string());
 
     let mut configure = Command::new("cmake");
     configure
@@ -45,7 +50,7 @@ fn main() {
         .arg("-B")
         .arg(&build_dir)
         .arg("-G")
-        .arg("Ninja")
+        .arg(&cmake_generator)
         .arg(format!("-DCMAKE_BUILD_TYPE={build_type}"));
 
     if let Ok(value) = env::var("HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR")
@@ -87,7 +92,8 @@ fn main() {
     emit_build_log(
         "INFO ",
         format!(
-            "configuring slang-hier-exporter: build_type={build_type}, static={}, slang_source={}, vcpkg_triplet={}",
+            "configuring slang-hier-exporter: build_type={build_type}, generator={}, static={}, slang_source={}, vcpkg_triplet={}",
+            cmake_generator,
             if fully_static { "ON" } else { "OFF" },
             slang_source_desc,
             vcpkg_target_triplet.as_deref().unwrap_or("<auto>")

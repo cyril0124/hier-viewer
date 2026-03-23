@@ -7,15 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- Updated the GitHub Actions macOS Intel release job to use the supported `macos-15-intel` runner label after `macos-13` runner retirement.
-- Updated the GitHub Actions macOS Apple Silicon release job to use `macos-15` for a newer supported Xcode toolchain.
-- Adjusted the release workflow so a GitHub release can still publish any successfully built artifacts even if other matrix targets fail, while still failing when no release artifacts are produced.
-- Passed the Windows vcpkg target triplet explicitly into the CMake exporter build so SQLite3 and zlib can be resolved reliably during release builds.
-- Added recovery for incomplete cached `slang` FetchContent checkouts so interrupted builds can self-heal by discarding stale partial sources before reconfiguring.
-
-## [1.0.0] - 2026-03-23
+## [1.0.0] - 2026-03-24
 
 ### Added
 
@@ -25,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Multiple hierarchy visualizations, including treemap, 2D pie, and 3D chart views, along with drill-down navigation, breadcrumbs, matches, a hierarchy tree panel, and zen mode.
 - Source browsing workflows for both module definitions and instance locations, including in-view search, bookmarks, fullscreen reading, and bundled source materialization for static serving.
 - Analysis and sizing workflows for weighted signal bits, LOC, generic pattern analysis, legends, theme selection, persisted viewer settings, and saved UI state such as collapse state and bookmarks.
-- A GitHub Actions release pipeline that builds raw binaries for Linux, macOS, and Windows from `vX.Y.Z` tags.
+- A GitHub Actions release pipeline that builds platform-specific release archives for Linux, macOS, and Windows from `vX.Y.Z` tags.
 
 ### Changed
 
@@ -39,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-platform release packaging issues in the embedded exporter build path, including Windows exporter naming and multi-platform release asset generation.
 - Static dependency resolution for the standalone exporter build, especially around sqlite and zlib linking on Linux.
 - A stale upstream `slang` pin that no longer fetched successfully during clean builds.
+- GitHub Actions runner compatibility for macOS Intel and Apple Silicon release builds by moving to the supported `macos-15-intel` and `macos-15` runners.
+- Release publication behavior so successfully built artifacts can still be attached even when other matrix targets fail, while still refusing to publish an empty release.
+- Windows release dependency resolution by passing the vcpkg target triplet explicitly into the CMake exporter build for SQLite3 and zlib.
+- Interrupted `slang` FetchContent checkouts by automatically discarding incomplete cached sources before reconfiguring.
+- Release packaging now keeps the downloaded archive names platform-specific while restoring the actual executable name inside each archive to `hier-viewer` or `hier-viewer.exe`.
 
 [Unreleased]: https://github.com/cyril0124/hier-viewer/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/cyril0124/hier-viewer/releases/tag/v1.0.0
