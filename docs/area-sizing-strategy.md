@@ -24,7 +24,7 @@ The sizing data flows through three stages:
 
 1. `slang-hier-exporter`
    Exports hierarchy sqlite data with per-module signal statistics and bit totals.
-2. `rust-hier-viewer`
+2. `hier-viewer`
    Loads those sqlite rows, stores them on each node, and serializes the sizing data into the generated bundle.
 3. HTML viewer
    Applies the active sizing mode, layout mode, and decomposition mode to decide how area should be visualized.

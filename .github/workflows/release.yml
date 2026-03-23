@@ -43,20 +43,20 @@ jobs:
         include:
           - os: ubuntu-22.04
             label: Linux
-            asset_name: rust-hier-viewer-${{ github.ref_name }}-x86_64-unknown-linux-gnu
-            binary_path: target/release/rust-hier-viewer
+            asset_name: hier-viewer-${{ github.ref_name }}-x86_64-unknown-linux-gnu
+            binary_path: target/release/hier-viewer
           - os: macos-13
             label: macOS Intel
-            asset_name: rust-hier-viewer-${{ github.ref_name }}-x86_64-apple-darwin
-            binary_path: target/release/rust-hier-viewer
+            asset_name: hier-viewer-${{ github.ref_name }}-x86_64-apple-darwin
+            binary_path: target/release/hier-viewer
           - os: macos-14
             label: macOS Apple Silicon
-            asset_name: rust-hier-viewer-${{ github.ref_name }}-aarch64-apple-darwin
-            binary_path: target/release/rust-hier-viewer
+            asset_name: hier-viewer-${{ github.ref_name }}-aarch64-apple-darwin
+            binary_path: target/release/hier-viewer
           - os: windows-2022
             label: Windows
-            asset_name: rust-hier-viewer-${{ github.ref_name }}-x86_64-pc-windows-msvc.exe
-            binary_path: target/release/rust-hier-viewer.exe
+            asset_name: hier-viewer-${{ github.ref_name }}-x86_64-pc-windows-msvc.exe
+            binary_path: target/release/hier-viewer.exe
 
     steps:
       - name: Checkout

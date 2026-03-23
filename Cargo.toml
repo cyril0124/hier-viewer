@@ -1,12 +1,12 @@
 [package]
-name = "rust-hier-viewer"
-version = "0.1.0"
+name = "hier-viewer"
+version = "1.0.0"
 edition = "2024"
 readme = "README.md"
-default-run = "rust-hier-viewer"
+default-run = "hier-viewer"
 
 [[bin]]
-name = "rust-hier-viewer"
+name = "hier-viewer"
 path = "rust-hier-viewer/src/main.rs"
 
 [dependencies]

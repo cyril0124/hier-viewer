@@ -16,8 +16,8 @@ The generated viewer supports:
 
 If you are using it for the first time, read `Quick Start` and `Common Commands` first.
 
-Unless noted otherwise, the command examples below assume `rust-hier-viewer` is already available on your `PATH`.
-If you are running directly from the source tree, replace `rust-hier-viewer` with `./target/release/rust-hier-viewer`.
+Unless noted otherwise, the command examples below assume `hier-viewer` is already available on your `PATH`.
+If you are running directly from the source tree, replace `hier-viewer` with `./target/release/hier-viewer`.
 
 ## Quick Start
 
@@ -38,7 +38,7 @@ By default it uses CMake `FetchContent` to fetch and build `slang`.
 ### 2. Run
 
 ```bash
-./target/release/rust-hier-viewer --output out --preview
+./target/release/hier-viewer --output out --preview
 ```
 
 If you are on an interactive terminal and do not provide RTL inputs, filelists, or `--db`, the tool opens the built-in TUI wizard. The wizard lets you:
@@ -56,7 +56,7 @@ If you use VSCode Remote or Live Server, serving the output directory directly i
 
 ## Requirements
 
-### To build and run `rust-hier-viewer`
+### To build and run `hier-viewer`
 
 - Rust toolchain
 - `cmake`
@@ -105,7 +105,7 @@ Notes:
 If you already have a prebuilt hierarchy sqlite DB:
 
 ```bash
-rust-hier-viewer --db path/to/hiers.db --output out --preview
+hier-viewer --db path/to/hiers.db --output out --preview
 ```
 
 In this mode the tool does not reparse RTL.
@@ -115,7 +115,7 @@ In this mode the tool does not reparse RTL.
 ### Example 1: recommended first run, open the wizard
 
 ```bash
-rust-hier-viewer --output out --preview
+hier-viewer --output out --preview
 ```
 
 This is the easiest way to start, especially when you have many RTL paths, filelists, `+incdir+`, and `-D` flags.
@@ -123,7 +123,7 @@ This is the easiest way to start, especially when you have many RTL paths, filel
 ### Example 2: pass RTL files directly
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   rtl/top.sv \
   rtl/core.sv \
   --output out \
@@ -135,7 +135,7 @@ rust-hier-viewer \
 Quote the patterns so the viewer resolves them itself instead of your shell expanding them first.
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   'rtl/**/*.sv' \
   'tb/**/*.v' \
   --output out \
@@ -147,7 +147,7 @@ rust-hier-viewer \
 Everything after `--` is passed through to `slang-hier-exporter` / the slang driver.
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   'rtl/**/*.sv' \
   --output out \
   -- \
@@ -160,7 +160,7 @@ rust-hier-viewer \
 ### Example 5: use filelists
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   -f rtl/files.f \
   -f tb/files.f \
   --output out \
@@ -171,7 +171,7 @@ rust-hier-viewer \
 ### Example 6: mix filelists and positional RTL inputs
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   -f rtl/files.f \
   'rtl/generated/**/*.sv' \
   --output out \
@@ -184,7 +184,7 @@ rust-hier-viewer \
 Use this when you know the RTL, filelists, or extra flags changed, or when you simply want a full rebuild:
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   -r \
   'rtl/**/*.sv' \
   --output out \
@@ -195,7 +195,7 @@ rust-hier-viewer \
 ### Example 8: read an existing sqlite DB
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   --db path/to/hiers.db \
   --output out
 ```
@@ -203,7 +203,7 @@ rust-hier-viewer \
 ### Example 9: disable the wizard and require explicit CLI inputs
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   --no-wizard \
   'rtl/**/*.sv' \
   --output out \
@@ -214,7 +214,7 @@ rust-hier-viewer \
 ### Example 10: enable debug overlays
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   --db path/to/hiers.db \
   --output out \
   --debug
@@ -225,7 +225,7 @@ rust-hier-viewer \
 ### Example 11: use the release binary
 
 ```bash
-./target/release/rust-hier-viewer \
+./target/release/hier-viewer \
   --db path/to/hiers.db \
   --output out \
   --preview
@@ -234,7 +234,7 @@ rust-hier-viewer \
 ### Example 12: choose a preferred preview port
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   --db path/to/hiers.db \
   --output out \
   --preview \
@@ -244,7 +244,7 @@ rust-hier-viewer \
 ### Example 13: bind preview to all interfaces
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   --db path/to/hiers.db \
   --output out \
   --preview \
@@ -254,7 +254,7 @@ rust-hier-viewer \
 ## CLI Reference
 
 ```text
-rust-hier-viewer [OPTIONS] [rtl ...]
+hier-viewer [OPTIONS] [rtl ...]
 ```
 
 Common options:
@@ -331,7 +331,7 @@ That is why the recommended workflow is `output directory + static file server`,
 ### Recommended: built-in preview mode
 
 ```bash
-rust-hier-viewer --output out --preview
+hier-viewer --output out --preview
 ```
 
 This keeps the server in the foreground until you press `Ctrl-C`.

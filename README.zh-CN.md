@@ -16,8 +16,8 @@
 
 如果你第一次使用，优先看下面的“快速开始”和“常见命令”。
 
-下面大部分命令示例默认都假设 `rust-hier-viewer` 已经在你的 `PATH` 里。
-如果你是在源码目录里直接运行，可以把 `rust-hier-viewer` 替换成 `./target/release/rust-hier-viewer`。
+下面大部分命令示例默认都假设 `hier-viewer` 已经在你的 `PATH` 里。
+如果你是在源码目录里直接运行，可以把 `hier-viewer` 替换成 `./target/release/hier-viewer`。
 
 ## 快速开始
 
@@ -38,7 +38,7 @@ cargo build --release
 ### 2. 运行
 
 ```bash
-./target/release/rust-hier-viewer --output out --preview
+./target/release/hier-viewer --output out --preview
 ```
 
 如果当前是交互式终端，并且你没有传 RTL 输入、filelist 或 `--db`，工具会自动打开内置的 TUI wizard。wizard 可以让你：
@@ -56,7 +56,7 @@ cargo build --release
 
 ## 依赖要求
 
-### 构建和运行 `rust-hier-viewer`
+### 构建和运行 `hier-viewer`
 
 - Rust toolchain
 - `cmake`
@@ -105,7 +105,7 @@ slang-hier-exporter --sqlite
 如果你已经有预构建好的 hierarchy sqlite DB：
 
 ```bash
-rust-hier-viewer --db path/to/hiers.db --output out --preview
+hier-viewer --db path/to/hiers.db --output out --preview
 ```
 
 这种模式下不会重新解析 RTL。
@@ -115,7 +115,7 @@ rust-hier-viewer --db path/to/hiers.db --output out --preview
 ### 例 1：最推荐的第一次使用方式，直接打开 wizard
 
 ```bash
-rust-hier-viewer --output out --preview
+hier-viewer --output out --preview
 ```
 
 尤其适合 RTL 路径、filelist、`+incdir+`、`-D` 很多的时候。
@@ -123,7 +123,7 @@ rust-hier-viewer --output out --preview
 ### 例 2：直接传 RTL 文件
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   rtl/top.sv \
   rtl/core.sv \
   --output out \
@@ -135,7 +135,7 @@ rust-hier-viewer \
 这里要加引号，让模式由 viewer 自己解析，而不是先被 shell 展开。
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   'rtl/**/*.sv' \
   'tb/**/*.v' \
   --output out \
@@ -147,7 +147,7 @@ rust-hier-viewer \
 `--` 后面的参数会原样透传给 `slang-hier-exporter` / slang driver。
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   'rtl/**/*.sv' \
   --output out \
   -- \
@@ -160,7 +160,7 @@ rust-hier-viewer \
 ### 例 5：使用 filelist
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   -f rtl/files.f \
   -f tb/files.f \
   --output out \
@@ -171,7 +171,7 @@ rust-hier-viewer \
 ### 例 6：混合 filelist 和位置参数 RTL 输入
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   -f rtl/files.f \
   'rtl/generated/**/*.sv' \
   --output out \
@@ -184,7 +184,7 @@ rust-hier-viewer \
 当你明确知道 RTL、filelist、额外 flags 有变化，或者只是想全量重跑时：
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   -r \
   'rtl/**/*.sv' \
   --output out \
@@ -195,7 +195,7 @@ rust-hier-viewer \
 ### 例 8：直接读取已有 sqlite
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   --db path/to/hiers.db \
   --output out
 ```
@@ -203,7 +203,7 @@ rust-hier-viewer \
 ### 例 9：禁用 wizard，只允许命令行显式输入
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   --no-wizard \
   'rtl/**/*.sv' \
   --output out \
@@ -214,7 +214,7 @@ rust-hier-viewer \
 ### 例 10：打开 debug overlay
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   --db path/to/hiers.db \
   --output out \
   --debug
@@ -225,7 +225,7 @@ rust-hier-viewer \
 ### 例 11：使用 release 二进制
 
 ```bash
-./target/release/rust-hier-viewer \
+./target/release/hier-viewer \
   --db path/to/hiers.db \
   --output out \
   --preview
@@ -234,7 +234,7 @@ rust-hier-viewer \
 ### 例 12：指定偏好的 preview 端口
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   --db path/to/hiers.db \
   --output out \
   --preview \
@@ -244,7 +244,7 @@ rust-hier-viewer \
 ### 例 13：让 preview 监听所有网卡
 
 ```bash
-rust-hier-viewer \
+hier-viewer \
   --db path/to/hiers.db \
   --output out \
   --preview \
@@ -254,7 +254,7 @@ rust-hier-viewer \
 ## CLI 速查
 
 ```text
-rust-hier-viewer [OPTIONS] [rtl ...]
+hier-viewer [OPTIONS] [rtl ...]
 ```
 
 常用参数：
@@ -331,7 +331,7 @@ out/
 ### 推荐：内置 preview 模式
 
 ```bash
-rust-hier-viewer --output out --preview
+hier-viewer --output out --preview
 ```
 
 这个模式会一直前台运行，直到你按 `Ctrl-C`。

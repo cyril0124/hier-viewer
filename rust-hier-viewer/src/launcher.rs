@@ -588,7 +588,7 @@ fn ensure_embedded_hierarchy_exporter() -> Result<PathBuf, String> {
 
 fn embedded_exporter_target_path() -> PathBuf {
     env::temp_dir()
-        .join("rust-hier-viewer")
+        .join("hier-viewer")
         .join("embedded-exporter")
         .join(format!("{EMBEDDED_EXPORTER_HASH}-{EXPORTER_BINARY_NAME}"))
 }

@@ -44,7 +44,7 @@ struct BundleAssets<'a> {
 
 fn main() {
     if let Err(err) = run() {
-        error("rust-hier-viewer", err);
+        error("hier-viewer", err);
         process::exit(1);
     }
 }
@@ -118,7 +118,7 @@ fn run() -> Result<(), String> {
         ));
     }
 
-    info("rust-hier-viewer", "Loading hierarchy input...");
+    info("hier-viewer", "Loading hierarchy input...");
     let input_data = match startup_selection.as_ref() {
         Some(selection) => {
             let export = run_hier_viewer_export(selection)?;
@@ -135,9 +135,9 @@ fn run() -> Result<(), String> {
                 .ok_or_else(|| "missing --db path".to_string())?,
         )?,
     };
-    info("rust-hier-viewer", "Building viewer model...");
+    info("hier-viewer", "Building viewer model...");
     let data = build_viewer_data(input_data, &config)?;
-    info("rust-hier-viewer", "Rendering HTML bundle assets...");
+    info("hier-viewer", "Rendering HTML bundle assets...");
     let html = render_html(&data);
     let meta_json = render_meta_json(&data);
     let core_bin = render_core_bin(&data)?;
@@ -146,7 +146,7 @@ fn run() -> Result<(), String> {
     let three_js = render_three_js();
     let three_core_js = render_three_core_js();
     info(
-        "rust-hier-viewer",
+        "hier-viewer",
         format!("Writing bundle files into '{}'", output_dir),
     );
     let assets = BundleAssets {
@@ -159,7 +159,7 @@ fn run() -> Result<(), String> {
         three_core_js,
     };
     write_bundle(&output_dir, &assets)?;
-    info("rust-hier-viewer", "Bundle generation finished.");
+    info("hier-viewer", "Bundle generation finished.");
     if config.preview {
         serve_output_dir(
             &output_dir,
@@ -170,7 +170,7 @@ fn run() -> Result<(), String> {
     } else {
         let entry_path = Path::new(&output_dir).join(INDEX_HTML_NAME);
         info(
-            "rust-hier-viewer",
+            "hier-viewer",
             format!(
                 "Bundle entry point: '{}'. Re-run with --preview for built-in local serving.",
                 entry_path.display()

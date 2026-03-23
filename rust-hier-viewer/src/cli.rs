@@ -171,13 +171,13 @@ fn parse_preview_host(value: &str) -> Result<String, String> {
 fn print_help() {
     println!(
         "\
-rust-hier-viewer
+hier-viewer
 
 Generate a static hierarchy viewer bundle from RTL sources or from a prebuilt sqlite hierarchy DB.
 If no RTL paths, filelists, or `--db` are provided on an interactive terminal, a ratatui startup wizard opens and lets you pick RTL paths plus extra compiler flags before `slang-hier-exporter --sqlite` is launched internally.
 
 Usage:
-  rust-hier-viewer [OPTIONS] [rtl ...]
+  hier-viewer [OPTIONS] [rtl ...]
 
 Arguments:
   [rtl ...]                RTL source paths or wildcard patterns to resolve in the current workspace
