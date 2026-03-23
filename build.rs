@@ -19,6 +19,8 @@ fn main() {
     println!("cargo:rerun-if-env-changed=HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR");
     println!("cargo:rerun-if-env-changed=HIER_VIEWER_EXPORTER_FULLY_STATIC");
     println!("cargo:rerun-if-env-changed=HIER_VIEWER_EXPORTER_CMAKE_TOOLCHAIN_FILE");
+    println!("cargo:rerun-if-env-changed=HIER_VIEWER_EXPORTER_VCPKG_TARGET_TRIPLET");
+    println!("cargo:rerun-if-env-changed=VCPKG_TARGET_TRIPLET");
     println!("cargo:rerun-if-env-changed=HIER_VIEWER_LOG_COLOR");
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR is not set"));
@@ -56,6 +58,13 @@ fn main() {
     {
         configure.arg(format!("-DCMAKE_TOOLCHAIN_FILE={value}"));
     }
+    let vcpkg_target_triplet = env::var("HIER_VIEWER_EXPORTER_VCPKG_TARGET_TRIPLET")
+        .ok()
+        .or_else(|| env::var("VCPKG_TARGET_TRIPLET").ok())
+        .filter(|value| !value.trim().is_empty());
+    if let Some(value) = &vcpkg_target_triplet {
+        configure.arg(format!("-DVCPKG_TARGET_TRIPLET={value}"));
+    }
 
     let fully_static = env::var("HIER_VIEWER_EXPORTER_FULLY_STATIC")
         .map(|value| !matches!(value.trim(), "0" | "false" | "False" | "FALSE"))
@@ -65,19 +74,23 @@ fn main() {
         if fully_static { "ON" } else { "OFF" }
     ));
 
-    let slang_source_desc = env::var("HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR")
+    let slang_source_override = env::var("HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR")
         .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| {
-            "FetchContent(https://github.com/MikePopoloski/slang.git @ v10.0)".to_string()
-        });
+        .filter(|value| !value.trim().is_empty());
+    if slang_source_override.is_none() {
+        repair_incomplete_slang_fetchcontent_state(&build_dir);
+    }
+    let slang_source_desc = slang_source_override.unwrap_or_else(|| {
+        "FetchContent(https://github.com/MikePopoloski/slang.git @ v10.0)".to_string()
+    });
 
     emit_build_log(
         "INFO ",
         format!(
-            "configuring slang-hier-exporter: build_type={build_type}, static={}, slang_source={}",
+            "configuring slang-hier-exporter: build_type={build_type}, static={}, slang_source={}, vcpkg_triplet={}",
             if fully_static { "ON" } else { "OFF" },
-            slang_source_desc
+            slang_source_desc,
+            vcpkg_target_triplet.as_deref().unwrap_or("<auto>")
         ),
     );
     let configure_started = Instant::now();
@@ -110,10 +123,7 @@ fn main() {
         ),
     );
 
-    let built_binary = build_dir
-        .join("out")
-        .join("bin")
-        .join(EXPORTER_BINARY_NAME);
+    let built_binary = build_dir.join("out").join("bin").join(EXPORTER_BINARY_NAME);
     if !built_binary.is_file() {
         panic!(
             "C++ slang exporter was built but '{}' does not exist",
@@ -207,6 +217,52 @@ fn fnv1a_hex(bytes: &[u8]) -> String {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     format!("{hash:016x}")
+}
+
+fn repair_incomplete_slang_fetchcontent_state(build_dir: &Path) {
+    let deps_dir = build_dir.join("_deps");
+    let slang_source_dir = deps_dir.join("slang-src");
+    if !slang_source_dir.exists() {
+        return;
+    }
+
+    let required_paths = [
+        slang_source_dir.join("source").join("CMakeLists.txt"),
+        slang_source_dir
+            .join("source")
+            .join("ast")
+            .join("CMakeLists.txt"),
+    ];
+    if required_paths.iter().all(|path| path.is_file()) {
+        return;
+    }
+
+    emit_build_log(
+        "WARN ",
+        format!(
+            "detected incomplete cached slang FetchContent state at '{}'; removing stale cache before reconfigure",
+            slang_source_dir.display()
+        ),
+    );
+
+    let Ok(entries) = fs::read_dir(&deps_dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if !name.starts_with("slang-") {
+            continue;
+        }
+        if let Err(err) = fs::remove_dir_all(&path) {
+            panic!(
+                "failed to remove stale slang FetchContent state '{}': {err}",
+                path.display()
+            );
+        }
+    }
 }
 
 fn run_command(mut command: Command, context: &str) {

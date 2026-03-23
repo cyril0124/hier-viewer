@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Updated the GitHub Actions macOS Intel release job to use the supported `macos-15-intel` runner label after `macos-13` runner retirement.
+- Updated the GitHub Actions macOS Apple Silicon release job to use `macos-15` for a newer supported Xcode toolchain.
+- Adjusted the release workflow so a GitHub release can still publish any successfully built artifacts even if other matrix targets fail, while still failing when no release artifacts are produced.
+- Passed the Windows vcpkg target triplet explicitly into the CMake exporter build so SQLite3 and zlib can be resolved reliably during release builds.
+- Added recovery for incomplete cached `slang` FetchContent checkouts so interrupted builds can self-heal by discarding stale partial sources before reconfiguring.
+
 ## [1.0.0] - 2026-03-23
 
 ### Added

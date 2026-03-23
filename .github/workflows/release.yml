@@ -45,11 +45,11 @@ jobs:
             label: Linux
             asset_name: hier-viewer-${{ github.ref_name }}-x86_64-unknown-linux-gnu
             binary_path: target/release/hier-viewer
-          - os: macos-13
+          - os: macos-15-intel
             label: macOS Intel
             asset_name: hier-viewer-${{ github.ref_name }}-x86_64-apple-darwin
             binary_path: target/release/hier-viewer
-          - os: macos-14
+          - os: macos-15
             label: macOS Apple Silicon
             asset_name: hier-viewer-${{ github.ref_name }}-aarch64-apple-darwin
             binary_path: target/release/hier-viewer
@@ -89,6 +89,8 @@ jobs:
           & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
           & "$vcpkgRoot\vcpkg.exe" install sqlite3:x64-windows-static-md zlib:x64-windows-static-md
           "HIER_VIEWER_EXPORTER_CMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "HIER_VIEWER_EXPORTER_VCPKG_TARGET_TRIPLET=x64-windows-static-md" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VCPKG_TARGET_TRIPLET=x64-windows-static-md" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "VCPKG_DEFAULT_TRIPLET=x64-windows-static-md" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build release binary
@@ -113,6 +115,7 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
+    if: ${{ always() }}
     needs: build-release
     runs-on: ubuntu-22.04
 
@@ -120,8 +123,21 @@ jobs:
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: hier-viewer-*
           path: dist
           merge-multiple: true
+
+      - name: Verify at least one release artifact exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          artifacts=(dist/*)
+          if (( ${#artifacts[@]} == 0 )); then
+            echo "No release artifacts were produced; refusing to publish an empty release." >&2
+            exit 1
+          fi
+          echo "Publishing ${#artifacts[@]} release artifact(s)."
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
