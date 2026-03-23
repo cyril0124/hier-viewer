@@ -1482,6 +1482,144 @@
       inset: 0;
     }
 
+    .treemap-analysis-legend {
+      position: absolute;
+      left: 18px;
+      top: 18px;
+      z-index: calc(var(--z-hover-card) - 2);
+      max-width: min(calc(100% - 36px), 920px);
+      padding: 8px 10px;
+      border-radius: 14px;
+      border: 1px solid var(--hover-card-border);
+      background: color-mix(in srgb, var(--hover-card-bg) 92%, transparent);
+      backdrop-filter: blur(12px) saturate(1.04);
+      box-shadow: var(--hover-card-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px 12px;
+      flex-wrap: wrap;
+    }
+
+    .treemap-analysis-legend.hidden {
+      display: none;
+    }
+
+    .treemap-analysis-legend-head {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex: 0 0 auto;
+      min-width: 0;
+    }
+
+    .treemap-analysis-legend-kicker {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .treemap-analysis-legend-title {
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.2;
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .treemap-analysis-legend-subtitle {
+      display: none;
+    }
+
+    .treemap-analysis-legend-list {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      flex: 1 1 auto;
+    }
+
+    .treemap-analysis-legend-row {
+      display: inline-grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      padding: 4px 7px 4px 5px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--panel) 62%, transparent);
+      border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+      cursor: pointer;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .treemap-analysis-legend-row:hover {
+      transform: none;
+      background: color-mix(in srgb, var(--control-bg-hover) 84%, var(--panel) 16%);
+      border-color: color-mix(in srgb, var(--control-border-hover) 82%, transparent);
+      box-shadow: none;
+    }
+
+    .treemap-analysis-legend-row.active {
+      background: color-mix(in srgb, var(--accent-soft) 84%, var(--panel) 16%);
+      border-color: color-mix(in srgb, var(--accent) 52%, transparent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
+    }
+
+    .treemap-analysis-legend-swatch {
+      position: relative;
+      width: 20px;
+      height: 14px;
+      border-radius: 5px;
+      border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+      overflow: hidden;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    }
+
+    .treemap-analysis-legend-swatch::after {
+      content: "";
+      position: absolute;
+      inset: 2px 3px;
+      border-radius: 3px;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      background: var(--legend-content-fill, transparent);
+    }
+
+    .treemap-analysis-legend-swatch.descendant::after {
+      inset: 3px;
+      border-style: dashed;
+      background:
+        repeating-linear-gradient(
+          -45deg,
+          color-mix(in srgb, var(--legend-content-fill, transparent) 76%, transparent) 0 5px,
+          transparent 5px 10px
+        ),
+        var(--legend-content-fill, transparent);
+    }
+
+    .treemap-analysis-legend-copy {
+      min-width: 0;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .treemap-analysis-legend-label {
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.2;
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .treemap-analysis-legend-meta {
+      display: none;
+    }
+
     canvas {
       width: 100%;
       height: 100%;
@@ -3321,6 +3459,14 @@
       <div class="main-stage" id="main-stage" data-ui-name="main-stage">
         <div class="main-view-layer treemap-stage" id="treemap-stage" data-ui-name="treemap-stage">
           <canvas id="treemap" data-ui-name="treemap-canvas"></canvas>
+          <div class="treemap-analysis-legend hidden" id="treemap-analysis-legend" data-ui-name="treemap-analysis-legend">
+            <div class="treemap-analysis-legend-head">
+              <div class="treemap-analysis-legend-kicker">Analysis</div>
+              <div class="treemap-analysis-legend-title" id="treemap-analysis-legend-title"></div>
+              <div class="treemap-analysis-legend-subtitle" id="treemap-analysis-legend-subtitle"></div>
+            </div>
+            <div class="treemap-analysis-legend-list" id="treemap-analysis-legend-list"></div>
+          </div>
         </div>
         <section class="main-view-layer chart-panel" id="chart-panel" data-ui-name="chart-panel" data-ui-label="always">
           <div class="chart-shell" data-ui-name="chart-shell">
@@ -4009,6 +4155,10 @@
     const canvas = document.getElementById("treemap");
     const canvasPanel = canvas.closest(".canvas-panel");
     const treemapStage = document.getElementById("treemap-stage");
+    const treemapAnalysisLegend = document.getElementById("treemap-analysis-legend");
+    const treemapAnalysisLegendTitle = document.getElementById("treemap-analysis-legend-title");
+    const treemapAnalysisLegendSubtitle = document.getElementById("treemap-analysis-legend-subtitle");
+    const treemapAnalysisLegendList = document.getElementById("treemap-analysis-legend-list");
     const chartPanel = document.getElementById("chart-panel");
     const viewTreemapBtn = document.getElementById("view-treemap-btn");
     const viewPieBtn = document.getElementById("view-pie-btn");
@@ -4129,6 +4279,8 @@
       analysisVisibleMaxLoc: 0,
       analysisVisibleMaxRatio: 0,
       analysisVisibleSubtreeQualified: new Array(nodes.length).fill(false),
+      analysisLegendFilter: "",
+      analysisLegendVisibleSubtree: new Array(nodes.length).fill(false),
       analysisHatchDisabledUntil: 0,
       advancedPopoverOpen: false,
       toolbarCollapsed: false,
@@ -4621,6 +4773,7 @@
           analysisMode: state.analysisMode,
           analysisPatternMode: state.analysisPatternMode,
           analysisPattern: state.analysisPattern,
+          analysisLegendFilter: state.analysisLegendFilter,
           toolbarCollapsed: state.toolbarCollapsed,
           depthLimit: state.depthLimit,
           search: state.search,
@@ -4685,6 +4838,13 @@
         }
         if (typeof saved.analysisPattern === "string") {
           state.analysisPattern = saved.analysisPattern;
+        }
+        if (
+          saved.analysisLegendFilter === "" ||
+          saved.analysisLegendFilter === "descendant" ||
+          (typeof saved.analysisLegendFilter === "string" && /^bucket-[1-4]$/.test(saved.analysisLegendFilter))
+        ) {
+          state.analysisLegendFilter = saved.analysisLegendFilter || "";
         }
         if (saved.sourceBookmarksByFile && typeof saved.sourceBookmarksByFile === "object") {
           state.sourceBookmarksByFile = normalizeSourceBookmarks(saved.sourceBookmarksByFile);
@@ -6155,6 +6315,132 @@
       return analysisLocalValue(nodeId);
     }
 
+    function analysisLegendTitleText() {
+      if (state.analysisMode === "count") {
+        return "Pattern Count";
+      }
+      if (state.analysisMode === "ratio") {
+        return "Pattern Ratio";
+      }
+      if (state.analysisMode === "loc") {
+        return "Module LOC";
+      }
+      return "Analysis";
+    }
+
+    function analysisLegendSubtitleText() {
+      if (state.analysisMode === "loc") {
+        return "Local module LOC, bucketed against the current visible view.";
+      }
+      const pattern = state.analysisPattern.trim();
+      if (!pattern) {
+        return "Local signal-name matches, bucketed against the current visible view.";
+      }
+      return `Pattern: ${pattern}`;
+    }
+
+    function appendTreemapAnalysisLegendRow({ shellFill, contentFill, label, meta, descendant = false, filterKey = "" }) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "treemap-analysis-legend-row";
+      if (filterKey && state.analysisLegendFilter === filterKey) {
+        row.classList.add("active");
+      }
+      row.title = meta;
+      row.setAttribute("aria-pressed", filterKey && state.analysisLegendFilter === filterKey ? "true" : "false");
+      row.addEventListener("click", () => {
+        state.analysisLegendFilter = state.analysisLegendFilter === filterKey ? "" : filterKey;
+        savePersistedState();
+        draw();
+      });
+
+      const swatch = document.createElement("div");
+      swatch.className = "treemap-analysis-legend-swatch";
+      if (descendant) {
+        swatch.classList.add("descendant");
+      }
+      swatch.style.background = shellFill;
+      swatch.style.setProperty("--legend-content-fill", contentFill);
+
+      const copy = document.createElement("div");
+      copy.className = "treemap-analysis-legend-copy";
+
+      const title = document.createElement("div");
+      title.className = "treemap-analysis-legend-label";
+      title.textContent = label;
+
+      const detail = document.createElement("div");
+      detail.className = "treemap-analysis-legend-meta";
+      detail.textContent = meta;
+
+      copy.appendChild(title);
+      copy.appendChild(detail);
+      row.appendChild(swatch);
+      row.appendChild(copy);
+      treemapAnalysisLegendList.appendChild(row);
+    }
+
+    function renderTreemapAnalysisLegend() {
+      if (
+        !treemapAnalysisLegend ||
+        !treemapAnalysisLegendTitle ||
+        !treemapAnalysisLegendSubtitle ||
+        !treemapAnalysisLegendList
+      ) {
+        return;
+      }
+
+      if (!analysisActive()) {
+        treemapAnalysisLegend.classList.add("hidden");
+        treemapAnalysisLegendList.innerHTML = "";
+        return;
+      }
+
+      const buckets = themeAnalysisBuckets();
+      treemapAnalysisLegendTitle.textContent = analysisLegendTitleText();
+      treemapAnalysisLegendSubtitle.textContent = analysisLegendSubtitleText();
+      treemapAnalysisLegendList.innerHTML = "";
+
+      appendTreemapAnalysisLegendRow({
+        shellFill: buckets[1].shellFill,
+        contentFill: buckets[1].contentFill,
+        label: "Low",
+        meta: "Local value is present, but near the low end of the current view.",
+        filterKey: "bucket-1"
+      });
+      appendTreemapAnalysisLegendRow({
+        shellFill: buckets[2].shellFill,
+        contentFill: buckets[2].contentFill,
+        label: "Medium",
+        meta: "Local value is clearly visible within the current view range.",
+        filterKey: "bucket-2"
+      });
+      appendTreemapAnalysisLegendRow({
+        shellFill: buckets[3].shellFill,
+        contentFill: buckets[3].contentFill,
+        label: "High",
+        meta: "Local value is strong compared with other visible nodes.",
+        filterKey: "bucket-3"
+      });
+      appendTreemapAnalysisLegendRow({
+        shellFill: buckets[4].shellFill,
+        contentFill: buckets[4].contentFill,
+        label: "Peak",
+        meta: "Local value is near the current visible maximum.",
+        filterKey: "bucket-4"
+      });
+      appendTreemapAnalysisLegendRow({
+        shellFill: analysisDescendantShellFill(),
+        contentFill: analysisDescendantShellFill(),
+        label: "Descendant only",
+        meta: "No local hit here; a qualified match exists deeper below.",
+        descendant: true,
+        filterKey: "descendant"
+      });
+
+      treemapAnalysisLegend.classList.remove("hidden");
+    }
+
     function updateAnalysisVisibleExtents() {
       state.analysisVisibleMaxCount = 0;
       state.analysisVisibleMaxLoc = 0;
@@ -6236,7 +6522,42 @@
       return Math.max(0, Math.min(0.7, normalized * 0.7));
     }
 
-    function analysisNodeHighlightState(nodeId) {
+    function selectedAnalysisLegendBucket() {
+      if (typeof state.analysisLegendFilter !== "string") {
+        return null;
+      }
+      const match = /^bucket-([1-4])$/.exec(state.analysisLegendFilter);
+      return match ? Number(match[1]) : null;
+    }
+
+    function analysisLegendLocalBucketMatches(nodeId) {
+      const bucket = selectedAnalysisLegendBucket();
+      return bucket !== null && analysisNodeQualified(nodeId) && analysisBucketIndex(nodeId) === bucket;
+    }
+
+    function updateAnalysisLegendVisibleSubtree() {
+      state.analysisLegendVisibleSubtree.fill(false);
+      const selectedBucket = selectedAnalysisLegendBucket();
+      if (!analysisActive() || selectedBucket === null) {
+        return;
+      }
+
+      const maxDepth = state.depthLimit === null ? Infinity : state.depthLimit;
+      function walk(nodeId, depth) {
+        let subtreeQualified = analysisLegendLocalBucketMatches(nodeId);
+        if (depth < maxDepth) {
+          for (const childId of getNode(nodeId).children) {
+            subtreeQualified = walk(childId, depth + 1) || subtreeQualified;
+          }
+        }
+        state.analysisLegendVisibleSubtree[nodeId] = subtreeQualified;
+        return subtreeQualified;
+      }
+
+      walk(state.currentRoot, 0);
+    }
+
+    function analysisBaseHighlightState(nodeId) {
       if (!analysisActive()) {
         return "none";
       }
@@ -6244,6 +6565,20 @@
         return "local";
       }
       return state.analysisVisibleSubtreeQualified[nodeId] ? "descendant" : "none";
+    }
+
+    function analysisNodeHighlightState(nodeId) {
+      const baseState = analysisBaseHighlightState(nodeId);
+      if (!analysisActive() || !state.analysisLegendFilter) {
+        return baseState;
+      }
+      if (state.analysisLegendFilter === "descendant") {
+        return baseState === "descendant" ? "descendant" : "none";
+      }
+      if (analysisLegendLocalBucketMatches(nodeId)) {
+        return "local";
+      }
+      return state.analysisLegendVisibleSubtree[nodeId] ? "descendant" : "none";
     }
 
     function getAnalysisHatchPattern(kind) {
@@ -7477,6 +7812,8 @@
       const height = canvas.clientHeight;
       syncDepthControl();
       updateAnalysisVisibleExtents();
+      updateAnalysisLegendVisibleSubtree();
+      renderTreemapAnalysisLegend();
       const virtual = virtualSize();
       const worldAreas = createAreas(state.currentRoot, virtual.width, virtual.height);
       state.areas = worldAreas
