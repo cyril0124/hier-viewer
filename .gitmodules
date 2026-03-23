@@ -1,0 +1,6 @@
+[submodule "examples/openpiton-example/openpiton"]
+	path = examples/openpiton-example/openpiton
+	url = https://github.com/PrincetonUniversity/openpiton.git
+[submodule "examples/ibex-example/ibex"]
+	path = examples/ibex-example/ibex
+	url = https://github.com/lowRISC/ibex.git

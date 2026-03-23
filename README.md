@@ -19,6 +19,11 @@ If you are using it for the first time, read `Quick Start` and `Common Commands`
 Unless noted otherwise, the command examples below assume `hier-viewer` is already available on your `PATH`.
 If you are running directly from the source tree, replace `hier-viewer` with `./target/release/hier-viewer`.
 
+## Examples
+
+- [`examples/ibex-example`](examples/ibex-example) is the recommended first example. It uses a pinned `lowRISC/ibex` submodule, static filelists, and two short wrapper scripts for `ibex_top` and `ibex_simple_system`.
+- [`examples/openpiton-example`](examples/openpiton-example) is a more advanced real-world example that flattens a fixed 2x2 OpenPiton chip design into a generated filelist and opens it with `hier-viewer` using only open-source tooling.
+
 ## Quick Start
 
 ### 1. Build

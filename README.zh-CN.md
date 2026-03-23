@@ -19,6 +19,11 @@
 下面大部分命令示例默认都假设 `hier-viewer` 已经在你的 `PATH` 里。
 如果你是在源码目录里直接运行，可以把 `hier-viewer` 替换成 `./target/release/hier-viewer`。
 
+## 示例
+
+- [`examples/ibex-example`](examples/ibex-example) 是最推荐先看的示例。它使用固定版本的 `lowRISC/ibex` submodule、静态 filelist，以及两个很短的包装脚本来打开 `ibex_top` 和 `ibex_simple_system`。
+- [`examples/openpiton-example`](examples/openpiton-example) 是更高级、更贴近真实项目的示例，演示如何把固定 2x2 的 OpenPiton chip design 展开成生成式 filelist，并且只依赖开源工具链用 `hier-viewer` 打开它。
+
 ## 快速开始
 
 ### 1. 构建
