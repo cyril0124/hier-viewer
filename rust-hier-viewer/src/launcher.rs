@@ -26,6 +26,7 @@ const EXPORTER_BINARY_NAME: &str = if cfg!(windows) {
 } else {
     "slang-hier-exporter"
 };
+const EMBEDDED_EXPORTER_DIR_ENV: &str = "HIER_VIEWER_EMBEDDED_EXPORTER_DIR";
 const EMBEDDED_EXPORTER_BYTES: &[u8] = include_bytes!(env!("HIER_VIEWER_EMBEDDED_EXPORTER_PATH"));
 const EMBEDDED_EXPORTER_HASH: &str = env!("HIER_VIEWER_EMBEDDED_EXPORTER_HASH");
 static EMBEDDED_EXPORTER_PATH: OnceLock<PathBuf> = OnceLock::new();
@@ -90,6 +91,7 @@ pub(crate) struct ExportResult {
 struct HierarchyExporter {
     path: PathBuf,
     cache_fingerprint: String,
+    source: &'static str,
 }
 
 #[derive(Clone, Debug)]
@@ -385,6 +387,14 @@ pub(crate) fn parse_extra_args(raw: &str) -> Result<Vec<String>, String> {
 
 pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<ExportResult, String> {
     let exporter = locate_hierarchy_exporter()?;
+    info(
+        "launcher",
+        format!(
+            "Using hierarchy exporter '{}' [{}]",
+            exporter.path.display(),
+            exporter.source
+        ),
+    );
     let cache_dir = sqlite_cache_dir(&selection.output_dir);
     fs::create_dir_all(&cache_dir).map_err(|err| {
         format!(
@@ -515,34 +525,26 @@ fn sqlite_cache_dir(output_dir: &str) -> PathBuf {
 }
 
 fn locate_hierarchy_exporter() -> Result<HierarchyExporter, String> {
-    if let Ok(current_exe) = env::current_exe()
-        && let Some(dir) = current_exe.parent()
-    {
-        let sibling = dir.join(EXPORTER_BINARY_NAME);
-        if sibling.is_file() {
-            return external_hierarchy_exporter(sibling);
-        }
-    }
-
     let embedded = ensure_embedded_hierarchy_exporter()?;
     if embedded.is_file() {
         return Ok(HierarchyExporter {
             path: embedded,
             cache_fingerprint: format!("embedded:{EMBEDDED_EXPORTER_HASH}"),
+            source: "embedded",
         });
     }
 
     if let Ok(cwd) = env::current_dir() {
         let local = cwd.join(EXPORTER_BINARY_NAME);
         if local.is_file() {
-            return external_hierarchy_exporter(local);
+            return external_hierarchy_exporter(local, "cwd");
         }
     }
 
     if let Some(path_binary) = find_binary_in_path(EXPORTER_BINARY_NAME)
         && path_binary.is_file()
     {
-        return external_hierarchy_exporter(path_binary);
+        return external_hierarchy_exporter(path_binary, "PATH");
     }
 
     Err(format!(
@@ -551,11 +553,15 @@ fn locate_hierarchy_exporter() -> Result<HierarchyExporter, String> {
     ))
 }
 
-fn external_hierarchy_exporter(path: PathBuf) -> Result<HierarchyExporter, String> {
+fn external_hierarchy_exporter(
+    path: PathBuf,
+    source: &'static str,
+) -> Result<HierarchyExporter, String> {
     let cache_fingerprint = external_exporter_fingerprint(&path)?;
     Ok(HierarchyExporter {
         path,
         cache_fingerprint,
+        source,
     })
 }
 
@@ -587,10 +593,46 @@ fn ensure_embedded_hierarchy_exporter() -> Result<PathBuf, String> {
 }
 
 fn embedded_exporter_target_path() -> PathBuf {
-    env::temp_dir()
-        .join("hier-viewer")
-        .join("embedded-exporter")
+    embedded_exporter_base_dir()
         .join(format!("{EMBEDDED_EXPORTER_HASH}-{EXPORTER_BINARY_NAME}"))
+}
+
+fn embedded_exporter_base_dir() -> PathBuf {
+    if let Some(path) = non_empty_env_path(EMBEDDED_EXPORTER_DIR_ENV) {
+        return path;
+    }
+    if let Some(path) = non_empty_env_path("XDG_RUNTIME_DIR") {
+        return path.join("hier-viewer").join("embedded-exporter");
+    }
+    if let Some(path) = non_empty_env_path("XDG_CACHE_HOME") {
+        return path.join("hier-viewer").join("embedded-exporter");
+    }
+    if let Some(path) = non_empty_env_path("HOME") {
+        return path
+            .join(".cache")
+            .join("hier-viewer")
+            .join("embedded-exporter");
+    }
+    #[cfg(unix)]
+    {
+        env::temp_dir()
+            .join(format!("hier-viewer-uid{}", current_effective_uid()))
+            .join("embedded-exporter")
+    }
+    #[cfg(not(unix))]
+    {
+        env::temp_dir()
+            .join("hier-viewer")
+            .join("embedded-exporter")
+    }
+}
+
+fn non_empty_env_path(name: &str) -> Option<PathBuf> {
+    let value = env::var_os(name)?;
+    if value.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(value))
 }
 
 fn materialize_embedded_hierarchy_exporter(path: &Path) -> Result<(), String> {
@@ -607,12 +649,7 @@ fn materialize_embedded_hierarchy_exporter(path: &Path) -> Result<(), String> {
             path.display()
         )
     })?;
-    fs::create_dir_all(parent).map_err(|err| {
-        format!(
-            "failed to create embedded exporter directory '{}': {err}",
-            parent.display()
-        )
-    })?;
+    ensure_embedded_exporter_directory(parent)?;
 
     let temp_path = parent.join(format!(
         ".{}-{}.tmp",
@@ -620,8 +657,7 @@ fn materialize_embedded_hierarchy_exporter(path: &Path) -> Result<(), String> {
         std::process::id()
     ));
     let mut file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
+        .create_new(true)
         .write(true)
         .open(&temp_path)
         .map_err(|err| {
@@ -662,19 +698,77 @@ fn materialize_embedded_hierarchy_exporter(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn ensure_embedded_exporter_directory(path: &Path) -> Result<(), String> {
+    fs::create_dir_all(path).map_err(|err| {
+        format!(
+            "failed to create embedded exporter directory '{}': {err}",
+            path.display()
+        )
+    })?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+        let metadata = fs::metadata(path)
+            .map_err(|err| format!("failed to stat directory '{}': {err}", path.display()))?;
+        if metadata.uid() != current_effective_uid() {
+            return Err(format!(
+                "embedded exporter directory '{}' is owned by uid {} instead of current uid {}",
+                path.display(),
+                metadata.uid(),
+                current_effective_uid()
+            ));
+        }
+        let current_mode = metadata.permissions().mode() & 0o777;
+        if current_mode != 0o700 {
+            let mut permissions = metadata.permissions();
+            permissions.set_mode(0o700);
+            fs::set_permissions(path, permissions).map_err(|err| {
+                format!(
+                    "failed to mark embedded exporter directory '{}' private: {err}",
+                    path.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
 fn ensure_executable_permissions(path: &Path) -> Result<(), String> {
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
-        let mut permissions = fs::metadata(path)
-            .map_err(|err| format!("failed to stat '{}': {err}", path.display()))?
-            .permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(path, permissions)
-            .map_err(|err| format!("failed to mark '{}' executable: {err}", path.display()))?;
+        let metadata =
+            fs::metadata(path).map_err(|err| format!("failed to stat '{}': {err}", path.display()))?;
+        let current_mode = metadata.permissions().mode() & 0o777;
+        if current_mode & 0o111 != 0 {
+            return Ok(());
+        }
+        if metadata.uid() != current_effective_uid() {
+            return Err(format!(
+                "embedded exporter '{}' is not executable and is owned by uid {} instead of current uid {}",
+                path.display(),
+                metadata.uid(),
+                current_effective_uid()
+            ));
+        }
+        let mut permissions = metadata.permissions();
+        permissions.set_mode(0o700);
+        fs::set_permissions(path, permissions).map_err(|err| {
+            format!(
+                "failed to mark embedded exporter '{}' executable: {err}",
+                path.display()
+            )
+        })?;
     }
     Ok(())
+}
+
+#[cfg(unix)]
+fn current_effective_uid() -> u32 {
+    // SAFETY: geteuid has no preconditions and returns the caller's effective uid.
+    unsafe { libc::geteuid() }
 }
 
 fn find_binary_in_path(binary_name: &str) -> Option<PathBuf> {

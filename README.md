@@ -88,7 +88,6 @@ The first build can take a while. That is expected. `build.rs` automatically:
 
 1. Configures and builds an embedded `slang-hier-exporter` with static third-party linkage where the platform allows it
 2. Embeds that exporter into the Rust executable
-3. Copies a sibling exporter binary into `target/{debug,release}/` for local debugging
 
 By default it uses CMake `FetchContent` to fetch and build `slang`.
 

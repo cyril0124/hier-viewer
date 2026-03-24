@@ -88,7 +88,6 @@ cargo build --release
 
 1. 配置并编译一个尽量静态链接第三方依赖的内置 `slang-hier-exporter`
 2. 把 exporter 嵌入 Rust 可执行文件
-3. 在 `target/{debug,release}/` 下复制一个同名 exporter，方便本地调试
 
 默认会通过 CMake `FetchContent` 拉取并编译 `slang`。
 

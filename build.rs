@@ -137,11 +137,6 @@ fn main() {
         );
     }
 
-    let profile_dir = out_dir
-        .ancestors()
-        .nth(3)
-        .expect("failed to derive target profile directory")
-        .to_path_buf();
     let embedded_dir = out_dir.join("embedded-exporter");
     fs::create_dir_all(&embedded_dir).expect("failed to create embedded exporter dir");
     let built_bytes = fs::read(&built_binary).unwrap_or_else(|err| {
@@ -166,22 +161,6 @@ fn main() {
         )
     });
 
-    let sibling_binary = profile_dir.join(EXPORTER_BINARY_NAME);
-    emit_build_log(
-        "INFO ",
-        format!(
-            "copying slang-hier-exporter to '{}'",
-            sibling_binary.display()
-        ),
-    );
-    fs::copy(&built_binary, &sibling_binary).unwrap_or_else(|err| {
-        panic!(
-            "failed to copy C++ slang exporter from '{}' to '{}': {err}",
-            built_binary.display(),
-            sibling_binary.display()
-        )
-    });
-
     println!(
         "cargo:rustc-env=HIER_VIEWER_EMBEDDED_EXPORTER_PATH={}",
         embedded_binary.display()
@@ -189,11 +168,7 @@ fn main() {
     println!("cargo:rustc-env=HIER_VIEWER_EMBEDDED_EXPORTER_HASH={embedded_hash}");
     emit_build_log(
         "INFO ",
-        format!(
-            "slang-hier-exporter is ready at '{}' (embedded hash {})",
-            sibling_binary.display(),
-            embedded_hash
-        ),
+        format!("slang-hier-exporter is embedded with hash {}", embedded_hash),
     );
 }
 

@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Tightened the embedded `slang-hier-exporter` static-linking policy so Windows release builds now use the static MSVC runtime and `x64-windows-static` vcpkg triplets, while documenting the macOS platform limit that prevents fully static executables there.
+- Changed the embedded `slang-hier-exporter` runtime materialization path to prefer user-private runtime or cache directories, with a user-scoped fallback and explicit override via `HIER_VIEWER_EMBEDDED_EXPORTER_DIR`, instead of always sharing a single `/tmp/hier-viewer/...` path.
+- Removed the special sibling-exporter runtime path so `cargo run` now resolves the hierarchy exporter the same way as released binaries, and logs the resolved exporter path consistently.
 
 ## [1.0.0] - 2026-03-24
 
