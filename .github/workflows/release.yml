@@ -91,11 +91,11 @@ jobs:
           $vcpkgRoot = Join-Path $env:RUNNER_TEMP "vcpkg"
           git clone --depth 1 https://github.com/microsoft/vcpkg $vcpkgRoot
           & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
-          & "$vcpkgRoot\vcpkg.exe" install sqlite3:x64-windows-static-md zlib:x64-windows-static-md
+          & "$vcpkgRoot\vcpkg.exe" install sqlite3:x64-windows-static zlib:x64-windows-static
           "HIER_VIEWER_EXPORTER_CMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "HIER_VIEWER_EXPORTER_VCPKG_TARGET_TRIPLET=x64-windows-static-md" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "VCPKG_TARGET_TRIPLET=x64-windows-static-md" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "VCPKG_DEFAULT_TRIPLET=x64-windows-static-md" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "HIER_VIEWER_EXPORTER_VCPKG_TARGET_TRIPLET=x64-windows-static" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VCPKG_TARGET_TRIPLET=x64-windows-static" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VCPKG_DEFAULT_TRIPLET=x64-windows-static" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build release binary
         run: cargo build --locked --release

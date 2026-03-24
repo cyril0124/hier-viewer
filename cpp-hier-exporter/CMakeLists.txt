@@ -1,8 +1,14 @@
 cmake_minimum_required(VERSION 3.20)
 
+if(POLICY CMP0091)
+  cmake_policy(SET CMP0091 NEW)
+endif()
+
 project(slang_hier_exporter LANGUAGES CXX)
 
-option(HIER_VIEWER_EXPORTER_FULLY_STATIC "Build the exporter as a static Linux binary" ON)
+option(HIER_VIEWER_EXPORTER_FULLY_STATIC
+       "Prefer a maximally static exporter binary where the platform allows it"
+       ON)
 set(HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR
     ""
     CACHE PATH "Path to a local slang checkout to use instead of FetchContent")
@@ -20,9 +26,20 @@ set(SLANG_INCLUDE_PYLIB OFF CACHE BOOL "" FORCE)
 set(SLANG_USE_MIMALLOC OFF CACHE BOOL "" FORCE)
 set(SLANG_USE_CPPTRACE OFF CACHE BOOL "" FORCE)
 
+if(MSVC AND HIER_VIEWER_EXPORTER_FULLY_STATIC)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 set(HIER_VIEWER_EXPORTER_FIND_STATIC_DEPS OFF)
 if(CMAKE_SYSTEM_NAME MATCHES "Linux" AND HIER_VIEWER_EXPORTER_FULLY_STATIC)
   set(HIER_VIEWER_EXPORTER_FIND_STATIC_DEPS ON)
+endif()
+
+if(APPLE AND HIER_VIEWER_EXPORTER_FULLY_STATIC)
+  message(
+    STATUS
+      "macOS does not support fully static executables; keeping slang static while using the platform dynamic linker for system libraries"
+  )
 endif()
 
 if(HIER_VIEWER_EXPORTER_FIND_STATIC_DEPS)

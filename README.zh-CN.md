@@ -86,7 +86,7 @@ cargo build --release
 
 第一次构建会比较慢，这是正常的。`build.rs` 会自动：
 
-1. 配置并编译静态 `slang-hier-exporter`
+1. 配置并编译一个尽量静态链接第三方依赖的内置 `slang-hier-exporter`
 2. 把 exporter 嵌入 Rust 可执行文件
 3. 在 `target/{debug,release}/` 下复制一个同名 exporter，方便本地调试
 
@@ -132,7 +132,9 @@ cargo build --release
 export HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR=/path/to/slang
 ```
 
-默认会尽量启用静态链接；如果要关闭：
+默认开启 `HIER_VIEWER_EXPORTER_FULLY_STATIC=1`。在 Linux 上它会生成 fully static 的 exporter，在 Windows 上会额外切到静态 MSVC runtime，而在 macOS 上则会保持 `slang` 静态链接，但仍然依赖系统动态链接器，因为 Apple 平台不支持真正的 fully static executable。
+
+如果要关闭这项静态链接偏好：
 
 ```bash
 export HIER_VIEWER_EXPORTER_FULLY_STATIC=0

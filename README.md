@@ -86,7 +86,7 @@ cargo build --release
 
 The first build can take a while. That is expected. `build.rs` automatically:
 
-1. Configures and builds a static `slang-hier-exporter`
+1. Configures and builds an embedded `slang-hier-exporter` with static third-party linkage where the platform allows it
 2. Embeds that exporter into the Rust executable
 3. Copies a sibling exporter binary into `target/{debug,release}/` for local debugging
 
@@ -132,7 +132,9 @@ If your environment cannot access the network, or if you want to force a local `
 export HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR=/path/to/slang
 ```
 
-Static linking is enabled by default where possible. To disable it:
+`HIER_VIEWER_EXPORTER_FULLY_STATIC=1` is enabled by default. On Linux it produces a fully static exporter, on Windows it also switches the exporter to the static MSVC runtime, and on macOS it keeps `slang` static but still relies on the platform dynamic linker because Apple does not support fully static executables.
+
+To disable the static-linking preference:
 
 ```bash
 export HIER_VIEWER_EXPORTER_FULLY_STATIC=0
