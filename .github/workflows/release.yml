@@ -9,33 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  lint-linux:
-    name: Lint Linux
-    runs-on: ubuntu-22.04
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build g++ pkg-config libsqlite3-dev zlib1g-dev
-
-      - name: Check
-        run: cargo check --locked
-
-      - name: Lint
-        run: cargo clippy --locked --all-targets --all-features -- -D warnings
-
   build-release:
     name: Build ${{ matrix.label }} Release Binary
-    needs: lint-linux
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
