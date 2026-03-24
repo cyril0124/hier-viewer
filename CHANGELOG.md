@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-03-24
+
 ### Added
 
 - Added a manual `hier-viewer update` command that downloads GitHub release binaries with staged terminal progress for release lookup, asset resolution, download, extraction, and in-place installation.
@@ -22,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- GitHub release publishing now checks out the repository before extracting release notes from `CHANGELOG.md`, fixing release jobs that previously failed with `Build release notes from changelog`.
+- Build recovery from stale cached `slang` FetchContent state is now more robust when recursive deletion hits transient non-empty-directory failures during cleanup.
 - Treemap selections in `Select` mode now stay pinned when the selected node is temporarily outside the visible treemap due to zoom, depth limiting, or collapsed hierarchy, with ancestor markers indicating where the hidden selection lives.
 - Navigating back to ancestor treemap roots no longer clears a locked selection as long as the selected node still belongs to the currently visible subtree.
 - Treemap collapse `-/+` controls and tree-panel expand/collapse toggles now show a clear hover highlight so the fold target is easier to confirm before clicking.
@@ -56,5 +60,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interrupted `slang` FetchContent checkouts by automatically discarding incomplete cached sources before reconfiguring.
 - Release packaging now keeps the downloaded archive names platform-specific while restoring the actual executable name inside each archive to `hier-viewer` or `hier-viewer.exe`.
 
-[Unreleased]: https://github.com/cyril0124/hier-viewer/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/cyril0124/hier-viewer/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/cyril0124/hier-viewer/releases/tag/v1.1.0
 [1.0.0]: https://github.com/cyril0124/hier-viewer/releases/tag/v1.0.0

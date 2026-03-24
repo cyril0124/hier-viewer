@@ -238,12 +238,49 @@ fn repair_incomplete_slang_fetchcontent_state(build_dir: &Path) {
             continue;
         }
         if let Err(err) = fs::remove_dir_all(&path) {
+            if err.kind() == std::io::ErrorKind::DirectoryNotEmpty {
+                quarantine_stale_fetchcontent_dir(&path);
+                continue;
+            }
             panic!(
                 "failed to remove stale slang FetchContent state '{}': {err}",
                 path.display()
             );
         }
     }
+}
+
+fn quarantine_stale_fetchcontent_dir(path: &Path) {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        panic!(
+            "failed to quarantine stale slang FetchContent state '{}': missing file name",
+            path.display()
+        );
+    };
+    let quarantine_name = format!("{name}-stale-{}", std::process::id());
+    let quarantine_path = path.with_file_name(quarantine_name);
+    if quarantine_path.exists() {
+        fs::remove_dir_all(&quarantine_path).unwrap_or_else(|err| {
+            panic!(
+                "failed to remove previous stale slang quarantine '{}': {err}",
+                quarantine_path.display()
+            )
+        });
+    }
+    fs::rename(path, &quarantine_path).unwrap_or_else(|err| {
+        panic!(
+            "failed to quarantine stale slang FetchContent state '{}' to '{}': {err}",
+            path.display(),
+            quarantine_path.display()
+        )
+    });
+    emit_build_log(
+        "WARN ",
+        format!(
+            "moved stale slang FetchContent state to '{}'; continuing with a fresh checkout",
+            quarantine_path.display()
+        ),
+    );
 }
 
 fn run_command(mut command: Command, context: &str) {
