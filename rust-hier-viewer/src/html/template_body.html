@@ -1,0 +1,472 @@
+  <div class="loading-overlay" id="loading-overlay" role="status" aria-live="polite" aria-label="Loading hierarchy viewer">
+    <div class="loading-card">
+      <div class="loading-eyebrow">Standalone Hierarchy Viewer</div>
+      <h1 class="loading-title">Loading Viewer</h1>
+      <div class="loading-stage" id="loading-stage">Opening bundle...</div>
+      <div class="loading-detail" id="loading-detail">Waiting for viewer data.</div>
+      <div class="loading-bar" aria-hidden="true">
+        <div class="loading-bar-fill" id="loading-bar-fill"></div>
+      </div>
+      <div class="loading-footnote">The first open can take longer on large hierarchy bundles because the browser still needs to fetch <code>viewer-meta.json</code>, decode <code>viewer-core.bin</code>, and lazy-load optional analysis data.</div>
+    </div>
+  </div>
+  <div class="app">
+    <section class="toolbar panel" id="toolbar" data-ui-name="toolbar" data-ui-label="always">
+      <div class="title-block" data-ui-name="title-block">
+        <div class="eyebrow">Standalone Hierarchy Viewer</div>
+        <h1 id="page-title" data-ui-name="page-title"></h1>
+        <div class="title-meta-row" data-ui-name="title-meta-row">
+          <div class="title-subtitle" id="page-subtitle" data-ui-name="page-subtitle"></div>
+          <div class="title-credit" data-ui-name="page-credit">
+            Author: <a href="https://github.com/cyril0124" target="_blank" rel="noopener noreferrer">cyril0124</a>
+          </div>
+        </div>
+      </div>
+      <div class="controls" data-ui-name="toolbar-controls">
+        <div class="control-row" data-ui-name="toolbar-row">
+          <div class="control-strip" data-ui-name="toolbar-strip">
+            <button id="home-btn" type="button" data-ui-name="home-btn">Home</button>
+            <button id="up-btn" type="button" data-ui-name="up-btn">Up</button>
+            <button id="zoom-out-btn" type="button" data-ui-name="zoom-out-btn">-</button>
+            <button id="zoom-in-btn" type="button" data-ui-name="zoom-in-btn">+</button>
+            <button id="fit-btn" type="button" data-ui-name="fit-btn">Fit</button>
+            <button id="clear-treemap-collapses-btn" type="button" title="Expand all treemap-collapsed hierarchy nodes" data-ui-name="clear-treemap-collapses-btn">Unfold</button>
+            <button id="select-mode-btn" type="button" title="Select mode: single-click pins a node, double-click enters it or opens source at a leaf" data-ui-name="select-mode-btn" aria-pressed="false">Select</button>
+            <button id="toggle-tree-btn" type="button" data-ui-name="tree-panel-btn">Tree</button>
+            <button id="toggle-match-btn" type="button" data-ui-name="matches-panel-btn">Matches</button>
+            <div class="metric-group" data-ui-name="level-group">
+              <label class="metric-inline-label" for="depth-select">Level:</label>
+              <select id="depth-select" aria-label="Visible depth" data-ui-name="level-select"></select>
+            </div>
+            <div class="metric-group" id="metric-group" data-ui-name="sizing-group">
+              <label class="metric-inline-label" for="metric-select">Sizing:</label>
+              <select id="metric-select" aria-label="Treemap sizing strategy" data-ui-name="sizing-select">
+                <option value="instances">Subtree Instances</option>
+                <option value="leaves">Leaf Count</option>
+                <option value="weighted_signals">Weighted Signal Bits</option>
+              </select>
+              <div class="metric-help-wrap" data-ui-name="sizing-help-wrap">
+                <div class="metric-help" tabindex="0" aria-label="Explain sizing strategies" data-ui-name="sizing-help">?</div>
+                <div class="metric-tooltip" id="metric-tooltip" role="note">
+                  <div class="metric-tooltip-title">Treemap area uses the selected sizing strategy.</div>
+                  <div class="metric-tooltip-list">
+                    <div class="metric-tooltip-item" data-metric="instances">
+                      <div class="metric-tooltip-name">Subtree Instances</div>
+                      <div class="metric-tooltip-desc">Size by the number of instances reachable under this node. Good for hierarchy fanout.</div>
+                    </div>
+                    <div class="metric-tooltip-item" data-metric="leaves">
+                      <div class="metric-tooltip-name">Leaf Count</div>
+                      <div class="metric-tooltip-desc">Size by the number of leaf instances under this node. Good for endpoint density.</div>
+                    </div>
+                    <div class="metric-tooltip-item" data-metric="weighted_signals">
+                      <div class="metric-tooltip-name">Weighted Signal Bits</div>
+                      <div class="metric-tooltip-desc">Size by subtree variable bits plus subtree net bits, each scaled by user-configurable coefficients. Set Var=1 and Net=1 to match the legacy subtree signal-bits mode.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="advanced-group" data-ui-name="advanced-group">
+              <button id="advanced-controls-btn" class="advanced-toggle" type="button" aria-expanded="false" aria-haspopup="dialog" data-ui-name="advanced-btn">Advanced</button>
+              <div class="advanced-popover hidden" id="advanced-popover" role="dialog" aria-label="Advanced viewer controls" data-ui-name="advanced-popover">
+                <div class="advanced-popover-header" id="advanced-popover-header" data-ui-name="advanced-popover-header">
+                  <div class="advanced-popover-kicker">Workspace Controls</div>
+                  <div class="advanced-popover-title">Advanced</div>
+                  <div class="advanced-popover-description">Tune layout, theme, weighted sizing, and signal analysis without leaving the current hierarchy view.</div>
+                </div>
+                <div class="advanced-popover-grid" data-ui-name="advanced-popover-grid">
+                  <div class="advanced-section" data-ui-name="theme-layout-section">
+                    <div class="advanced-section-copy">
+                      <div class="advanced-section-title">Appearance</div>
+                      <div class="advanced-section-hint">Choose the workspace tone.</div>
+                    </div>
+                    <div class="advanced-section-controls">
+                      <div class="metric-group" data-ui-name="theme-group">
+                        <label class="metric-inline-label" for="theme-select">Theme:</label>
+                        <select id="theme-select" aria-label="Viewer theme" data-ui-name="theme-select">
+                          <option value="warm-paper">Warm Paper</option>
+                          <option value="vscode-dark">VSCode Dark</option>
+                          <option value="github-light">GitHub Light</option>
+                          <option value="tokyo-night">Tokyo Night</option>
+                          <option value="nord">Nord</option>
+                          <option value="solarized-light">Solarized Light</option>
+                          <option value="catppuccin-latte">Catppuccin Latte</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="advanced-section" data-ui-name="layout-section">
+                    <div class="advanced-section-copy">
+                      <div class="advanced-section-title">Treemap Layout</div>
+                      <div class="advanced-section-hint">Switch between classic composition and proportional slicing.</div>
+                    </div>
+                    <div class="advanced-section-controls">
+                      <div class="metric-group" data-ui-name="layout-group">
+                        <label class="metric-inline-label" for="layout-select">Layout:</label>
+                        <select
+                          id="layout-select"
+                          aria-label="Treemap layout mode"
+                          title="Classic keeps the previous visual style. Accurate uses an ordered slicing layout with proportional area."
+                          data-ui-name="layout-select"
+                        >
+                          <option value="classic">Classic</option>
+                          <option value="accurate">Accurate</option>
+                        </select>
+                      </div>
+                      <div class="metric-group" data-ui-name="decomp-group">
+                        <label class="metric-inline-label" for="decomposition-select">Decomp:</label>
+                        <select
+                          id="decomposition-select"
+                          aria-label="Treemap decomposition mode"
+                          title="Subtree Only keeps the old clean hierarchy view. Subtree + Local Self reserves explicit area for the current module's own local contribution."
+                          data-ui-name="decomp-select"
+                        >
+                          <option value="subtree">Subtree Only</option>
+                          <option value="self">Subtree + Local Self</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="advanced-section advanced-section-wide hidden" id="weighted-metric-group" data-ui-name="weighted-sizing-section">
+                    <div class="advanced-section-copy">
+                      <div class="advanced-section-title">Weighted Signal Bits</div>
+                      <div class="advanced-section-hint">Control how much variables and nets contribute to subtree area.</div>
+                    </div>
+                    <div class="advanced-section-controls">
+                      <div class="metric-group" data-ui-name="weighted-var-group">
+                        <label class="metric-inline-label" for="weighted-variable-input">Var:</label>
+                        <input id="weighted-variable-input" type="number" min="0" step="0.05" inputmode="decimal" value="1.00" data-ui-name="weighted-var-input" />
+                      </div>
+                      <div class="metric-group" data-ui-name="weighted-net-group">
+                        <label class="metric-inline-label" for="weighted-net-input">Net:</label>
+                        <input id="weighted-net-input" type="number" min="0" step="0.05" inputmode="decimal" value="0.15" data-ui-name="weighted-net-input" />
+                      </div>
+                    </div>
+                  </div>
+                  <div class="advanced-section" data-ui-name="analysis-section">
+                    <div class="advanced-section-copy">
+                      <div class="advanced-section-title">Analysis Overlay</div>
+                      <div class="advanced-section-hint">Choose which module statistic should tint the current view.</div>
+                    </div>
+                    <div class="advanced-section-controls">
+                      <div class="metric-group" data-ui-name="analysis-group">
+                        <label class="metric-inline-label" for="analysis-select">Analysis:</label>
+                        <select id="analysis-select" aria-label="Signal analysis mode" data-ui-name="analysis-select">
+                          <option value="none">None</option>
+                          <option value="ratio">Pattern Ratio</option>
+                          <option value="count">Pattern Count</option>
+                          <option value="loc">Module LOC</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="advanced-section advanced-section-wide hidden" id="analysis-pattern-group" data-ui-name="analysis-pattern-section">
+                    <div class="advanced-section-copy">
+                      <div class="advanced-section-title">Pattern Analysis</div>
+                      <div class="advanced-section-hint">Match internal signal names with wildcard, text, or regex, then tint contributing modules inside the current view.</div>
+                    </div>
+                    <div class="advanced-section-controls">
+                      <div class="metric-group" data-ui-name="analysis-mode-group">
+                        <label class="metric-inline-label" for="analysis-pattern-mode-select">Mode:</label>
+                        <select id="analysis-pattern-mode-select" aria-label="Signal pattern mode" data-ui-name="analysis-mode-select">
+                          <option value="wildcard">Wildcard</option>
+                          <option value="text">Text</option>
+                          <option value="regex">Regex</option>
+                        </select>
+                      </div>
+                      <div class="metric-group" data-ui-name="analysis-pattern-group">
+                        <label class="metric-inline-label" for="analysis-pattern-input">Pattern:</label>
+                        <input
+                          id="analysis-pattern-input"
+                          type="search"
+                          placeholder="Signal pattern: _GEN* ; foo_*"
+                          title="Use ';' to combine multiple signal-name patterns. This matches internal signals only."
+                          data-ui-name="analysis-pattern-input"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="toolbar-bottom" data-ui-name="toolbar-bottom">
+          <div class="filter-group" data-ui-name="filter-group" data-ui-label="always">
+            <div class="group-label">Filter</div>
+            <select id="filter-scope-select" aria-label="Filter scope" data-ui-name="filter-scope-select">
+              <option value="both">Path + Module</option>
+              <option value="path">Hierarchy Path</option>
+              <option value="instance">Instance Name</option>
+              <option value="module">Module Name</option>
+            </select>
+            <select id="filter-mode-select" aria-label="Filter mode" data-ui-name="filter-mode-select">
+              <option value="text">Text</option>
+              <option value="wildcard">Wildcard</option>
+              <option value="regex">Regex</option>
+            </select>
+            <input
+              id="search-input"
+              type="search"
+              placeholder="Filter: foo ; bar"
+              title="Use ';' to combine multiple patterns. Scope and mode are selected by the dropdowns on the left. You can still override with wc:... or re:... prefixes."
+              data-ui-name="filter-input"
+            />
+          </div>
+        </div>
+      </div>
+      <button id="toggle-toolbar-btn" class="toolbar-toggle" type="button" aria-expanded="true" aria-label="Collapse header controls" data-ui-name="toolbar-collapse-toggle">
+        <span>Collapse</span>
+      </button>
+    </section>
+
+    <div class="breadcrumb-row" data-ui-name="breadcrumb-row" data-ui-label="always">
+      <section class="breadcrumbs panel" id="breadcrumbs" data-ui-name="breadcrumbs" data-ui-label="always"></section>
+      <div class="view-switcher" data-ui-name="view-switcher" data-ui-label="always">
+        <div class="view-switcher-shell panel" data-ui-name="view-switcher-shell">
+          <div class="view-switcher-label">View</div>
+          <div class="view-switcher-group" data-ui-name="view-switcher-group">
+            <button id="view-treemap-btn" class="view-switch-btn" type="button" data-ui-name="view-treemap-btn">Treemap</button>
+            <button id="view-pie-btn" class="view-switch-btn" type="button" data-ui-name="view-pie-btn">2D Pie</button>
+            <button id="view-three-btn" class="view-switch-btn" type="button" data-ui-name="view-three-btn">3D</button>
+            <button id="zen-toggle-btn" class="view-switch-btn zen-mode-btn" type="button" aria-pressed="false" data-ui-name="zen-toggle-btn">Zen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="canvas-panel panel" data-ui-name="canvas-panel" data-ui-label="always">
+      <div class="zen-overlay" id="zen-overlay" data-ui-name="zen-overlay" data-ui-label="always">
+        <div id="zen-overlay-shell" class="zen-overlay-shell panel" data-ui-name="zen-overlay-shell">
+          <div class="zen-overlay-label">Zen</div>
+          <div class="zen-overlay-group" data-ui-name="zen-overlay-group">
+            <button id="zen-view-treemap-btn" class="view-switch-btn" type="button" data-ui-name="zen-view-treemap-btn">Treemap</button>
+            <button id="zen-view-pie-btn" class="view-switch-btn" type="button" data-ui-name="zen-view-pie-btn">2D Pie</button>
+            <button id="zen-view-three-btn" class="view-switch-btn" type="button" data-ui-name="zen-view-three-btn">3D</button>
+          </div>
+          <div class="zen-overlay-actions" data-ui-name="zen-overlay-actions">
+            <button id="zen-exit-btn" class="view-switch-btn zen-mode-btn" type="button" aria-pressed="true" data-ui-name="zen-exit-btn">Exit Zen</button>
+          </div>
+        </div>
+      </div>
+      <div class="main-stage" id="main-stage" data-ui-name="main-stage">
+        <div class="main-view-layer treemap-stage" id="treemap-stage" data-ui-name="treemap-stage">
+          <canvas id="treemap" data-ui-name="treemap-canvas"></canvas>
+          <div class="treemap-analysis-legend hidden" id="treemap-analysis-legend" data-ui-name="treemap-analysis-legend">
+            <div class="treemap-analysis-legend-head">
+              <div class="treemap-analysis-legend-kicker">Analysis</div>
+              <div class="treemap-analysis-legend-title" id="treemap-analysis-legend-title"></div>
+              <div class="treemap-analysis-legend-subtitle" id="treemap-analysis-legend-subtitle"></div>
+            </div>
+            <div class="treemap-analysis-legend-list" id="treemap-analysis-legend-list"></div>
+          </div>
+        </div>
+        <section class="main-view-layer chart-panel" id="chart-panel" data-ui-name="chart-panel" data-ui-label="always">
+          <div class="chart-shell" data-ui-name="chart-shell">
+            <div class="chart-toolbar" data-ui-name="chart-toolbar">
+              <div class="chart-header">
+                <div class="chart-header-main">
+                  <div class="chart-kicker">Chart Workspace</div>
+                  <div class="side-title">Hierarchy Charts</div>
+                  <div class="side-subtitle" id="chart-panel-subtitle"></div>
+                </div>
+                <div class="chart-header-note">Charts follow the current root, filter, and hierarchy depth context.</div>
+              </div>
+              <div class="chart-controls" data-ui-name="chart-controls">
+                <div class="metric-group" data-ui-name="chart-mode-group">
+                  <label class="metric-inline-label" for="chart-mode-select">Mode:</label>
+                  <select id="chart-mode-select" aria-label="Chart mode" data-ui-name="chart-mode-select">
+                    <option value="weighted_bits">Weighted Bits</option>
+                    <option value="analysis">Analysis Pattern</option>
+                  </select>
+                </div>
+                <div class="metric-group" data-ui-name="chart-level-group">
+                  <label class="metric-inline-label" for="chart-level-select">Level:</label>
+                  <select id="chart-level-select" aria-label="Chart hierarchy level" data-ui-name="chart-level-select"></select>
+                </div>
+              </div>
+              <div class="chart-analysis-editor hidden" id="chart-analysis-editor" data-ui-name="chart-analysis-editor">
+                <div class="metric-group" data-ui-name="chart-analysis-select-group">
+                  <label class="metric-inline-label" for="chart-analysis-select">Analysis:</label>
+                  <select id="chart-analysis-select" aria-label="Chart signal analysis mode" data-ui-name="chart-analysis-select">
+                    <option value="none">None</option>
+                    <option value="ratio">Pattern Ratio</option>
+                    <option value="count">Pattern Count</option>
+                    <option value="loc">Module LOC</option>
+                  </select>
+                </div>
+                <div class="metric-group" data-ui-name="chart-analysis-mode-group">
+                  <label class="metric-inline-label" for="chart-analysis-pattern-mode-select">Mode:</label>
+                  <select id="chart-analysis-pattern-mode-select" aria-label="Chart signal pattern mode" data-ui-name="chart-analysis-pattern-mode-select">
+                    <option value="wildcard">Wildcard</option>
+                    <option value="text">Text</option>
+                    <option value="regex">Regex</option>
+                  </select>
+                </div>
+                <div class="metric-group" data-ui-name="chart-analysis-pattern-group">
+                  <label class="metric-inline-label" for="chart-analysis-pattern-input">Pattern:</label>
+                  <input
+                    id="chart-analysis-pattern-input"
+                    type="search"
+                    placeholder="Signal pattern: _GEN* ; foo_*"
+                    title="Use ';' to combine multiple signal-name patterns. This matches internal signals only."
+                    data-ui-name="chart-analysis-pattern-input"
+                  />
+                </div>
+              </div>
+              <div class="chart-status" id="chart-status" data-ui-name="chart-status"></div>
+            </div>
+            <div class="chart-layout">
+              <div class="chart-visual-card" data-ui-name="chart-visual-card">
+                <div class="chart-crumbs" id="chart-crumbs" data-ui-name="chart-crumbs"></div>
+                <div class="chart-visual-shell" data-ui-name="chart-visual-shell">
+                  <div class="chart-detail-card hidden" id="chart-detail-card" data-ui-name="chart-detail-card">
+                    <div class="chart-detail-path" id="chart-detail-path"></div>
+                    <div class="chart-detail-title" id="chart-detail-title"></div>
+                    <div class="chart-detail-meta" id="chart-detail-meta"></div>
+                  </div>
+                  <div class="chart-visual" id="chart-visual"></div>
+                </div>
+              </div>
+              <div class="chart-layout-divider" id="chart-layout-divider" aria-hidden="true" data-ui-name="chart-layout-divider"></div>
+              <div class="chart-legend-card" data-ui-name="chart-legend-card">
+                <div class="chart-legend-title">Slices</div>
+                <div class="chart-legend" id="chart-legend"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+      <aside class="side-panel tree-panel" id="tree-panel" data-ui-name="tree-panel" data-ui-label="always">
+        <div class="panel-resizer panel-resizer-x" id="tree-panel-resizer" aria-hidden="true"></div>
+        <div class="side-header">
+          <div>
+            <div class="side-title">Hierarchy Tree</div>
+            <div class="side-subtitle" id="tree-panel-subtitle"></div>
+          </div>
+          <div class="side-actions">
+            <button id="expand-tree-btn" type="button" data-ui-name="expand-tree-btn">Expand All</button>
+            <button id="collapse-tree-btn" type="button" data-ui-name="collapse-tree-btn">Collapse All</button>
+            <button id="close-tree-btn" type="button" data-ui-name="close-tree-btn">Close</button>
+          </div>
+        </div>
+        <div class="side-body">
+          <div class="tree-list" id="tree-panel-body" data-ui-name="tree-panel-body"></div>
+        </div>
+      </aside>
+      <aside class="side-panel match-panel" id="match-panel" data-ui-name="match-panel" data-ui-label="always">
+        <div class="panel-resizer panel-resizer-x" id="match-panel-resizer-x" aria-hidden="true"></div>
+        <div class="panel-resizer panel-resizer-y" id="match-panel-resizer-y" aria-hidden="true"></div>
+        <div class="panel-resizer panel-resizer-corner" id="match-panel-resizer-corner" aria-hidden="true"></div>
+        <div class="side-header">
+          <div>
+            <div class="side-title">Filter Matches</div>
+            <div class="side-subtitle" id="match-panel-subtitle"></div>
+          </div>
+          <div class="side-actions">
+            <button id="copy-matches-btn" type="button" data-ui-name="copy-matches-btn">Copy</button>
+            <button id="close-match-btn" type="button" data-ui-name="close-match-btn">Close</button>
+          </div>
+        </div>
+        <div class="side-body">
+          <div class="match-list" id="match-panel-body" data-ui-name="match-panel-body"></div>
+        </div>
+      </aside>
+      <div class="hover-card hidden" id="hover-card" data-ui-name="hover-card" data-ui-label="always">
+        <div class="hover-topbar hidden" id="hover-topbar">
+          <div class="hover-state-pill hidden" id="hover-selected-pill">Selected</div>
+          <button class="hover-dismiss hidden" id="hover-dismiss-btn" type="button" aria-label="Clear selected node" title="Clear selected node" data-ui-name="hover-dismiss-btn">×</button>
+        </div>
+        <div class="hover-path" id="hover-path"></div>
+        <div class="hover-title" id="hover-title"></div>
+        <div class="hover-meta" id="hover-meta"></div>
+        <div class="hover-actions hidden" id="hover-actions">
+          <button id="open-instance-source-btn" type="button" data-ui-name="open-instance-source-btn">Open Instance</button>
+          <button id="open-module-source-btn" type="button" data-ui-name="open-module-source-btn">Open Module</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="source-panel" id="source-panel" data-ui-name="source-panel" data-ui-label="always">
+      <div class="source-header">
+        <div class="source-header-top">
+          <div class="source-header-main">
+            <div class="source-kicker">Source Reader</div>
+            <div class="source-title" id="source-title" data-ui-name="source-title"></div>
+            <div class="source-subtitle" id="source-subtitle" data-ui-name="source-subtitle"></div>
+            <div class="source-status hidden" id="source-status" data-ui-name="source-status"></div>
+            <div class="source-load-progress hidden" id="source-load-progress" data-ui-name="source-load-progress">
+              <div class="source-load-row" data-ui-name="source-load-row">
+                <div class="source-load-stage" id="source-load-stage">Loading source...</div>
+                <div class="source-load-detail" id="source-load-detail"></div>
+              </div>
+              <div class="source-load-bar" aria-hidden="true" data-ui-name="source-load-bar">
+                <div class="source-load-bar-fill" id="source-load-bar-fill"></div>
+              </div>
+            </div>
+          </div>
+          <div class="source-actions">
+            <a class="source-open-link hidden" id="open-raw-source-link" href="#" target="_blank" rel="noopener noreferrer" data-ui-name="open-raw-source-link">Open Raw</a>
+            <button class="source-expand" id="toggle-source-fullscreen-btn" type="button" aria-pressed="false" data-ui-name="toggle-source-fullscreen-btn">Fullscreen</button>
+            <button class="source-close" id="close-source-btn" type="button" data-ui-name="close-source-btn">Close</button>
+          </div>
+        </div>
+        <div class="source-searchbar-shell" data-ui-name="source-searchbar-shell">
+          <div class="source-search-status" id="source-search-status" data-ui-name="source-search-status">Search current view</div>
+          <div class="source-search-row" data-ui-name="source-search-row">
+            <div class="source-bookmark-bar" data-ui-name="source-bookmark-bar">
+              <div class="source-bookmark-label">Bookmarks</div>
+              <div class="source-bookmark-list" id="source-bookmark-list" data-ui-name="source-bookmark-list">
+                <span class="source-bookmark-empty">Click a line number to bookmark it.</span>
+              </div>
+            </div>
+            <div class="source-searchbar" data-ui-name="source-searchbar">
+              <div class="metric-group" data-ui-name="source-search-mode-group">
+                <label class="metric-inline-label" for="source-search-mode-select">Search:</label>
+                <select id="source-search-mode-select" aria-label="Source search mode" data-ui-name="source-search-mode-select">
+                  <option value="wildcard">Wildcard</option>
+                  <option value="regex">Regex</option>
+                </select>
+              </div>
+              <div class="source-search-main" data-ui-name="source-search-main">
+                <input
+                  id="source-search-input"
+                  class="source-search-input"
+                  type="search"
+                  placeholder="Search current view: foo_*"
+                  title="Search the currently rendered source. Enter jumps to next match, Shift+Enter jumps to previous. Supports wildcard and regex."
+                  data-ui-name="source-search-input"
+                />
+                <div class="source-search-actions" data-ui-name="source-search-actions">
+                  <button
+                    id="source-search-prev-btn"
+                    class="source-nav-btn"
+                    type="button"
+                    aria-label="Previous source search match"
+                    title="Previous match (Shift+Enter)"
+                    data-ui-name="source-search-prev-btn"
+                  >↑</button>
+                  <button
+                    id="source-search-next-btn"
+                    class="source-nav-btn"
+                    type="button"
+                    aria-label="Next source search match"
+                    title="Next match (Enter)"
+                    data-ui-name="source-search-next-btn"
+                  >↓</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="source-code" id="source-code" data-ui-name="source-code"></div>
+    </aside>
+
+    <section class="statusbar panel" data-ui-name="statusbar" data-ui-label="always">
+      <div id="status-left" data-ui-name="status-left"></div>
+      <div class="hint" id="status-right" data-ui-name="status-right">Wheel to zoom. Drag to pan. Click to drill down. Filter supports text, wc:pattern, and re:regex. Use ';' to combine patterns.</div>
+    </section>
+  </div>
+  <div class="ui-annotation-layer" id="ui-annotation-layer" aria-hidden="true"></div>
+
