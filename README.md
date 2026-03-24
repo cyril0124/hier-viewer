@@ -12,6 +12,7 @@ The generated viewer supports:
 - hierarchy drill-down, tree panel, and matches panel
 - source reader for both instance locations and module definitions
 - filter, analysis pattern, LOC, and weighted signal bits
+- release-binary self-update with staged download progress
 - persisted UI settings, bookmarks, and collapse state
 
 ## Feature Showcase
@@ -110,6 +111,14 @@ This starts a built-in local preview server, prints the final viewer URL, and by
 
 If you use VSCode Remote or Live Server, serving the output directory directly is still a valid fallback.
 
+### 4. Update the installed binary
+
+```bash
+hier-viewer update
+```
+
+This checks GitHub Releases, shows staged progress for release lookup, download, extraction, and in-place replacement, then installs the latest stable binary over the current executable.
+
 ## Requirements
 
 ### To build and run `hier-viewer`
@@ -169,6 +178,18 @@ hier-viewer --db path/to/hiers.db --output out --preview
 In this mode the tool does not reparse RTL.
 
 ## Common Commands
+
+### Example 0: self-update the installed binary
+
+```bash
+hier-viewer update
+```
+
+Install a specific release tag instead:
+
+```bash
+hier-viewer update --to v1.0.0
+```
 
 ### Example 1: recommended first run, open the wizard
 

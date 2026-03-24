@@ -128,3 +128,14 @@ pub(crate) struct Config {
     pub(crate) extra_args_tokens: Vec<String>,
     pub(crate) debug: bool,
 }
+
+#[derive(Debug)]
+pub(crate) struct UpdateConfig {
+    pub(crate) target_tag: Option<String>,
+}
+
+#[derive(Debug)]
+pub(crate) enum AppCommand {
+    Generate(Config),
+    Update(UpdateConfig),
+}

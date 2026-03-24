@@ -5,6 +5,7 @@ mod launcher;
 mod logging;
 mod model;
 mod preview;
+mod updater;
 mod viewer;
 mod wizard;
 
@@ -21,7 +22,9 @@ use html::{
 use input::load_input_data;
 use launcher::{FileIndex, PatternMode, StartupSelection, run_hier_viewer_export};
 use logging::{error, info};
+use model::{AppCommand, Config};
 use preview::serve_output_dir;
+use updater::run_update;
 use viewer::build_viewer_data;
 
 const INDEX_HTML_NAME: &str = "index.html";
@@ -50,7 +53,13 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
-    let mut config = parse_args(std::env::args().skip(1))?;
+    match parse_args(std::env::args().skip(1))? {
+        AppCommand::Generate(config) => run_generate(config),
+        AppCommand::Update(config) => run_update(&config),
+    }
+}
+
+fn run_generate(mut config: Config) -> Result<(), String> {
     let interactive_terminal = std::io::stdin().is_terminal();
     if config.db_path.is_none()
         && !has_source_inputs(&config)

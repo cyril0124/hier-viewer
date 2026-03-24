@@ -12,6 +12,7 @@
 - hierarchy drill-down、tree panel、matches panel
 - source reader，支持打开 instance 位置和 module 定义
 - filter、analysis pattern、LOC、weighted signal bits
+- release 二进制自更新，带分阶段下载进度显示
 - 本地持久化 UI 配置、bookmark、折叠状态
 
 ## 功能展示
@@ -110,6 +111,14 @@ cargo build --release
 
 如果你使用 VSCode Remote 或 Live Server，直接对输出目录起服务仍然是一个可用的兜底方案。
 
+### 4. 更新已安装的二进制
+
+```bash
+hier-viewer update
+```
+
+这个命令会检查 GitHub Releases，用分阶段进度显示 release 查询、下载、解包和原地替换，然后把当前可执行文件更新到最新稳定版。
+
 ## 依赖要求
 
 ### 构建和运行 `hier-viewer`
@@ -169,6 +178,18 @@ hier-viewer --db path/to/hiers.db --output out --preview
 这种模式下不会重新解析 RTL。
 
 ## 常见命令
+
+### 例 0：自更新当前安装的二进制
+
+```bash
+hier-viewer update
+```
+
+如果要安装某个指定 tag：
+
+```bash
+hier-viewer update --to v1.0.0
+```
 
 ### 例 1：最推荐的第一次使用方式，直接打开 wizard
 

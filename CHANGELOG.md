@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added a manual `hier-viewer update` command that downloads GitHub release binaries with staged terminal progress for release lookup, asset resolution, download, extraction, and in-place installation.
+
 ### Changed
 
 - Release publishing now uses the matching `CHANGELOG.md` version section as the GitHub release body instead of relying on auto-generated release notes.

@@ -11,16 +11,22 @@ path = "rust-hier-viewer/src/main.rs"
 
 [dependencies]
 crossterm = "0.28.1"
+flate2 = "1.1.2"
 fuzzy-matcher = "0.3.7"
 globset = "0.4.16"
 libc = "0.2.177"
 ratatui = "0.29.0"
 rayon = "1.10.0"
 regex = "1.12.2"
+reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
+self-replace = "1.5.0"
+serde = { version = "1.0.228", features = ["derive"] }
 shell-words = "1.1.0"
+tar = "0.4.44"
 time = { version = "0.3.44", features = ["formatting", "local-offset", "macros"] }
 walkdir = "2.5.0"
+zip = { version = "2.4.2", default-features = false, features = ["deflate"] }
 
 [build-dependencies]
 time = { version = "0.3.44", features = ["formatting", "local-offset", "macros"] }

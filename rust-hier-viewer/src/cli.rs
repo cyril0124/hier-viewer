@@ -1,9 +1,32 @@
 use std::process;
 
-use crate::model::Config;
+use crate::model::{AppCommand, Config, UpdateConfig};
 use crate::preview::{DEFAULT_PREVIEW_HOST, DEFAULT_PREVIEW_PORT};
 
-pub(crate) fn parse_args<I>(args: I) -> Result<Config, String>
+pub(crate) fn parse_args<I>(args: I) -> Result<AppCommand, String>
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut iter = args.into_iter();
+    let Some(first_arg) = iter.next() else {
+        return parse_generate_args(Vec::<String>::new()).map(AppCommand::Generate);
+    };
+
+    match first_arg.as_str() {
+        "-h" | "--help" => {
+            print_help();
+            process::exit(0);
+        }
+        "update" => parse_update_args(iter).map(AppCommand::Update),
+        _ => {
+            let mut forwarded_args = vec![first_arg];
+            forwarded_args.extend(iter);
+            parse_generate_args(forwarded_args).map(AppCommand::Generate)
+        }
+    }
+}
+
+fn parse_generate_args<I>(args: I) -> Result<Config, String>
 where
     I: IntoIterator<Item = String>,
 {
@@ -75,10 +98,6 @@ where
                 extra_args_tokens.extend(iter);
                 break;
             }
-            "-h" | "--help" => {
-                print_help();
-                process::exit(0);
-            }
             _ if compiler_arg_requires_value(&arg) => {
                 let value = iter
                     .next()
@@ -89,6 +108,10 @@ where
             _ if is_passthrough_compiler_arg(&arg) => {
                 extra_args_tokens.push(arg);
             }
+            "-h" | "--help" => {
+                print_help();
+                process::exit(0);
+            }
             _ if arg.starts_with('-') => return Err(format!("unknown argument: {arg}")),
             _ => rtl_inputs.push(arg),
         }
@@ -98,10 +121,14 @@ where
         return Err("--db cannot be combined with RTL positional inputs or --filelist".to_string());
     }
     if db_path.is_some() && rebuild_sqlite {
-        return Err("--rebuild-sqlite only applies when building sqlite from RTL inputs".to_string());
+        return Err(
+            "--rebuild-sqlite only applies when building sqlite from RTL inputs".to_string(),
+        );
     }
     if db_path.is_some() && !extra_args_tokens.is_empty() {
-        return Err("--db cannot be combined with compiler passthrough arguments after '--'".to_string());
+        return Err(
+            "--db cannot be combined with compiler passthrough arguments after '--'".to_string(),
+        );
     }
     if !preview && preview_port != DEFAULT_PREVIEW_PORT {
         return Err("--preview-port only applies when --preview is enabled".to_string());
@@ -124,6 +151,51 @@ where
         extra_args_tokens,
         debug,
     })
+}
+
+fn parse_update_args<I>(args: I) -> Result<UpdateConfig, String>
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut target_tag = None;
+    let mut iter = args.into_iter();
+
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--to" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "--to requires a release tag like v1.0.0".to_string())?;
+                target_tag = Some(normalize_requested_tag(&value)?);
+            }
+            "-h" | "--help" => {
+                print_update_help();
+                process::exit(0);
+            }
+            _ => return Err(format!("unknown update argument: {arg}")),
+        }
+    }
+
+    Ok(UpdateConfig { target_tag })
+}
+
+fn normalize_requested_tag(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("--to cannot be empty".to_string());
+    }
+    if trimmed.starts_with('v') {
+        return Ok(trimmed.to_string());
+    }
+    if trimmed
+        .split('.')
+        .all(|segment| !segment.is_empty() && segment.chars().all(|ch| ch.is_ascii_digit()))
+    {
+        return Ok(format!("v{trimmed}"));
+    }
+    Err(format!(
+        "invalid --to value '{trimmed}': expected a release tag like v1.0.0"
+    ))
 }
 
 fn is_passthrough_compiler_arg(arg: &str) -> bool {
@@ -178,6 +250,10 @@ If no RTL paths, filelists, or `--db` are provided on an interactive terminal, a
 
 Usage:
   hier-viewer [OPTIONS] [rtl ...]
+  hier-viewer update [--to <tag>]
+
+Commands:
+  update                 Download and install the latest released binary in place
 
 Arguments:
   [rtl ...]                RTL source paths or wildcard patterns to resolve in the current workspace
@@ -196,6 +272,59 @@ Options:
   -t, --title <text>       Override page title
       --debug              Enable viewer debug overlays such as UI element labels
   -h, --help               Show this help
+
+Update Options:
+      --to <tag>           Install a specific GitHub release tag such as `v1.0.0`
 "
     );
+}
+
+fn print_update_help() {
+    println!(
+        "\
+hier-viewer update
+
+Download and install the latest released hier-viewer binary in place.
+
+Usage:
+  hier-viewer update [--to <tag>]
+
+Options:
+      --to <tag>           Install a specific GitHub release tag such as `v1.0.0`
+  -h, --help               Show this help
+"
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize_requested_tag, parse_args};
+    use crate::model::AppCommand;
+
+    #[test]
+    fn parses_update_subcommand() {
+        let command = parse_args(vec![
+            "update".to_string(),
+            "--to".to_string(),
+            "1.2.3".to_string(),
+        ])
+        .expect("update command should parse");
+        match command {
+            AppCommand::Update(config) => assert_eq!(config.target_tag.as_deref(), Some("v1.2.3")),
+            AppCommand::Generate(_) => panic!("expected update command"),
+        }
+    }
+
+    #[test]
+    fn normalizes_requested_tag() {
+        assert_eq!(
+            normalize_requested_tag("1.0.0").expect("numeric version should normalize"),
+            "v1.0.0"
+        );
+        assert_eq!(
+            normalize_requested_tag("v2.3.4").expect("v-prefixed version should pass through"),
+            "v2.3.4"
+        );
+        assert!(normalize_requested_tag("feature").is_err());
+    }
 }

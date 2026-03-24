@@ -49,6 +49,35 @@ pub(crate) fn color_env_value() -> &'static str {
     if supports_color() { "always" } else { "never" }
 }
 
+pub(crate) fn stderr_is_terminal() -> bool {
+    io::stderr().is_terminal()
+}
+
+pub(crate) fn supports_color_output() -> bool {
+    supports_color()
+}
+
+pub(crate) fn supports_unicode_output() -> bool {
+    if !stderr_is_terminal() {
+        return false;
+    }
+
+    for key in ["LC_ALL", "LC_CTYPE", "LANG"] {
+        let Some(value) = env::var_os(key) else {
+            continue;
+        };
+        if value
+            .to_string_lossy()
+            .to_ascii_uppercase()
+            .contains("UTF-8")
+        {
+            return true;
+        }
+    }
+
+    cfg!(windows)
+}
+
 fn emit(level: LogLevel, target: &str, message: &str) {
     if supports_color() {
         eprintln!(
@@ -128,5 +157,5 @@ fn detect_color_support() -> bool {
         return false;
     }
 
-    io::stderr().is_terminal()
+    stderr_is_terminal()
 }
