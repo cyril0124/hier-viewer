@@ -1686,6 +1686,13 @@
       will-change: opacity, transform;
     }
 
+    .hover-card.locked {
+      box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent),
+        var(--hover-card-shadow),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    }
+
     .hover-card.dragging {
       cursor: grabbing;
     }
@@ -1695,6 +1702,50 @@
       visibility: hidden;
       pointer-events: none;
       transform: translateY(-6px);
+    }
+
+    .hover-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .hover-topbar.hidden {
+      display: none;
+    }
+
+    .hover-state-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 22px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--accent) 36%, transparent);
+      background: color-mix(in srgb, var(--accent-soft) 84%, var(--panel) 16%);
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .hover-dismiss {
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      padding: 0;
+      border-radius: 999px;
+      font-size: 16px;
+      line-height: 1;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: color-mix(in srgb, var(--control-bg) 88%, transparent);
     }
 
     .hover-path {
@@ -3406,6 +3457,7 @@
             <button id="zoom-in-btn" type="button" data-ui-name="zoom-in-btn">+</button>
             <button id="fit-btn" type="button" data-ui-name="fit-btn">Fit</button>
             <button id="clear-treemap-collapses-btn" type="button" title="Expand all treemap-collapsed hierarchy nodes" data-ui-name="clear-treemap-collapses-btn">Unfold</button>
+            <button id="select-mode-btn" type="button" title="Select mode: single-click pins a node, double-click enters it or opens source at a leaf" data-ui-name="select-mode-btn" aria-pressed="false">Select</button>
             <button id="toggle-tree-btn" type="button" data-ui-name="tree-panel-btn">Tree</button>
             <button id="toggle-match-btn" type="button" data-ui-name="matches-panel-btn">Matches</button>
             <div class="metric-group" data-ui-name="level-group">
@@ -3747,6 +3799,10 @@
         </div>
       </aside>
       <div class="hover-card hidden" id="hover-card" data-ui-name="hover-card" data-ui-label="always">
+        <div class="hover-topbar hidden" id="hover-topbar">
+          <div class="hover-state-pill hidden" id="hover-selected-pill">Selected</div>
+          <button class="hover-dismiss hidden" id="hover-dismiss-btn" type="button" aria-label="Clear selected node" title="Clear selected node" data-ui-name="hover-dismiss-btn">×</button>
+        </div>
         <div class="hover-path" id="hover-path"></div>
         <div class="hover-title" id="hover-title"></div>
         <div class="hover-meta" id="hover-meta"></div>
@@ -4351,6 +4407,9 @@
     const zenViewThreeBtn = document.getElementById("zen-view-three-btn");
     const zenExitBtn = document.getElementById("zen-exit-btn");
     const hoverCard = document.getElementById("hover-card");
+    const hoverTopbar = document.getElementById("hover-topbar");
+    const hoverSelectedPill = document.getElementById("hover-selected-pill");
+    const hoverDismissBtn = document.getElementById("hover-dismiss-btn");
     const hoverPath = document.getElementById("hover-path");
     const hoverTitle = document.getElementById("hover-title");
     const hoverMeta = document.getElementById("hover-meta");
@@ -4368,6 +4427,7 @@
     const zoomInBtn = document.getElementById("zoom-in-btn");
     const fitBtn = document.getElementById("fit-btn");
     const clearTreemapCollapsesBtn = document.getElementById("clear-treemap-collapses-btn");
+    const selectModeBtn = document.getElementById("select-mode-btn");
     const toggleTreeBtn = document.getElementById("toggle-tree-btn");
     const toggleMatchBtn = document.getElementById("toggle-match-btn");
     const advancedControlsBtn = document.getElementById("advanced-controls-btn");
@@ -4450,6 +4510,7 @@
     const SOURCE_PLAIN_TEXT_DEFINITION_LINE_THRESHOLD = 80000;
     const SOURCE_PLAIN_TEXT_DEFINITION_CHAR_THRESHOLD = 12000000;
     const defaultHint = "Wheel to zoom. Drag to pan. Click to drill down. Filter supports text, wc:pattern, and re:regex. Signal analysis supports wildcard/text/regex over internal signal names. Press Escape to close source.";
+    const selectModeHint = "Select mode: single-click pins a node and keeps the hover card open. Double-click enters child hierarchy or opens source at a leaf. Right-click returns to the parent hierarchy.";
     const STORAGE_KEY = `hier-viewer:${window.location.pathname}`;
     let currentSourceView = null;
     let sourceSearchMatchElements = [];
@@ -4493,6 +4554,7 @@
       advancedPopoverDragOffsetX: 0,
       advancedPopoverDragOffsetY: 0,
       toolbarCollapsed: false,
+      selectMode: false,
       depthLimit: null,
       zoom: 1,
       viewX: 0,
@@ -4500,6 +4562,8 @@
       areas: [],
       hoverId: null,
       hoverAreaKind: "node",
+      selectedId: null,
+      selectedAreaKind: "node",
       hoverCardActive: false,
       hoverCardLeft: null,
       hoverCardTop: 18,
@@ -4507,6 +4571,7 @@
       hoverCardDragOffsetX: 0,
       hoverCardDragOffsetY: 0,
       hoverUpdateTimer: null,
+      selectClickTimer: null,
       sourceNodeId: null,
       sourceTargetKind: "instance",
       search: "",
@@ -5069,6 +5134,7 @@
           analysisPattern: state.analysisPattern,
           analysisLegendFilter: state.analysisLegendFilter,
           toolbarCollapsed: state.toolbarCollapsed,
+          selectMode: state.selectMode,
           advancedPopoverLeft: state.advancedPopoverLeft,
           advancedPopoverTop: state.advancedPopoverTop,
           depthLimit: state.depthLimit,
@@ -5144,6 +5210,7 @@
         }
         state.searchHistoryByField = normalizeSearchHistoryMap(saved.searchHistoryByField);
         state.toolbarCollapsed = !!saved.toolbarCollapsed;
+        state.selectMode = !!saved.selectMode;
         if (typeof saved.advancedPopoverLeft === "number") state.advancedPopoverLeft = saved.advancedPopoverLeft;
         if (typeof saved.advancedPopoverTop === "number") state.advancedPopoverTop = saved.advancedPopoverTop;
         state.depthLimit = saved.depthLimit === null
@@ -5292,6 +5359,7 @@
       state.chartPanelOpen = state.mainViewMode !== "treemap";
       treemapStage.classList.toggle("active", state.mainViewMode === "treemap");
       chartPanel.classList.toggle("active", state.chartPanelOpen);
+      applySelectModeState();
       viewTreemapBtn.classList.toggle("active", state.mainViewMode === "treemap");
       viewPieBtn.classList.toggle("active", state.mainViewMode === "pie2d");
       viewThreeBtn.classList.toggle("active", state.mainViewMode === "three3d");
@@ -5337,12 +5405,15 @@
     function setMainViewMode(mode) {
       const nextMode = ["treemap", "pie2d", "three3d"].includes(mode) ? mode : "treemap";
       state.mainViewMode = nextMode;
+      if (nextMode !== "treemap") {
+        resetLockedSelection();
+      }
       if (nextMode === "pie2d" || nextMode === "three3d") {
         state.chartRenderMode = nextMode;
         state.chartPanelDirty = true;
-        updateHover(null);
+        updateHover(null, "node", { force: true });
       } else {
-        updateHover(null);
+        updateHover(null, "node", { force: true });
       }
       applyMainViewMode();
       savePersistedState();
@@ -7406,6 +7477,17 @@
       }
     }
 
+    function nodeIsVisibleDescendantOf(rootId, nodeId) {
+      let cursor = nodeId;
+      while (cursor !== null && cursor !== undefined) {
+        if (cursor === rootId) {
+          return true;
+        }
+        cursor = visibleParent(cursor);
+      }
+      return false;
+    }
+
     function buildBreadcrumbs(nodeId) {
       const chain = [];
       let cursor = nodeId;
@@ -8073,6 +8155,9 @@
       const analysisText = analysisActive()
         ? ` · ${analysisLabel()}: <strong>${formatMetricValue(analysisValueForNode(state.currentRoot))}</strong>`
         : "";
+      const selectText = state.mainViewMode === "treemap" && state.selectMode
+        ? " · select <strong>on</strong>"
+        : "";
       const mainViewStatus = state.mainViewMode !== "treemap" && chartController && typeof chartController.viewStatus === "function"
         ? chartController.viewStatus()
         : null;
@@ -8082,8 +8167,8 @@
       statusLeft.innerHTML =
         `<strong>${root.path || "(root)"}</strong> · ${root.children.length} direct children · ` +
         `${metricLabel()}: <strong>${metricValue}</strong> · layout <strong>${layoutModeLabel()}</strong> · decomp <strong>${decompositionLabel()}</strong> · level <strong>${visibleDepthLabel()}</strong> · ` +
-        `zoom <strong>${zoomLabel}</strong>${analysisText}${matchText}`;
-      statusRight.textContent = state.searchError || state.analysisError || (mainViewStatus && mainViewStatus.hintText) || defaultHint;
+        `zoom <strong>${zoomLabel}</strong>${analysisText}${selectText}${matchText}`;
+      statusRight.textContent = state.searchError || state.analysisError || (mainViewStatus && mainViewStatus.hintText) || (state.mainViewMode === "treemap" && state.selectMode ? selectModeHint : defaultHint);
       if (clearTreemapCollapsesBtn) {
         clearTreemapCollapsesBtn.disabled = state.treeCollapsedIds.size === 0;
       }
@@ -8552,16 +8637,34 @@
 
     function setRootAndReset(rootId) {
       cancelScheduledHoverUpdate();
+      clearPendingSelectClick();
+      const preservedSelectedId = state.selectedId;
+      const preservedSelectedAreaKind = state.selectedAreaKind;
+      const preserveSelection =
+        hasLockedSelection() &&
+        nodeIsVisibleDescendantOf(rootId, state.selectedId);
+      if (!preserveSelection) {
+        resetLockedSelection();
+      }
       state.currentRoot = rootId;
       expandTreePath(rootId);
-      state.hoverId = null;
-      state.hoverAreaKind = "node";
+      if (preserveSelection) {
+        expandTreePath(preservedSelectedId);
+      }
       state.treePanelDirty = true;
       resetView();
-      hoverCard.classList.add("hidden");
-      clearUiAnnotationHoverTargetWithin(hoverCard);
+      if (preserveSelection) {
+        updateHover(preservedSelectedId, preservedSelectedAreaKind, { force: true });
+      } else {
+        state.hoverId = null;
+        state.hoverAreaKind = "node";
+        hoverCard.classList.add("hidden");
+        clearUiAnnotationHoverTargetWithin(hoverCard);
+      }
       savePersistedState();
-      draw();
+      if (!preserveSelection) {
+        draw();
+      }
     }
 
     function syncDepthControl() {
@@ -9001,8 +9104,108 @@
       );
     }
 
+    function hiddenSelectedMarkerIds(worldAreas) {
+      const markerIds = new Set();
+      if (!hasLockedSelection()) {
+        return markerIds;
+      }
+
+      let selectedAreaVisible = false;
+      let selectedNodeVisible = false;
+      for (const area of worldAreas) {
+        if (area.nodeId !== state.selectedId) {
+          continue;
+        }
+        if (area.kind === "node") {
+          selectedNodeVisible = true;
+        }
+        if (area.kind === state.selectedAreaKind) {
+          selectedAreaVisible = true;
+          break;
+        }
+      }
+
+      if (selectedAreaVisible) {
+        return markerIds;
+      }
+
+      let cursor = state.selectedAreaKind === "self" && selectedNodeVisible
+        ? state.selectedId
+        : visibleParent(state.selectedId);
+      while (cursor !== null && cursor !== undefined) {
+        markerIds.add(cursor);
+        if (cursor === state.currentRoot) {
+          break;
+        }
+        cursor = visibleParent(cursor);
+      }
+
+      return markerIds;
+    }
+
     function isHoveredArea(area) {
       return area.nodeId === state.hoverId && area.kind === state.hoverAreaKind;
+    }
+
+    function hasLockedSelection() {
+      return state.selectedId !== null && state.selectedId !== undefined;
+    }
+
+    function isSelectedArea(area) {
+      return !!(
+        area &&
+        hasLockedSelection() &&
+        area.nodeId === state.selectedId &&
+        area.kind === state.selectedAreaKind
+      );
+    }
+
+    function clearPendingSelectClick() {
+      if (state.selectClickTimer !== null) {
+        window.clearTimeout(state.selectClickTimer);
+        state.selectClickTimer = null;
+      }
+    }
+
+    function resetLockedSelection() {
+      clearPendingSelectClick();
+      state.selectedId = null;
+      state.selectedAreaKind = "node";
+    }
+
+    function applySelectModeState() {
+      if (!selectModeBtn) {
+        return;
+      }
+      selectModeBtn.classList.toggle("active", state.selectMode);
+      selectModeBtn.setAttribute("aria-pressed", state.selectMode ? "true" : "false");
+    }
+
+    function applyHoverCardLockState() {
+      const locked =
+        hasLockedSelection() &&
+        state.hoverId === state.selectedId &&
+        state.hoverAreaKind === state.selectedAreaKind;
+      hoverCard.classList.toggle("locked", locked);
+      hoverTopbar.classList.toggle("hidden", !locked);
+      hoverSelectedPill.classList.toggle("hidden", !locked);
+      hoverDismissBtn.classList.toggle("hidden", !locked);
+    }
+
+    function lockSelectedArea(nodeId, areaKind = "node") {
+      state.selectedId = nodeId;
+      state.selectedAreaKind = areaKind;
+      updateHover(nodeId, areaKind, { force: true });
+    }
+
+    function clearSelectedArea() {
+      const hadSelection = hasLockedSelection();
+      resetLockedSelection();
+      if (!hadSelection) {
+        updateHover(null, "node", { force: true });
+        return;
+      }
+      updateHover(null, "node", { force: true });
     }
 
     function visibleAreaRect(area) {
@@ -9270,6 +9473,23 @@
       ctx.restore();
     }
 
+    function drawTreemapCornerIndicator(area, slotIndex, fillStyle, outlineStyle, radius = 4.5) {
+      const { x, y, w, h } = visibleAreaRect(area);
+      if (w <= 0 || h <= 0) {
+        return;
+      }
+      const insetX = 11 + slotIndex * (radius * 2 + 4);
+      const dotX = x + w - insetX;
+      const dotY = y + Math.max(11, radius + 6);
+      ctx.fillStyle = fillStyle;
+      ctx.beginPath();
+      ctx.arc(dotX, dotY, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = outlineStyle;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
     function draw() {
       applyMainViewMode();
       applyZenModeState();
@@ -9282,6 +9502,7 @@
       renderTreemapAnalysisLegend();
       const virtual = virtualSize();
       const worldAreas = createAreas(state.currentRoot, virtual.width, virtual.height);
+      const selectedHiddenMarkerIds = hiddenSelectedMarkerIds(worldAreas);
       state.areas = worldAreas
         .map((area) => ({
           nodeId: area.nodeId,
@@ -9404,6 +9625,7 @@
         ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1));
         ctx.setLineDash([]);
 
+        let cornerIndicatorSlot = 0;
         if (isMatch(area.nodeId)) {
           ctx.fillStyle = state.layoutMode === "accurate"
             ? hexToRgba(currentThemeVisuals().match, currentThemeVisuals().dark ? 0.18 : 0.20)
@@ -9413,15 +9635,41 @@
           ctx.strokeStyle = currentThemeVisuals().match;
           ctx.strokeRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
         } else if (hasMatchedDescendant(area.nodeId)) {
-          const dotX = x + w - 11;
-          const dotY = y + 11;
-          ctx.fillStyle = currentThemeVisuals().match;
-          ctx.beginPath();
-          ctx.arc(dotX, dotY, 4.5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = hexToRgba(currentThemeVisuals().panel, currentThemeVisuals().dark ? 0.88 : 0.95);
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
+          drawTreemapCornerIndicator(
+            area,
+            cornerIndicatorSlot,
+            currentThemeVisuals().match,
+            hexToRgba(currentThemeVisuals().panel, currentThemeVisuals().dark ? 0.88 : 0.95),
+            4.5
+          );
+          cornerIndicatorSlot += 1;
+        }
+
+        if (selectedHiddenMarkerIds.has(area.nodeId) && !isSelectedArea(area)) {
+          const selectedNode = getNode(state.selectedId);
+          const selectedMarkerFill = mixHexColors(
+            themeNodeAccent(selectedNode.depth),
+            currentThemeVisuals().text,
+            currentThemeVisuals().dark ? 0.18 : 0.08
+          );
+          drawTreemapCornerIndicator(
+            area,
+            cornerIndicatorSlot,
+            hexToRgba(selectedMarkerFill, currentThemeVisuals().dark ? 0.98 : 0.94),
+            hexToRgba(currentThemeVisuals().panel, currentThemeVisuals().dark ? 0.92 : 0.97),
+            5
+          );
+        }
+
+        if (isSelectedArea(area)) {
+          const selectStroke = mixHexColors(
+            themeNodeAccent(area.level),
+            currentThemeVisuals().text,
+            currentThemeVisuals().dark ? 0.26 : 0.12
+          );
+          ctx.lineWidth = 1.6;
+          ctx.strokeStyle = hexToRgba(selectStroke, currentThemeVisuals().dark ? 0.96 : 0.88);
+          ctx.strokeRect(x + 3, y + 3, Math.max(0, w - 6), Math.max(0, h - 6));
         }
       }
 
@@ -9615,13 +9863,22 @@
       return pointInPolygon(polygon, clientX, clientY);
     }
 
-    function updateHover(nodeId, areaKind = "node") {
+    function updateHover(nodeId, areaKind = "node", options = {}) {
+      const force = !!options.force;
       cancelScheduledHoverUpdate();
+      if (
+        !force &&
+        hasLockedSelection() &&
+        (nodeId !== state.selectedId || areaKind !== state.selectedAreaKind)
+      ) {
+        return;
+      }
       state.hoverId = nodeId;
       state.hoverAreaKind = areaKind;
       if (nodeId === null || nodeId === undefined) {
         state.hoverCardActive = false;
         hoverActions.classList.add("hidden");
+        applyHoverCardLockState();
         if (!sourcePanel.classList.contains("visible")) {
           hoverCard.classList.add("hidden");
           clearUiAnnotationHoverTargetWithin(hoverCard);
@@ -9691,6 +9948,8 @@
         );
       }
       hoverMeta.innerHTML = hoverMetaLines.join("");
+      hoverSelectedPill.textContent = areaKind === "self" ? "Selected Self" : "Selected";
+      applyHoverCardLockState();
       const hasInstanceSource = nodeHasInstanceSource(node);
       const hasDefinitionSource = nodeHasDefinitionSource(node);
       openInstanceSourceBtn.hidden = !hasInstanceSource;
@@ -9723,6 +9982,31 @@
       }
     }
 
+    function activateTreemapArea(area) {
+      if (!area) {
+        return;
+      }
+      const nodeId = area.nodeId;
+      const node = getNode(nodeId);
+      if (area.kind === "self") {
+        if (nodeId !== state.currentRoot) {
+          setRootAndReset(nodeId);
+          return;
+        }
+        if (nodeHasAnySource(node)) {
+          renderSource(nodeId);
+        }
+        return;
+      }
+      if (node.children.length) {
+        setRootAndReset(nodeId);
+        return;
+      }
+      if (nodeHasAnySource(node)) {
+        renderSource(nodeId);
+      }
+    }
+
     hoverCard.addEventListener("mouseenter", () => {
       if (!isHoverCardVisible()) {
         return;
@@ -9733,7 +10017,7 @@
 
     hoverCard.addEventListener("mouseleave", (event) => {
       state.hoverCardActive = false;
-      if (sourcePanel.classList.contains("visible")) {
+      if (sourcePanel.classList.contains("visible") || hasLockedSelection()) {
         return;
       }
       const nextHoverArea = hitTestArea(event.clientX, event.clientY);
@@ -9800,6 +10084,9 @@
         draw();
         return;
       }
+      if (hasLockedSelection()) {
+        return;
+      }
       if (state.hoverCardActive || isPointInsideElement(hoverCard, event.clientX, event.clientY)) {
         return;
       }
@@ -9815,6 +10102,9 @@
         event.relatedTarget &&
         hoverCard.contains(event.relatedTarget)
       ) {
+        return;
+      }
+      if (hasLockedSelection()) {
         return;
       }
       if (!state.isDragging) {
@@ -9837,33 +10127,29 @@
       const toggleArea = hitTestTreemapCollapseToggle(event.clientX, event.clientY);
       if (toggleArea) {
         toggleTreemapCollapsedNode(toggleArea.nodeId);
-        updateHover(toggleArea.nodeId, toggleArea.kind);
+        if (!hasLockedSelection()) {
+          updateHover(toggleArea.nodeId, toggleArea.kind);
+        }
         return;
       }
       const area = hitTestArea(event.clientX, event.clientY);
+      if (state.selectMode) {
+        clearPendingSelectClick();
+        if (!area) {
+          clearSelectedArea();
+          return;
+        }
+        state.selectClickTimer = window.setTimeout(() => {
+          state.selectClickTimer = null;
+          lockSelectedArea(area.nodeId, area.kind);
+        }, 220);
+        return;
+      }
       if (!area) {
         updateHover(null);
         return;
       }
-      const nodeId = area.nodeId;
-      const node = getNode(nodeId);
-      if (area.kind === "self") {
-        if (nodeId !== state.currentRoot) {
-          setRootAndReset(nodeId);
-          return;
-        }
-        if (nodeHasAnySource(node)) {
-          renderSource(nodeId);
-        }
-        return;
-      }
-      if (node.children.length) {
-        setRootAndReset(nodeId);
-        return;
-      }
-      if (nodeHasAnySource(node)) {
-        renderSource(nodeId);
-      }
+      activateTreemapArea(area);
     });
 
     canvas.addEventListener("contextmenu", (event) => {
@@ -9896,6 +10182,22 @@
     }, { passive: false });
 
     canvas.addEventListener("dblclick", (event) => {
+      clearPendingSelectClick();
+      if (state.selectMode) {
+        if (state.isDragging || state.dragMoved) {
+          state.dragMoved = false;
+          return;
+        }
+        if (hitTestTreemapCollapseToggle(event.clientX, event.clientY)) {
+          return;
+        }
+        const area = hitTestArea(event.clientX, event.clientY);
+        if (!area) {
+          return;
+        }
+        activateTreemapArea(area);
+        return;
+      }
       const rect = canvas.getBoundingClientRect();
       const anchorX = event.clientX - rect.left;
       const anchorY = event.clientY - rect.top;
@@ -10096,6 +10398,28 @@
       if (state.hoverId === null || state.hoverId === undefined) return;
       renderSource(state.hoverId, "definition");
     });
+
+    if (hoverDismissBtn) {
+      hoverDismissBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        clearSelectedArea();
+      });
+    }
+
+    if (selectModeBtn) {
+      selectModeBtn.addEventListener("click", () => {
+        state.selectMode = !state.selectMode;
+        if (!state.selectMode) {
+          clearSelectedArea();
+          savePersistedState();
+        } else {
+          applySelectModeState();
+          savePersistedState();
+          draw();
+        }
+      });
+    }
 
     advancedControlsBtn.addEventListener("click", (event) => {
       event.stopPropagation();
