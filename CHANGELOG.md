@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Treemap selections in `Select` mode now stay pinned when the selected node is temporarily outside the visible treemap due to zoom, depth limiting, or collapsed hierarchy, with ancestor markers indicating where the hidden selection lives.
 - Navigating back to ancestor treemap roots no longer clears a locked selection as long as the selected node still belongs to the currently visible subtree.
+- Treemap collapse `-/+` controls and tree-panel expand/collapse toggles now show a clear hover highlight so the fold target is easier to confirm before clicking.
 
 ## [1.0.0] - 2026-03-24
 

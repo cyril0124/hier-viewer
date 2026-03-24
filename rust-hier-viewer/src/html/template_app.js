@@ -662,6 +662,7 @@
       areas: [],
       hoverId: null,
       hoverAreaKind: "node",
+      hoveredTreemapToggleId: null,
       selectedId: null,
       selectedAreaKind: "node",
       hoverCardActive: false,
@@ -5247,6 +5248,14 @@
       return area.nodeId === state.hoverId && area.kind === state.hoverAreaKind;
     }
 
+    function setHoveredTreemapToggle(nodeId) {
+      if (state.hoveredTreemapToggleId === nodeId) {
+        return false;
+      }
+      state.hoveredTreemapToggleId = nodeId;
+      return true;
+    }
+
     function hasLockedSelection() {
       return state.selectedId !== null && state.selectedId !== undefined;
     }
@@ -5521,7 +5530,8 @@
         return;
       }
       const collapsed = isTreemapNodeCollapsed(area.nodeId);
-      const hovered = isHoveredArea(area);
+      const toggleHovered = state.hoveredTreemapToggleId === area.nodeId;
+      const hovered = toggleHovered || isHoveredArea(area);
       const dimmed = shouldDim(area.nodeId);
       const theme = currentThemeVisuals();
       const fillBase = collapsed
@@ -5531,14 +5541,14 @@
         ? mixHexColors(theme.text, theme.match, theme.dark ? 0.22 : 0.12)
         : mixHexColors(theme.text, theme.panel, theme.dark ? 0.10 : 0.05);
       const fillAlphaBase = collapsed
-        ? (hovered ? 0.54 : 0.36)
-        : (hovered ? 0.24 : 0.12);
+        ? (toggleHovered ? 0.72 : (hovered ? 0.54 : 0.36))
+        : (toggleHovered ? 0.42 : (hovered ? 0.24 : 0.12));
       const strokeAlphaBase = collapsed
-        ? (hovered ? 0.66 : 0.44)
-        : (hovered ? 0.34 : 0.18);
+        ? (toggleHovered ? 0.92 : (hovered ? 0.66 : 0.44))
+        : (toggleHovered ? 0.58 : (hovered ? 0.34 : 0.18));
       const symbolAlphaBase = collapsed
-        ? (hovered ? 0.96 : 0.84)
-        : (hovered ? 0.82 : 0.58);
+        ? (toggleHovered ? 1 : (hovered ? 0.96 : 0.84))
+        : (toggleHovered ? 0.96 : (hovered ? 0.82 : 0.58));
       const alphaScale = dimmed ? 0.82 : 1;
       const fillAlpha = fillAlphaBase * alphaScale;
       const strokeAlpha = strokeAlphaBase * alphaScale;
@@ -5554,13 +5564,17 @@
       ctx.save();
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      if (toggleHovered) {
+        ctx.shadowColor = hexToRgba(theme.match, theme.dark ? 0.34 : 0.24);
+        ctx.shadowBlur = collapsed ? 14 : 10;
+      }
       ctx.fillStyle = hexToRgba(fillBase, fillAlpha);
       ctx.fill();
-      ctx.lineWidth = hovered ? 1.2 : 0.95;
+      ctx.lineWidth = toggleHovered ? 1.45 : (hovered ? 1.2 : 0.95);
       ctx.strokeStyle = hexToRgba(strokeBase, strokeAlpha);
       ctx.stroke();
       ctx.strokeStyle = hexToRgba(symbolBase, symbolAlpha);
-      ctx.lineWidth = Math.max(1.1, toggleRect.w * 0.09);
+      ctx.lineWidth = Math.max(toggleHovered ? 1.35 : 1.1, toggleRect.w * (toggleHovered ? 0.11 : 0.09));
       ctx.lineCap = "round";
       ctx.beginPath();
       ctx.moveTo(centerX - half, centerY);
@@ -6184,34 +6198,59 @@
         draw();
         return;
       }
+      const toggleArea = hitTestTreemapCollapseToggle(event.clientX, event.clientY);
+      const toggleChanged = setHoveredTreemapToggle(toggleArea ? toggleArea.nodeId : null);
+      canvas.style.cursor = toggleArea ? "pointer" : "default";
       if (hasLockedSelection()) {
+        if (toggleChanged) {
+          draw();
+        }
         return;
       }
       if (state.hoverCardActive || isPointInsideElement(hoverCard, event.clientX, event.clientY)) {
+        if (toggleChanged) {
+          draw();
+        }
         return;
       }
       if (isPointInsideHoverBridge(event.clientX, event.clientY)) {
+        if (toggleChanged) {
+          draw();
+        }
         return;
       }
       scheduleHoverUpdate(hitTestArea(event.clientX, event.clientY));
     });
 
     canvas.addEventListener("mouseleave", (event) => {
+      const toggleChanged = setHoveredTreemapToggle(null);
+      canvas.style.cursor = "default";
       if (
         isHoverCardVisible() &&
         event.relatedTarget &&
         hoverCard.contains(event.relatedTarget)
       ) {
+        if (toggleChanged) {
+          draw();
+        }
         return;
       }
       if (hasLockedSelection()) {
+        if (toggleChanged) {
+          draw();
+        }
         return;
       }
       if (!state.isDragging) {
         if (isPointInsideHoverBridge(event.clientX, event.clientY)) {
+          if (toggleChanged) {
+            draw();
+          }
           return;
         }
         scheduleHoverUpdate(null);
+      } else if (toggleChanged) {
+        draw();
       }
     });
 
@@ -6266,6 +6305,7 @@
         event.preventDefault();
         return;
       }
+      setHoveredTreemapToggle(null);
       state.isDragging = true;
       state.dragMoved = false;
       state.lastPointerX = event.clientX;
