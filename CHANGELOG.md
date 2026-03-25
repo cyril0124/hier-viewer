@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-03-25
+
 ### Fixed
 
 - Filelist-driven sqlite cache invalidation now fingerprints the source paths referenced by command files as well, so deleting or changing files listed under `--filelist` no longer silently reuses a stale cached sqlite export.
@@ -65,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interrupted `slang` FetchContent checkouts by automatically discarding incomplete cached sources before reconfiguring.
 - Release packaging now keeps the downloaded archive names platform-specific while restoring the actual executable name inside each archive to `hier-viewer` or `hier-viewer.exe`.
 
-[Unreleased]: https://github.com/cyril0124/hier-viewer/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/cyril0124/hier-viewer/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/cyril0124/hier-viewer/releases/tag/v1.1.1
 [1.1.0]: https://github.com/cyril0124/hier-viewer/releases/tag/v1.1.0
 [1.0.0]: https://github.com/cyril0124/hier-viewer/releases/tag/v1.0.0
