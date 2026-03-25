@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Filelist-driven sqlite cache invalidation now fingerprints the source paths referenced by command files as well, so deleting or changing files listed under `--filelist` no longer silently reuses a stale cached sqlite export.
 - Treemap collapse `-/+` hover targets now show a small floating tooltip with the current instance name and module name, making it easier to confirm exactly which node will fold before clicking.
 
 ## [1.1.0] - 2026-03-24
