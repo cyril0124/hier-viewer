@@ -514,6 +514,9 @@
     const hoverTitle = document.getElementById("hover-title");
     const hoverMeta = document.getElementById("hover-meta");
     const hoverActions = document.getElementById("hover-actions");
+    const treemapToggleTooltip = document.getElementById("treemap-toggle-tooltip");
+    const treemapToggleTooltipInstance = document.getElementById("treemap-toggle-tooltip-instance");
+    const treemapToggleTooltipModule = document.getElementById("treemap-toggle-tooltip-module");
     const openInstanceSourceBtn = document.getElementById("open-instance-source-btn");
     const openModuleSourceBtn = document.getElementById("open-module-source-btn");
     const pageTitle = document.getElementById("page-title");
@@ -663,6 +666,9 @@
       hoverId: null,
       hoverAreaKind: "node",
       hoveredTreemapToggleId: null,
+      treemapToggleTooltipNodeId: null,
+      treemapToggleTooltipClientX: 0,
+      treemapToggleTooltipClientY: 0,
       selectedId: null,
       selectedAreaKind: "node",
       hoverCardActive: false,
@@ -830,6 +836,51 @@
 
     function hoverMetaLine(label, value) {
       return `<div class="hover-meta-line"><span class="hover-meta-label">${escapeHtml(label)}:</span> ${escapeHtml(value)}</div>`;
+    }
+
+    function nodeInstanceLabel(node) {
+      const value = typeof node?.name === "string" ? node.name.trim() : "";
+      return value || "(root)";
+    }
+
+    function hideTreemapToggleTooltip() {
+      state.treemapToggleTooltipNodeId = null;
+      if (!treemapToggleTooltip) {
+        return;
+      }
+      treemapToggleTooltip.classList.add("hidden");
+    }
+
+    function positionTreemapToggleTooltip(clientX = state.treemapToggleTooltipClientX, clientY = state.treemapToggleTooltipClientY) {
+      if (!treemapToggleTooltip || state.treemapToggleTooltipNodeId === null) {
+        return;
+      }
+      const offsetX = 16;
+      const offsetY = 20;
+      const margin = 10;
+      const tooltipWidth = treemapToggleTooltip.offsetWidth || 0;
+      const tooltipHeight = treemapToggleTooltip.offsetHeight || 0;
+      const maxLeft = Math.max(margin, window.innerWidth - tooltipWidth - margin);
+      const maxTop = Math.max(margin, window.innerHeight - tooltipHeight - margin);
+      const left = clamp(clientX + offsetX, margin, maxLeft);
+      const top = clamp(clientY + offsetY, margin, maxTop);
+      treemapToggleTooltip.style.left = `${left}px`;
+      treemapToggleTooltip.style.top = `${top}px`;
+    }
+
+    function showTreemapToggleTooltip(nodeId, clientX, clientY) {
+      if (!Number.isInteger(nodeId) || nodeId < 0 || nodeId >= nodes.length || !treemapToggleTooltip) {
+        hideTreemapToggleTooltip();
+        return;
+      }
+      state.treemapToggleTooltipNodeId = nodeId;
+      state.treemapToggleTooltipClientX = clientX;
+      state.treemapToggleTooltipClientY = clientY;
+      const node = getNode(nodeId);
+      treemapToggleTooltipInstance.textContent = nodeInstanceLabel(node);
+      treemapToggleTooltipModule.textContent = node.module || "(unknown)";
+      treemapToggleTooltip.classList.remove("hidden");
+      positionTreemapToggleTooltip(clientX, clientY);
     }
 
     function isGenericViewerTitle(title) {
@@ -1506,6 +1557,7 @@
     function setMainViewMode(mode) {
       const nextMode = ["treemap", "pie2d", "three3d"].includes(mode) ? mode : "treemap";
       state.mainViewMode = nextMode;
+      hideTreemapToggleTooltip();
       if (nextMode !== "treemap") {
         resetLockedSelection();
       }
@@ -4719,6 +4771,7 @@
       state.isDragging = false;
       state.dragMoved = false;
       canvas.style.cursor = "default";
+      hideTreemapToggleTooltip();
     }
 
     function changeZoom(factor, anchorX, anchorY) {
@@ -4739,6 +4792,7 @@
     function setRootAndReset(rootId) {
       cancelScheduledHoverUpdate();
       clearPendingSelectClick();
+      hideTreemapToggleTooltip();
       const preservedSelectedId = state.selectedId;
       const preservedSelectedAreaKind = state.selectedAreaKind;
       const preserveSelection =
@@ -6184,6 +6238,7 @@
 
     canvas.addEventListener("mousemove", (event) => {
       if (state.isDragging) {
+        hideTreemapToggleTooltip();
         const dx = event.clientX - state.lastPointerX;
         const dy = event.clientY - state.lastPointerY;
         if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
@@ -6200,6 +6255,11 @@
       }
       const toggleArea = hitTestTreemapCollapseToggle(event.clientX, event.clientY);
       const toggleChanged = setHoveredTreemapToggle(toggleArea ? toggleArea.nodeId : null);
+      if (toggleArea) {
+        showTreemapToggleTooltip(toggleArea.nodeId, event.clientX, event.clientY);
+      } else {
+        hideTreemapToggleTooltip();
+      }
       canvas.style.cursor = toggleArea ? "pointer" : "default";
       if (hasLockedSelection()) {
         if (toggleChanged) {
@@ -6224,6 +6284,7 @@
 
     canvas.addEventListener("mouseleave", (event) => {
       const toggleChanged = setHoveredTreemapToggle(null);
+      hideTreemapToggleTooltip();
       canvas.style.cursor = "default";
       if (
         isHoverCardVisible() &&
@@ -6305,6 +6366,7 @@
         event.preventDefault();
         return;
       }
+      hideTreemapToggleTooltip();
       setHoveredTreemapToggle(null);
       state.isDragging = true;
       state.dragMoved = false;
@@ -6812,6 +6874,10 @@
 
     const observer = new ResizeObserver(() => draw());
     observer.observe(canvas);
+
+    window.addEventListener("resize", () => {
+      positionTreemapToggleTooltip();
+    });
 
     treePanelResizer.addEventListener("mousedown", (event) => {
       if (event.button !== 0) return;

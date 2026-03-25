@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Treemap collapse `-/+` hover targets now show a small floating tooltip with the current instance name and module name, making it easier to confirm exactly which node will fold before clicking.
+
 ## [1.1.0] - 2026-03-24
 
 ### Added
