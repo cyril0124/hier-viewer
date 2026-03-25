@@ -608,10 +608,10 @@
     const SOURCE_COMPACT_RENDER_INSTANCE_CHAR_THRESHOLD = 320000;
     const SOURCE_COMPACT_RENDER_DEFINITION_LINE_THRESHOLD = 1800;
     const SOURCE_COMPACT_RENDER_DEFINITION_CHAR_THRESHOLD = 260000;
-    const SOURCE_PLAIN_TEXT_INSTANCE_LINE_THRESHOLD = 120000;
-    const SOURCE_PLAIN_TEXT_INSTANCE_CHAR_THRESHOLD = 20000000;
-    const SOURCE_PLAIN_TEXT_DEFINITION_LINE_THRESHOLD = 80000;
-    const SOURCE_PLAIN_TEXT_DEFINITION_CHAR_THRESHOLD = 12000000;
+    const SOURCE_PLAIN_TEXT_INSTANCE_LINE_THRESHOLD = 500000;
+    const SOURCE_PLAIN_TEXT_INSTANCE_CHAR_THRESHOLD = 40000000;
+    const SOURCE_PLAIN_TEXT_DEFINITION_LINE_THRESHOLD = 300000;
+    const SOURCE_PLAIN_TEXT_DEFINITION_CHAR_THRESHOLD = 24000000;
     const defaultHint = "Wheel to zoom. Drag to pan. Click to drill down. Filter supports text, wc:pattern, and re:regex. Signal analysis supports wildcard/text/regex over internal signal names. Press Escape to close source.";
     const selectModeHint = "Select mode: single-click pins a node and keeps the hover card open. Double-click enters child hierarchy or opens source at a leaf. Right-click returns to the parent hierarchy.";
     const STORAGE_KEY = `hier-viewer:${window.location.pathname}`;
@@ -2325,7 +2325,7 @@
           renderSourceBookmarkBar();
           return;
         }
-        selectPlainSourceRange(range.start, range.end, true);
+        selectPlainSourceRange(range.start, range.end, true, lineNo);
         showSourceStatus(`Jumped to bookmark line ${lineNo}.`);
         renderSourceBookmarkBar();
         return;
@@ -2363,7 +2363,7 @@
         if (!startRange || !endRange) {
           return false;
         }
-        selectPlainSourceRange(startRange.start, endRange.end, true);
+        selectPlainSourceRange(startRange.start, endRange.end, true, startLine);
         return true;
       }
       clearSourceFocusJump();
@@ -2589,7 +2589,81 @@
       return { start, end, index };
     }
 
-    function selectPlainSourceRange(start, end, scrollIntoView = true) {
+    function measurePlainSourceMetrics(view, textarea) {
+      if (!view || !textarea) {
+        return null;
+      }
+      const cached = view.plainMetrics;
+      if (
+        cached
+        && cached.width === textarea.clientWidth
+        && cached.height === textarea.clientHeight
+      ) {
+        return cached;
+      }
+      const style = window.getComputedStyle(textarea);
+      const metrics = {
+        lineHeight: Number.parseFloat(style.lineHeight) || 21.33,
+        paddingTop: Number.parseFloat(style.paddingTop) || 0,
+        paddingBottom: Number.parseFloat(style.paddingBottom) || 0,
+        width: textarea.clientWidth,
+        height: textarea.clientHeight,
+      };
+      view.plainMetrics = metrics;
+      return metrics;
+    }
+
+    function plainSourceScrollTopForLine(view, textarea, lineNo, block = "center") {
+      if (!view || !textarea) {
+        return null;
+      }
+      const index = lineNo - view.firstLineNumber;
+      if (index < 0 || index >= view.lines.length) {
+        return null;
+      }
+      const metrics = measurePlainSourceMetrics(view, textarea);
+      if (!metrics) {
+        return null;
+      }
+      const viewportHeight = Math.max(
+        1,
+        textarea.clientHeight - metrics.paddingTop - metrics.paddingBottom,
+      );
+      const maxScrollTop = Math.max(0, textarea.scrollHeight - textarea.clientHeight);
+      const lineTop = metrics.paddingTop + index * metrics.lineHeight;
+      if (block === "start") {
+        return Math.max(0, Math.min(maxScrollTop, lineTop));
+      }
+      if (block === "nearest") {
+        const currentTop = textarea.scrollTop;
+        const currentBottom = currentTop + textarea.clientHeight;
+        const lineBottom = lineTop + metrics.lineHeight;
+        if (lineTop >= currentTop && lineBottom <= currentBottom) {
+          return currentTop;
+        }
+      }
+      const centered = lineTop - Math.max(0, (viewportHeight - metrics.lineHeight) / 2);
+      return Math.max(0, Math.min(maxScrollTop, centered));
+    }
+
+    function scrollPlainSourceLineIntoView(lineNo, block = "center") {
+      const textarea = plainSourceTextarea();
+      if (!textarea || !currentSourceView) {
+        return;
+      }
+      const nextScrollTop = plainSourceScrollTopForLine(
+        currentSourceView,
+        textarea,
+        lineNo,
+        block,
+      );
+      if (nextScrollTop === null) {
+        return;
+      }
+      textarea.scrollTop = nextScrollTop;
+    }
+
+    function selectPlainSourceRange(start, end, scrollIntoView = true, lineNo = null) {
       const textarea = plainSourceTextarea();
       if (!textarea) {
         return;
@@ -2600,6 +2674,9 @@
         textarea.focus();
       }
       textarea.setSelectionRange(start, end);
+      if (scrollIntoView && Number.isInteger(lineNo)) {
+        scrollPlainSourceLineIntoView(lineNo, "center");
+      }
     }
 
     function buildPlainSourceSearchMatches(view, search) {
@@ -2699,7 +2776,7 @@
           return;
         }
         const current = plainMatches[state.sourceSearchMatchIndex];
-        selectPlainSourceRange(current.start, current.end, scrollIntoView);
+        selectPlainSourceRange(current.start, current.end, scrollIntoView, current.lineNo);
         updateSourceSearchStatus();
         return;
       }
@@ -3123,6 +3200,7 @@
         text: typeof options.text === "string" ? options.text : null,
         textLength: Number.isInteger(options.textLength) ? options.textLength : null,
         lineOffsets: Array.isArray(options.lineOffsets) ? options.lineOffsets : null,
+        plainMetrics: null,
         plainSearchMatches: [],
         searchMatchRecords: [],
         searchMatchRangesByLine: new Map(),

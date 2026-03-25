@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Tightened the Cargo package contents for source-based installation and updated the install docs to recommend GitHub release binaries first, with `cargo install --git` / `cargo install --path` documented as advanced source-install options.
 - Selecting `Weighted Signal Bits` as the treemap sizing mode now defaults the layout to `Accurate`, and viewers that start with weighted sizing also initialize in `Accurate` layout by default.
+- Raised the large-source plain-text fallback thresholds so source files around a few hundred thousand lines keep the virtualized highlighted renderer, preserving syntax coloring and search navigation for large RTL files such as 220k-line drops.
+- Plain-text large-source fallback now keeps search, bookmark, and focus jumps navigable by explicitly scrolling the textarea viewport to the selected line.
 
 ## [1.1.1] - 2026-03-25
 
