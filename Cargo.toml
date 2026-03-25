@@ -2,8 +2,24 @@
 name = "hier-viewer"
 version = "1.1.1"
 edition = "2024"
+description = "Static hierarchy viewer for large RTL designs"
 readme = "README.md"
+repository = "https://github.com/cyril0124/hier-viewer"
+homepage = "https://github.com/cyril0124/hier-viewer"
+keywords = ["rtl", "verilog", "systemverilog", "viewer", "eda"]
+categories = ["command-line-utilities", "visualization"]
 default-run = "hier-viewer"
+include = [
+  "/Cargo.toml",
+  "/Cargo.lock",
+  "/README.md",
+  "/README.zh-CN.md",
+  "/CHANGELOG.md",
+  "/build.rs",
+  "/cpp-hier-exporter/CMakeLists.txt",
+  "/cpp-hier-exporter/src/**",
+  "/rust-hier-viewer/src/**",
+]
 
 [[bin]]
 name = "hier-viewer"

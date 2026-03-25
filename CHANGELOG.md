@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Tightened the Cargo package contents for source-based installation and updated the install docs to recommend GitHub release binaries first, with `cargo install --git` / `cargo install --path` documented as advanced source-install options.
+
 ## [1.1.1] - 2026-03-25
 
 ### Fixed

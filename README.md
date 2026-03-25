@@ -72,6 +72,42 @@ If you are using it for the first time, read `Quick Start` and `Common Commands`
 Unless noted otherwise, the command examples below assume `hier-viewer` is already available on your `PATH`.
 If you are running directly from the source tree, replace `hier-viewer` with `./target/release/hier-viewer`.
 
+## Install
+
+### Recommended: install a release binary
+
+```bash
+hier-viewer update
+```
+
+If you do not have `hier-viewer` installed yet, download the archive for your platform from GitHub Releases, unpack it, and put the `hier-viewer` binary on your `PATH`.
+
+This is the recommended path because it avoids rebuilding the embedded `slang-hier-exporter` locally and matches the binaries tested by the release workflow.
+
+### Advanced: install from GitHub with Cargo
+
+```bash
+cargo install --git https://github.com/cyril0124/hier-viewer --locked
+```
+
+### Advanced: install from a local checkout with Cargo
+
+```bash
+cargo install --path . --locked
+```
+
+These Cargo-based installation paths still build the embedded `slang-hier-exporter`, so you need the same native build tools as a normal source build:
+
+- `cmake`
+- `ninja`
+- a C++20 compiler
+
+If your environment cannot fetch `slang` from GitHub during install, point Cargo builds at a local checkout first:
+
+```bash
+export HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR=/path/to/slang
+```
+
 ## Examples
 
 - [`examples/ibex-example`](examples/ibex-example) is the recommended first example. It uses a pinned `lowRISC/ibex` submodule, static filelists, and two short wrapper scripts for `ibex_top` and `ibex_simple_system`.

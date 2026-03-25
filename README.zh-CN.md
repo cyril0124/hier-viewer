@@ -72,6 +72,42 @@
 下面大部分命令示例默认都假设 `hier-viewer` 已经在你的 `PATH` 里。
 如果你是在源码目录里直接运行，可以把 `hier-viewer` 替换成 `./target/release/hier-viewer`。
 
+## 安装
+
+### 推荐：安装 release 二进制
+
+```bash
+hier-viewer update
+```
+
+如果你还没有安装 `hier-viewer`，推荐直接从 GitHub Releases 下载对应平台的压缩包，解压后把 `hier-viewer` 放到 `PATH` 里。
+
+这是最推荐的安装方式，因为它不需要在本地重新编译内置的 `slang-hier-exporter`，并且和 release workflow 实际验证过的二进制一致。
+
+### 进阶：用 Cargo 从 GitHub 安装
+
+```bash
+cargo install --git https://github.com/cyril0124/hier-viewer --locked
+```
+
+### 进阶：用 Cargo 从本地源码目录安装
+
+```bash
+cargo install --path . --locked
+```
+
+这两种 Cargo 安装方式本质上都还是会编译内置的 `slang-hier-exporter`，所以原生构建依赖和普通源码构建一致：
+
+- `cmake`
+- `ninja`
+- 支持 C++20 的编译器
+
+如果你的环境在安装阶段不能直接从 GitHub 拉取 `slang`，可以先指定本地 checkout：
+
+```bash
+export HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR=/path/to/slang
+```
+
 ## 示例
 
 - [`examples/ibex-example`](examples/ibex-example) 是最推荐先看的示例。它使用固定版本的 `lowRISC/ibex` submodule、静态 filelist，以及两个很短的包装脚本来打开 `ibex_top` 和 `ibex_simple_system`。
