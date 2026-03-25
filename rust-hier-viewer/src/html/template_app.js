@@ -630,7 +630,9 @@
       metric: DATA.defaultMetric,
       weightedVariableWeight: 1,
       weightedNetWeight: 0.15,
-      layoutMode: "classic",
+      layoutMode: DATA.defaultMetric === "weighted_signals" || DATA.defaultMetric === "signals"
+        ? "accurate"
+        : "classic",
       decomposition: "subtree",
       analysisMode: "none",
       analysisPatternMode: "wildcard",
@@ -6750,6 +6752,10 @@
 
     metricSelect.addEventListener("change", () => {
       state.metric = metricSelect.value;
+      if (state.metric === "weighted_signals") {
+        state.layoutMode = "accurate";
+        layoutSelect.value = state.layoutMode;
+      }
       syncMetricHelp();
       savePersistedState();
       draw();

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Tightened the Cargo package contents for source-based installation and updated the install docs to recommend GitHub release binaries first, with `cargo install --git` / `cargo install --path` documented as advanced source-install options.
+- Selecting `Weighted Signal Bits` as the treemap sizing mode now defaults the layout to `Accurate`, and viewers that start with weighted sizing also initialize in `Accurate` layout by default.
 
 ## [1.1.1] - 2026-03-25
 
