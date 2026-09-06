@@ -92,7 +92,10 @@ impl PreviewServer {
     }
 
     fn viewer_url(&self) -> String {
-        format!("http://{}:{}/index.html", self.viewer_host_display, self.port)
+        format!(
+            "http://{}:{}/index.html",
+            self.viewer_host_display, self.port
+        )
     }
 
     fn serve_forever(self) -> Result<(), String> {
@@ -262,13 +265,8 @@ fn handle_connection(mut stream: TcpStream, root_dir: &Path) -> Result<(), Strin
 
             let content_type = content_type_for_path(&path);
             let content_length = metadata.len();
-            write_response_headers(
-                &mut stream,
-                Status::ok(),
-                content_type,
-                content_length,
-            )
-            .map_err(|err| format!("failed to write preview response headers: {err}"))?;
+            write_response_headers(&mut stream, Status::ok(), content_type, content_length)
+                .map_err(|err| format!("failed to write preview response headers: {err}"))?;
 
             if method != "HEAD" {
                 let mut file = fs::File::open(&canonical_path).map_err(|err| {
@@ -279,11 +277,9 @@ fn handle_connection(mut stream: TcpStream, root_dir: &Path) -> Result<(), Strin
                 })?;
                 let mut buffer = [0u8; 64 * 1024];
                 loop {
-                    let read = file
-                        .read(&mut buffer)
-                        .map_err(|err| {
-                            format!("failed to read '{}': {err}", canonical_path.display())
-                        })?;
+                    let read = file.read(&mut buffer).map_err(|err| {
+                        format!("failed to read '{}': {err}", canonical_path.display())
+                    })?;
                     if read == 0 {
                         break;
                     }
@@ -309,13 +305,7 @@ fn handle_connection(mut stream: TcpStream, root_dir: &Path) -> Result<(), Strin
 }
 
 fn resolve_request_path(root_dir: &Path, target: &str) -> Result<PathBuf, Status> {
-    let raw_path = target
-        .split_once('?')
-        .map(|(path, _)| path)
-        .unwrap_or(target)
-        .split_once('#')
-        .map(|(path, _)| path)
-        .unwrap_or(target);
+    let raw_path = target.split(['?', '#']).next().unwrap_or(target);
     if raw_path.is_empty() || !raw_path.starts_with('/') {
         return Err(Status::bad_request());
     }
@@ -429,7 +419,10 @@ fn maybe_open_browser(url: &str, interactive_terminal: bool) {
     {
         info(
             "preview",
-            format!("Preview URL: {} (browser auto-open skipped in SSH session)", url),
+            format!(
+                "Preview URL: {} (browser auto-open skipped in SSH session)",
+                url
+            ),
         );
         return;
     }
@@ -473,8 +466,7 @@ fn browser_command(url: &str) -> Option<Command> {
 
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        if std::env::var_os("DISPLAY").is_none() && std::env::var_os("WAYLAND_DISPLAY").is_none()
-        {
+        if std::env::var_os("DISPLAY").is_none() && std::env::var_os("WAYLAND_DISPLAY").is_none() {
             return None;
         }
         let mut command = Command::new("xdg-open");
@@ -569,8 +561,40 @@ mod tests {
             resolve_request_path(root, "/").expect("root path should resolve"),
             root.join("index.html")
         );
-        let status = resolve_request_path(root, "/../secret").expect_err("parent traversal must fail");
+        let status =
+            resolve_request_path(root, "/../secret").expect_err("parent traversal must fail");
         assert_eq!(status.code, Status::forbidden().code);
+    }
+
+    #[test]
+    fn request_query_and_fragment_do_not_become_file_names() {
+        let root = Path::new("/tmp/hier-viewer-preview-root");
+        for target in ["/", "/?v=1", "/#top", "/?v=1#top", "/#top?v=1"] {
+            assert_eq!(
+                resolve_request_path(root, target).unwrap(),
+                root.join("index.html")
+            );
+        }
+        for target in [
+            "/viewer-core.bin?v=1",
+            "/viewer-core.bin#data",
+            "/viewer-core.bin?v=1#data",
+        ] {
+            assert_eq!(
+                resolve_request_path(root, target).unwrap(),
+                root.join("viewer-core.bin")
+            );
+        }
+        assert_eq!(
+            resolve_request_path(root, "/a%3Fb%23c.sv?v=1").unwrap(),
+            root.join("a?b#c.sv")
+        );
+        assert_eq!(
+            resolve_request_path(root, "/%2e%2e/secret?v=1")
+                .unwrap_err()
+                .code,
+            403
+        );
     }
 
     #[test]

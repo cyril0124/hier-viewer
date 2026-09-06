@@ -409,7 +409,7 @@ When the input comes from RTL rather than `--db`, the viewer stores cache files 
 
 The cache key includes:
 
-- RTL source file content and timestamps
+- RTL source file paths, sizes, and modification timestamps
 - filelists
 - extra slang flags
 - the `slang-hier-exporter` fingerprint
@@ -420,7 +420,7 @@ So:
 - if inputs changed, the sqlite export is rebuilt automatically
 - if you pass `-r` / `--rebuild-sqlite`, rebuild is always forced
 
-The command-line logs also explain why a cache was reused or rebuilt.
+The command-line logs also explain why a cache was reused or rebuilt. Cache reuse also checks the files actually read by the exporter, including included headers. See [export and bundle contracts](docs/export-and-bundle-contracts.md#cached-source-dependencies) for the invalidation rules and limits.
 
 ## Output Directory Layout
 
@@ -538,6 +538,7 @@ Usually because the page was opened through `file://`, or because the static ser
 ## Related Documents
 
 - [Area sizing strategy](docs/area-sizing-strategy.md)
+- [Export and bundle contracts](docs/export-and-bundle-contracts.md)
 
 ## AI Development
 

@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <optional>
@@ -16,6 +18,7 @@
 #include "slang/diagnostics/DiagnosticEngine.h"
 #include "slang/diagnostics/Diagnostics.h"
 #include "slang/driver/Driver.h"
+#include "slang/text/SourceManager.h"
 #include "slang/util/VersionInfo.h"
 
 using namespace slang;
@@ -84,6 +87,25 @@ bool hasSynthesisDefine(const std::vector<std::string>& defines) {
         }
     }
     return false;
+}
+
+std::vector<std::string> collectSourceDependencies(const SourceManager& sourceManager) {
+    std::vector<std::string> dependencies;
+    for (const auto buffer : sourceManager.getAllBuffers()) {
+        const auto& path = sourceManager.getFullPath(buffer);
+        if (path.empty()) {
+            continue;
+        }
+        // Disk reads use canonical cache keys; assignText keeps its synthetic path key.
+        const auto normalizedPath = std::filesystem::weakly_canonical(std::filesystem::absolute(path));
+        if (!sourceManager.isCached(normalizedPath)) {
+            continue;
+        }
+        dependencies.push_back(std::filesystem::canonical(normalizedPath).generic_string());
+    }
+    std::sort(dependencies.begin(), dependencies.end());
+    dependencies.erase(std::unique(dependencies.begin(), dependencies.end()), dependencies.end());
+    return dependencies;
 }
 
 void printHelp(Driver& driver) {
@@ -239,6 +261,7 @@ int main(int argc, char** argv) {
                 hier::logInfo("slang-hier-exporter", "Writing SQLite hierarchy output");
                 hier::generateSqliteHierarchy(collected.hierarchyEntries, collected.instanceMetadata,
                                               collected.definitionSignalSummaries,
+                                              collectSourceDependencies(*compilation->getSourceManager()),
                                               *cliOptions.outputPath, cliOptions.viewerConfig);
                 hier::logInfo("slang-hier-exporter",
                               std::string("SQLite hierarchy written to: ") + *cliOptions.outputPath);

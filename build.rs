@@ -15,7 +15,8 @@ const COLOR_COMPONENT: &str = "\x1b[35m";
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
-    emit_rerun_for_dir(Path::new("cpp-hier-exporter"));
+    println!("cargo:rerun-if-changed=cpp-hier-exporter/CMakeLists.txt");
+    emit_rerun_for_dir(Path::new("cpp-hier-exporter/src"));
     println!("cargo:rerun-if-env-changed=HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR");
     println!("cargo:rerun-if-env-changed=HIER_VIEWER_EXPORTER_FULLY_STATIC");
     println!("cargo:rerun-if-env-changed=HIER_VIEWER_EXPORTER_CMAKE_TOOLCHAIN_FILE");
@@ -113,6 +114,8 @@ fn main() {
     build
         .arg("--build")
         .arg(&build_dir)
+        .arg("--config")
+        .arg(build_type)
         .arg("--target")
         .arg("slang-hier-exporter");
     emit_build_log(
@@ -168,7 +171,10 @@ fn main() {
     println!("cargo:rustc-env=HIER_VIEWER_EMBEDDED_EXPORTER_HASH={embedded_hash}");
     emit_build_log(
         "INFO ",
-        format!("slang-hier-exporter is embedded with hash {}", embedded_hash),
+        format!(
+            "slang-hier-exporter is embedded with hash {}",
+            embedded_hash
+        ),
     );
 }
 
@@ -179,6 +185,7 @@ const EXPORTER_BINARY_NAME: &str = if cfg!(windows) {
 };
 
 fn emit_rerun_for_dir(dir: &Path) {
+    println!("cargo:rerun-if-changed={}", dir.display());
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();

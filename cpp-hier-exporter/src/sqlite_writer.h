@@ -15,6 +15,7 @@ void generateSqliteHierarchy(
     const std::vector<HierarchyEntry>& hierarchyData,
     const std::vector<InstanceMetadata>& instanceMetadata,
     const std::vector<std::pair<uint64_t, DefinitionSignalSummary>>& definitionSignalSummaries,
+    const std::vector<std::string>& dependencies,
     const std::string& outputPath,
     const ViewerConfig& config);
 

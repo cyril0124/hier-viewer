@@ -81,8 +81,8 @@ fn run_generate(mut config: Config) -> Result<(), String> {
     let needs_export_selection =
         config.db_path.is_none() && (interactive_terminal || has_source_inputs(&config));
     let startup_selection = if needs_export_selection {
-        let file_index = FileIndex::build()?;
         if has_source_inputs(&config) {
+            let file_index = FileIndex::for_inputs(&config.rtl_inputs)?;
             let selection = StartupSelection {
                 output_dir: config.output_path.clone().ok_or_else(|| {
                     "--output <dir> is required when using RTL positional inputs or --filelist"
@@ -99,6 +99,7 @@ fn run_generate(mut config: Config) -> Result<(), String> {
             };
             Some(selection)
         } else if !config.no_wizard {
+            let file_index = FileIndex::build()?;
             let mut selection = wizard::run_startup_wizard(&config, &file_index)?;
             selection.rebuild_sqlite = config.rebuild_sqlite;
             config.output_path = Some(selection.output_dir.clone());

@@ -153,6 +153,7 @@ void generateSqliteHierarchy(
     const std::vector<HierarchyEntry>& hierarchyData,
     const std::vector<InstanceMetadata>& instanceMetadata,
     const std::vector<std::pair<uint64_t, DefinitionSignalSummary>>& definitionSignalSummaries,
+    const std::vector<std::string>& dependencies,
     const std::string& outputPath,
     const ViewerConfig& config) {
     const auto compiled = compileViewerConfig(config);
@@ -212,6 +213,7 @@ void generateSqliteHierarchy(
         exec(db, "BEGIN IMMEDIATE");
         exec(db,
              "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
+             "CREATE TABLE source_dependencies (path TEXT PRIMARY KEY);"
              "CREATE TABLE instances ("
              "path TEXT PRIMARY KEY,"
              "parent_path TEXT,"
@@ -274,6 +276,16 @@ void generateSqliteHierarchy(
              "CREATE INDEX idx_instances_definition_key ON instances(definition_key);"
              "CREATE INDEX idx_def_signal_stats_definition_key ON definition_signal_stats(definition_key);"
              "CREATE INDEX idx_def_signal_stats_signal_name ON definition_signal_stats(signal_name);");
+
+        Statement dependencyStmt(db, "INSERT INTO source_dependencies(path) VALUES(?1)");
+        for (const auto& path : dependencies) {
+            dependencyStmt.reset();
+            checkSqlite(sqlite3_bind_text(dependencyStmt.get(), 1, path.c_str(), -1,
+                                         SQLITE_TRANSIENT),
+                        db, "failed to bind source dependency path");
+            checkSqlite(sqlite3_step(dependencyStmt.get()), db,
+                        "failed to insert source dependency");
+        }
 
         Statement metaStmt(db, "INSERT INTO meta(key, value) VALUES(?1, ?2)");
         auto insertMeta = [&](const std::string& key, const std::string& value) {

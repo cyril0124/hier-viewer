@@ -93,7 +93,7 @@ target_link_libraries(
 set_target_properties(
   slang-hier-exporter
   PROPERTIES OUTPUT_NAME "slang-hier-exporter"
-             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/out/bin")
+             RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_BINARY_DIR}/out/bin>")
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux" AND HIER_VIEWER_EXPORTER_FULLY_STATIC)
   target_link_options(slang-hier-exporter PRIVATE -static -static-libstdc++ -static-libgcc)

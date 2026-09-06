@@ -14,6 +14,7 @@ use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use globset::{Glob, GlobSetBuilder};
 use regex::Regex;
+use rusqlite::{Connection, OpenFlags};
 use shell_words::split as shell_split;
 use walkdir::{DirEntry, WalkDir};
 
@@ -104,9 +105,38 @@ pub(crate) struct FileIndex {
 }
 
 impl FileIndex {
+    pub(crate) fn for_inputs(rtl_paths: &[String]) -> Result<Self, String> {
+        let cwd = env::current_dir()
+            .map_err(|err| format!("failed to determine current directory: {err}"))?;
+        Self::for_inputs_at(cwd, rtl_paths)
+    }
+
+    fn for_inputs_at(cwd: PathBuf, rtl_paths: &[String]) -> Result<Self, String> {
+        let patterns = if rtl_paths.iter().any(|path| !path.trim().is_empty()) {
+            normalize_patterns(rtl_paths)?
+        } else {
+            Vec::new()
+        };
+        if patterns.iter().any(|pattern| {
+            contains_glob_meta(pattern) && !pattern.starts_with('/') && !pattern.starts_with('~')
+        }) {
+            return Self::build_at(cwd);
+        }
+        Ok(Self {
+            cwd,
+            home_dir: home_dir(),
+            rtl_files_relative: Vec::new(),
+            rtl_files_absolute: Vec::new(),
+        })
+    }
+
     pub(crate) fn build() -> Result<Self, String> {
         let cwd = env::current_dir()
             .map_err(|err| format!("failed to determine current directory: {err}"))?;
+        Self::build_at(cwd)
+    }
+
+    fn build_at(cwd: PathBuf) -> Result<Self, String> {
         let mut rtl_files_relative = Vec::new();
         let mut rtl_files_absolute = Vec::new();
         let walker = WalkDir::new(&cwd)
@@ -406,7 +436,10 @@ pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<Exp
     validate_command_file_sources(selection)?;
     let cache_key = compute_sqlite_cache_key(selection, &exporter)?;
     let export_path = cache_dir.join(format!("{cache_key}.sqlite"));
-    if export_path.is_file() && !selection.rebuild_sqlite {
+    if export_path.is_file()
+        && !selection.rebuild_sqlite
+        && cached_dependencies_match(&export_path)?
+    {
         info(
             "launcher",
             format!(
@@ -490,6 +523,8 @@ pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<Exp
         });
     }
 
+    store_dependency_signature(&temp_export_path)?;
+
     if export_path.exists() {
         fs::remove_file(&export_path).map_err(|err| {
             format!(
@@ -520,6 +555,68 @@ pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<Exp
         sqlite_path: path_to_unix_string(&export_path),
         temporary: false,
     })
+}
+
+fn source_dependency_signature(db: &Connection) -> Result<Option<String>, String> {
+    let mut statement = db
+        .prepare("SELECT path FROM source_dependencies ORDER BY path")
+        .map_err(|err| format!("failed to query source dependencies: {err}"))?;
+    let paths = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|err| format!("failed to read source dependencies: {err}"))?;
+    let mut hasher = StableHasher::default();
+    for path in paths {
+        let path = path.map_err(|err| format!("failed to read source dependency path: {err}"))?;
+        let metadata = match fs::metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                info(
+                    "launcher",
+                    format!("cache miss: source dependency '{path}' was deleted"),
+                );
+                return Ok(None);
+            }
+            Err(err) => return Err(format!("failed to stat source dependency '{path}': {err}")),
+        };
+        write_metadata_fingerprint(&mut hasher, Path::new(&path), &metadata)?;
+    }
+    Ok(Some(hasher.finish_hex()))
+}
+
+fn store_dependency_signature(path: &Path) -> Result<(), String> {
+    let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
+        .map_err(|err| format!("failed to open exported sqlite '{}': {err}", path.display()))?;
+    let signature = source_dependency_signature(&db)?.ok_or_else(|| {
+        "source dependency disappeared while finalizing sqlite export".to_string()
+    })?;
+    db.execute_batch("CREATE TABLE cache_metadata (dependency_signature TEXT NOT NULL)")
+        .map_err(|err| format!("failed to create sqlite cache metadata: {err}"))?;
+    db.execute("INSERT INTO cache_metadata VALUES (?1)", [&signature])
+        .map_err(|err| format!("failed to store sqlite dependency signature: {err}"))?;
+    Ok(())
+}
+
+fn cached_dependencies_match(path: &Path) -> Result<bool, String> {
+    let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|err| format!("failed to open cached sqlite '{}': {err}", path.display()))?;
+    let stored: String = db
+        .query_row(
+            "SELECT dependency_signature FROM cache_metadata",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|err| format!("failed to read sqlite dependency signature: {err}"))?;
+    let Some(current) = source_dependency_signature(&db)? else {
+        return Ok(false);
+    };
+    if current != stored {
+        info(
+            "launcher",
+            "cache miss: source dependency fingerprint changed",
+        );
+        return Ok(false);
+    }
+    Ok(true)
 }
 
 fn sqlite_cache_dir(output_dir: &str) -> PathBuf {
@@ -595,8 +692,7 @@ fn ensure_embedded_hierarchy_exporter() -> Result<PathBuf, String> {
 }
 
 fn embedded_exporter_target_path() -> PathBuf {
-    embedded_exporter_base_dir()
-        .join(format!("{EMBEDDED_EXPORTER_HASH}-{EXPORTER_BINARY_NAME}"))
+    embedded_exporter_base_dir().join(format!("{EMBEDDED_EXPORTER_HASH}-{EXPORTER_BINARY_NAME}"))
 }
 
 fn embedded_exporter_base_dir() -> PathBuf {
@@ -741,8 +837,8 @@ fn ensure_executable_permissions(path: &Path) -> Result<(), String> {
     {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
-        let metadata =
-            fs::metadata(path).map_err(|err| format!("failed to stat '{}': {err}", path.display()))?;
+        let metadata = fs::metadata(path)
+            .map_err(|err| format!("failed to stat '{}': {err}", path.display()))?;
         let current_mode = metadata.permissions().mode() & 0o777;
         if current_mode & 0o111 != 0 {
             return Ok(());
@@ -835,8 +931,8 @@ fn compute_sqlite_cache_key(
     exporter: &HierarchyExporter,
 ) -> Result<String, String> {
     let mut hasher = StableHasher::default();
-    let cwd =
-        env::current_dir().map_err(|err| format!("failed to determine current directory: {err}"))?;
+    let cwd = env::current_dir()
+        .map_err(|err| format!("failed to determine current directory: {err}"))?;
     let home = home_dir();
     let mut fingerprinted_command_files = BTreeSet::new();
     let mut previous_was_filelist = false;
@@ -878,22 +974,28 @@ fn compute_sqlite_cache_key(
 fn write_path_fingerprint(hasher: &mut StableHasher, path: &Path) -> Result<(), String> {
     let metadata =
         fs::metadata(path).map_err(|err| format!("failed to stat '{}': {err}", path.display()))?;
+    write_metadata_fingerprint(hasher, path, &metadata)
+}
+
+fn write_metadata_fingerprint(
+    hasher: &mut StableHasher,
+    path: &Path,
+    metadata: &fs::Metadata,
+) -> Result<(), String> {
     hasher.write_str(&path_to_unix_string(path));
     hasher.write_u64(metadata.len());
-    let modified_secs = metadata
+    let modified = metadata
         .modified()
-        .ok()
-        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
-        .map(|value| value.as_secs())
-        .unwrap_or(0);
-    let modified_nanos = metadata
-        .modified()
-        .ok()
-        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
-        .map(|value| value.subsec_nanos())
-        .unwrap_or(0);
-    hasher.write_u64(modified_secs);
-    hasher.write_u32(modified_nanos);
+        .map_err(|err| {
+            format!(
+                "failed to read modification time for '{}': {err}",
+                path.display()
+            )
+        })?
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    hasher.write_u64(modified.as_secs());
+    hasher.write_u32(modified.subsec_nanos());
     Ok(())
 }
 
@@ -912,8 +1014,8 @@ struct MissingCommandFileEntry {
 }
 
 fn validate_command_file_sources(selection: &StartupSelection) -> Result<(), String> {
-    let cwd =
-        env::current_dir().map_err(|err| format!("failed to determine current directory: {err}"))?;
+    let cwd = env::current_dir()
+        .map_err(|err| format!("failed to determine current directory: {err}"))?;
     let home = home_dir();
     let mut visited = BTreeSet::new();
     let mut missing_entries = Vec::new();
@@ -1037,13 +1139,7 @@ fn fingerprint_command_file(
                 for include_dir in rest.split('+').filter(|value| !value.is_empty()) {
                     fingerprint_resolved_path(
                         hasher,
-                        &resolve_command_file_token(
-                            command_dir,
-                            mode,
-                            cwd,
-                            home_dir,
-                            include_dir,
-                        ),
+                        &resolve_command_file_token(command_dir, mode, cwd, home_dir, include_dir),
                     )?;
                 }
                 index += 1;
@@ -1122,13 +1218,8 @@ fn collect_missing_command_file_entries(
             }
             if let Some(rest) = token.strip_prefix("+incdir+") {
                 for include_dir in rest.split('+').filter(|value| !value.is_empty()) {
-                    let resolved = resolve_command_file_token(
-                        command_dir,
-                        mode,
-                        cwd,
-                        home_dir,
-                        include_dir,
-                    );
+                    let resolved =
+                        resolve_command_file_token(command_dir, mode, cwd, home_dir, include_dir);
                     if !resolved.exists() {
                         missing_entries.push(MissingCommandFileEntry {
                             command_file: key.clone(),
@@ -1145,8 +1236,7 @@ fn collect_missing_command_file_entries(
                 index += 1;
                 continue;
             }
-            let resolved =
-                resolve_command_file_token(command_dir, mode, cwd, home_dir, token);
+            let resolved = resolve_command_file_token(command_dir, mode, cwd, home_dir, token);
             if !resolved.exists() {
                 missing_entries.push(MissingCommandFileEntry {
                     command_file: key.clone(),
@@ -1608,21 +1698,158 @@ mod tests {
     }
 
     #[test]
+    fn cached_dependencies_detect_modified_and_deleted_headers() {
+        let temp_dir = temp_test_dir("cache-dependencies");
+        let header = temp_dir.join("defs.svh");
+        let sqlite = temp_dir.join("hier.sqlite");
+        fs::write(&header, "`define WIDTH 8\n").expect("write header");
+        {
+            let db = Connection::open(&sqlite).expect("open sqlite");
+            db.execute_batch("CREATE TABLE source_dependencies (path TEXT PRIMARY KEY)")
+                .expect("create dependencies");
+            db.execute(
+                "INSERT INTO source_dependencies VALUES (?1)",
+                [path_to_unix_string(&header)],
+            )
+            .expect("insert header dependency");
+        }
+        store_dependency_signature(&sqlite).expect("store signature");
+        assert!(cached_dependencies_match(&sqlite).expect("unchanged dependency"));
+        fs::write(&header, "`define WIDTH 128\n").expect("modify header");
+        assert!(!cached_dependencies_match(&sqlite).expect("modified dependency"));
+        fs::remove_file(&header).expect("delete header");
+        assert!(!cached_dependencies_match(&sqlite).expect("deleted dependency"));
+        fs::remove_dir_all(temp_dir).expect("remove temp test dir");
+    }
+
+    #[test]
+    fn dependency_sql_errors_are_not_cache_misses() {
+        let temp_dir = temp_test_dir("cache-invalid-schema");
+        let sqlite = temp_dir.join("hier.sqlite");
+        let db = Connection::open(&sqlite).expect("open sqlite");
+        assert!(
+            store_dependency_signature(&sqlite)
+                .unwrap_err()
+                .contains("source_dependencies")
+        );
+        db.execute_batch("CREATE TABLE source_dependencies (path TEXT PRIMARY KEY)")
+            .expect("create dependencies");
+        assert!(
+            cached_dependencies_match(&sqlite)
+                .unwrap_err()
+                .contains("dependency signature")
+        );
+        drop(db);
+        fs::remove_dir_all(temp_dir).expect("remove temp test dir");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dependency_io_errors_are_not_cache_misses() {
+        let temp_dir = temp_test_dir("cache-io-error");
+        let header = temp_dir.join("defs.svh");
+        std::os::unix::fs::symlink(&header, &header).expect("create symlink loop");
+        let db = Connection::open_in_memory().expect("open sqlite");
+        db.execute_batch("CREATE TABLE source_dependencies (path TEXT PRIMARY KEY)")
+            .expect("create dependencies");
+        db.execute(
+            "INSERT INTO source_dependencies VALUES (?1)",
+            [path_to_unix_string(&header)],
+        )
+        .expect("insert dependency");
+        assert!(
+            source_dependency_signature(&db)
+                .unwrap_err()
+                .contains("failed to stat")
+        );
+        fs::remove_dir_all(temp_dir).expect("remove temp test dir");
+    }
+
+    #[test]
+    fn explicit_inputs_do_not_index_unrelated_workspace_files() {
+        let temp_dir = temp_test_dir("targeted-inputs");
+        fs::create_dir_all(temp_dir.join("rtl/nested")).expect("create rtl dir");
+        fs::create_dir(temp_dir.join("unrelated")).expect("create unrelated dir");
+        let source = temp_dir.join("rtl/nested/top.sv");
+        fs::write(&source, "module top; endmodule").expect("write source");
+        fs::write(
+            temp_dir.join("unrelated/unused.sv"),
+            "module unused; endmodule",
+        )
+        .expect("write unrelated source");
+        let expected = vec![path_to_unix_string(&source)];
+        for pattern in [
+            "  rtl/nested/top.sv  ".to_string(),
+            "rtl".to_string(),
+            path_to_unix_string(&source),
+            path_to_unix_string(temp_dir.join("rtl/**/*.sv")),
+        ] {
+            let patterns = vec![pattern];
+            let index =
+                FileIndex::for_inputs_at(temp_dir.clone(), &patterns).expect("create index");
+            assert_eq!(index.file_count(), 0);
+            assert!(index.rtl_files_absolute.is_empty());
+            assert_eq!(
+                index
+                    .resolve_patterns(&patterns, PatternMode::Wildcard)
+                    .unwrap(),
+                expected
+            );
+        }
+        let filelist = temp_dir.join("files.f");
+        fs::write(&filelist, "rtl/nested/top.sv\n").expect("write filelist");
+        let index = FileIndex::for_inputs_at(temp_dir.clone(), &[]).expect("empty inputs");
+        assert_eq!(index.file_count(), 0);
+        assert_eq!(
+            index
+                .build_source_args(&[], PatternMode::Wildcard, &["files.f".to_string()])
+                .unwrap(),
+            vec!["-f".to_string(), path_to_unix_string(filelist)]
+        );
+        fs::remove_dir_all(temp_dir).expect("remove temp test dir");
+    }
+
+    #[test]
+    fn relative_globs_keep_complete_workspace_index() {
+        let temp_dir = temp_test_dir("relative-globs");
+        fs::create_dir_all(temp_dir.join("rtl/nested")).expect("create rtl dir");
+        let sources = [
+            temp_dir.join("top.sv"),
+            temp_dir.join("rtl/nested/child.sv"),
+        ];
+        for source in &sources {
+            fs::write(source, "module test; endmodule").expect("write source");
+        }
+        let patterns = vec!["  **/*.sv  ".to_string()];
+        let index = FileIndex::for_inputs_at(temp_dir.clone(), &patterns).expect("create index");
+        assert_eq!(index.file_count(), sources.len());
+        let mut expected = sources.iter().map(path_to_unix_string).collect::<Vec<_>>();
+        expected.sort();
+        assert_eq!(
+            index
+                .resolve_patterns(&patterns, PatternMode::Wildcard)
+                .unwrap(),
+            expected
+        );
+        fs::remove_dir_all(temp_dir).expect("remove temp test dir");
+    }
+
+    #[test]
     fn cache_key_changes_when_filelist_referenced_source_disappears() {
         let temp_dir = temp_test_dir("filelist-missing-source");
         let source_path = temp_dir.join("top.sv");
         let filelist_path = temp_dir.join("files.f");
         fs::write(&source_path, "module top; endmodule\n").expect("write source");
-        fs::write(&filelist_path, format!("{}\n", path_to_unix_string(&source_path)))
-            .expect("write filelist");
+        fs::write(
+            &filelist_path,
+            format!("{}\n", path_to_unix_string(&source_path)),
+        )
+        .expect("write filelist");
 
         let selection = StartupSelection {
             output_dir: path_to_unix_string(&temp_dir),
             title: None,
-            source_args_tokens: vec![
-                "-f".to_string(),
-                path_to_unix_string(&filelist_path),
-            ],
+            source_args_tokens: vec!["-f".to_string(), path_to_unix_string(&filelist_path)],
             extra_args_tokens: Vec::new(),
             rebuild_sqlite: false,
         };
@@ -1655,10 +1882,7 @@ mod tests {
         let selection = StartupSelection {
             output_dir: path_to_unix_string(&temp_dir),
             title: None,
-            source_args_tokens: vec![
-                "-f".to_string(),
-                path_to_unix_string(&filelist_path),
-            ],
+            source_args_tokens: vec!["-f".to_string(), path_to_unix_string(&filelist_path)],
             extra_args_tokens: Vec::new(),
             rebuild_sqlite: false,
         };

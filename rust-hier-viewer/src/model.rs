@@ -41,12 +41,6 @@ pub(crate) struct Entry {
     pub(crate) module_signal_bits: usize,
     pub(crate) module_internal_signal_count: usize,
     pub(crate) module_gen_signal_count: usize,
-    pub(crate) snippet_start_line: Option<usize>,
-    pub(crate) snippet_end_line: Option<usize>,
-    pub(crate) snippet_text: Option<String>,
-    pub(crate) definition_snippet_start_line: Option<usize>,
-    pub(crate) definition_snippet_end_line: Option<usize>,
-    pub(crate) definition_snippet_text: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -88,12 +82,6 @@ pub(crate) struct Node {
     pub(crate) definition_column: Option<usize>,
     pub(crate) definition_end_line: Option<usize>,
     pub(crate) definition_end_column: Option<usize>,
-    pub(crate) snippet_start_line: Option<usize>,
-    pub(crate) snippet_end_line: Option<usize>,
-    pub(crate) snippet_text: Option<String>,
-    pub(crate) definition_snippet_start_line: Option<usize>,
-    pub(crate) definition_snippet_end_line: Option<usize>,
-    pub(crate) definition_snippet_text: Option<String>,
 }
 
 #[derive(Debug)]

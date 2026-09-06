@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Parameterized instances now retain their own elaborated signal widths and generate-dependent counts instead of reusing the first instance's statistics.
+- Cached exports are invalidated when an actual source dependency, including an included header, changes or disappears.
+- Bundled source paths no longer collide when different source directories share filenames, and source URLs encode reserved characters in directory and file names.
+- Analysis charts refresh when lazy-loaded signal data finishes loading or fails.
+- Preview requests with query parameters resolve to the requested file instead of returning an incorrect 404.
+- Multi-configuration CMake generators use the selected build profile and emit the exporter at the path expected by Cargo.
+
 ### Changed
+
+- Removed unused source-snippet extraction from bundle generation and compute hierarchy statistics iteratively without cloning child lists.
+- Explicit RTL paths, directories, absolute globs, and filelist-only input skip the workspace-wide RTL index; the wizard and relative wildcard searches still build it.
+- Signal analysis matches each shared definition once per pattern update, and hierarchy depth and analysis totals use iterative traversal for wide and deep trees.
+- Exporter statistics reuse slang's canonical elaborated instance bodies and avoid copying signal-detail vectors for each instance.
 
 - Tightened the Cargo package contents for source-based installation and updated the install docs to recommend GitHub release binaries first, with `cargo install --git` / `cargo install --path` documented as advanced source-install options.
 - Selecting `Weighted Signal Bits` as the treemap sizing mode now defaults the layout to `Accurate`, and viewers that start with weighted sizing also initialize in `Accurate` layout by default.

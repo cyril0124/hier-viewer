@@ -1,11 +1,9 @@
 #include "exporter.h"
 
-#include <algorithm>
 #include <functional>
 #include <map>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -36,35 +34,6 @@ struct SourceRangeEnd {
     std::optional<size_t> endLine;
     std::optional<size_t> endColumn;
 };
-
-uint64_t fnv1a64(std::string_view text) {
-    uint64_t hash = 0xcbf29ce484222325ull;
-    for (unsigned char ch : text) {
-        hash ^= uint64_t(ch);
-        hash *= 0x100000001b3ull;
-    }
-    return hash;
-}
-
-uint64_t stableDefinitionKey(std::string_view moduleName,
-                             std::string_view definitionFilePath,
-                             const std::optional<size_t>& definitionLine,
-                             const std::optional<size_t>& definitionColumn) {
-    std::string raw;
-    raw.reserve(moduleName.size() + definitionFilePath.size() + 32);
-    raw.append(moduleName);
-    raw.push_back('\0');
-    raw.append(definitionFilePath);
-    raw.push_back('\0');
-    if (definitionLine) {
-        raw.append(std::to_string(*definitionLine));
-    }
-    raw.push_back('\0');
-    if (definitionColumn) {
-        raw.append(std::to_string(*definitionColumn));
-    }
-    return fnv1a64(raw) & ((uint64_t(1) << 63) - 1);
-}
 
 SourceLocationInfo originalLocationDetails(const SourceManager& sourceManager,
                                            SourceLocation location) {
@@ -331,17 +300,20 @@ private:
     std::vector<std::pair<std::string, std::string>> hierarchyData;
     std::vector<HierarchyEntry> hierarchyEntries;
     std::vector<InstanceMetadata> instanceMetadata;
-    std::unordered_map<uint64_t, ModuleMetrics> definitionShapeCache;
-    std::unordered_map<uint64_t, DefinitionSignalSummary> definitionSignalCache;
+    struct CachedDefinition {
+        ModuleMetrics shape;
+        DefinitionSignalSummary signals;
+    };
 
-    std::vector<std::pair<uint64_t, DefinitionSignalSummary>> orderedSignalSummaries() const {
+    std::unordered_map<const InstanceBodySymbol*, uint64_t> definitionKeys;
+    std::vector<CachedDefinition> definitionCache;
+
+    std::vector<std::pair<uint64_t, DefinitionSignalSummary>> orderedSignalSummaries() {
         std::vector<std::pair<uint64_t, DefinitionSignalSummary>> result;
-        result.reserve(definitionSignalCache.size());
-        for (const auto& [key, summary] : definitionSignalCache) {
-            result.push_back({key, summary});
+        result.reserve(definitionCache.size());
+        for (size_t index = 0; index < definitionCache.size(); ++index) {
+            result.emplace_back(index + 1, std::move(definitionCache[index].signals));
         }
-        std::sort(result.begin(), result.end(),
-                  [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
         return result;
     }
 
@@ -350,13 +322,8 @@ private:
         hierarchyEntries.reserve(instanceMetadata.size());
 
         for (const auto& instance : instanceMetadata) {
-            DefinitionSignalSummary signalSummary;
-            if (instance.definitionKey) {
-                auto it = definitionSignalCache.find(*instance.definitionKey);
-                if (it != definitionSignalCache.end()) {
-                    signalSummary = it->second;
-                }
-            }
+            const auto& signalSummary =
+                definitionCache.at(instance.definitionKey.value() - 1).signals;
 
             hierarchyEntries.push_back(HierarchyEntry{
                 .path = instance.path,
@@ -423,19 +390,18 @@ private:
             definitionEnd = originalRangeEnd(sourceManager, syntax->sourceRange());
         }
 
-        ModuleMetrics definitionShape;
-        std::optional<uint64_t> definitionKey;
-        if (!definitionLoc.filePath.empty()) {
-            definitionKey = stableDefinitionKey(moduleName, definitionLoc.filePath,
-                                                definitionLoc.line, definitionLoc.column);
-            if (!definitionShapeCache.count(*definitionKey)) {
-                definitionShapeCache.emplace(*definitionKey, collectDefinitionShape(node.body));
-            }
-            if (!definitionSignalCache.count(*definitionKey)) {
-                definitionSignalCache.emplace(*definitionKey, collectDefinitionSignals(node.body));
-            }
-            definitionShape = definitionShapeCache.at(*definitionKey);
+        const auto* body = node.getCanonicalBody();
+        if (!body) {
+            body = &node.body;
         }
+
+        // Keys are one-based cache indices local to this export, not source identities.
+        const auto [keyIt, inserted] = definitionKeys.try_emplace(body, definitionCache.size() + 1);
+        const uint64_t definitionKey = keyIt->second;
+        if (inserted) {
+            definitionCache.push_back({collectDefinitionShape(*body), collectDefinitionSignals(*body)});
+        }
+        const auto& definitionShape = definitionCache.at(definitionKey - 1).shape;
 
         instanceMetadata.push_back(InstanceMetadata{
             .path = hierPath,

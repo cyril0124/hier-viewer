@@ -3509,14 +3509,24 @@
       if (subtreeDepthCache[nodeId] !== -1) {
         return subtreeDepthCache[nodeId];
       }
-      const node = getNode(nodeId);
-      if (!node.children.length) {
-        subtreeDepthCache[nodeId] = 0;
-        return 0;
+      const order = [nodeId];
+      for (let i = 0; i < order.length; i += 1) {
+        for (const childId of getNode(order[i]).children) {
+          if (subtreeDepthCache[childId] === -1) {
+            order.push(childId);
+          }
+        }
       }
-      const depth = 1 + Math.max(...node.children.map((childId) => subtreeDepth(childId)));
-      subtreeDepthCache[nodeId] = depth;
-      return depth;
+      // Reverse parent-before-child order so every child depth is already cached.
+      for (let i = order.length - 1; i >= 0; i -= 1) {
+        const id = order[i];
+        let depth = 0;
+        for (const childId of getNode(id).children) {
+          depth = Math.max(depth, subtreeDepthCache[childId] + 1);
+        }
+        subtreeDepthCache[id] = depth;
+      }
+      return subtreeDepthCache[nodeId];
     }
 
     function currentMaxDepth() {
@@ -3803,25 +3813,35 @@
     }
 
     function computeAnalysisSubtree(nodeId) {
-      const node = getNode(nodeId);
-      const localCount = state.analysisLocalCounts[nodeId] || 0;
-      const localLoc = state.analysisLocalLocs[nodeId] || 0;
-      let subtreeCount = localCount;
-      let subtreeLoc = localLoc;
-      for (const childId of node.children) {
-        const childTotals = computeAnalysisSubtree(childId);
-        subtreeCount += childTotals.count;
-        subtreeLoc += childTotals.loc;
+      const order = [nodeId];
+      for (let i = 0; i < order.length; i += 1) {
+        for (const childId of getNode(order[i]).children) {
+          order.push(childId);
+        }
       }
-      state.analysisSubtreeCounts[nodeId] = subtreeCount;
-      state.analysisSubtreeLocs[nodeId] = subtreeLoc;
-      state.analysisLocalRatios[nodeId] = node.moduleInternalSignalCount > 0
-        ? localCount / node.moduleInternalSignalCount
-        : 0;
-      state.analysisSubtreeRatios[nodeId] = node.subtreeInternalSignalCount > 0
-        ? subtreeCount / node.subtreeInternalSignalCount
-        : 0;
-      return { count: subtreeCount, loc: subtreeLoc };
+      for (let i = order.length - 1; i >= 0; i -= 1) {
+        const id = order[i];
+        const node = getNode(id);
+        const localCount = state.analysisLocalCounts[id] || 0;
+        let subtreeCount = localCount;
+        let subtreeLoc = state.analysisLocalLocs[id] || 0;
+        for (const childId of node.children) {
+          subtreeCount += state.analysisSubtreeCounts[childId];
+          subtreeLoc += state.analysisSubtreeLocs[childId];
+        }
+        state.analysisSubtreeCounts[id] = subtreeCount;
+        state.analysisSubtreeLocs[id] = subtreeLoc;
+        state.analysisLocalRatios[id] = node.moduleInternalSignalCount > 0
+          ? localCount / node.moduleInternalSignalCount
+          : 0;
+        state.analysisSubtreeRatios[id] = node.subtreeInternalSignalCount > 0
+          ? subtreeCount / node.subtreeInternalSignalCount
+          : 0;
+      }
+      return {
+        count: state.analysisSubtreeCounts[nodeId],
+        loc: state.analysisSubtreeLocs[nodeId],
+      };
     }
 
     function ensureAnalysisDefinitionsRequested() {
@@ -3847,6 +3867,7 @@
           if (!state.analysisError && state.analysisMode !== "none") {
             buildSignalAnalysis();
           }
+          state.chartPanelDirty = true;
           draw();
         });
     }
@@ -3913,17 +3934,23 @@
       }
 
       const definitionMap = getAnalysisDefinitionMap();
-
+      const definitionCounts = new Map();
       for (const node of nodes) {
         if (node.definitionKey === null || node.definitionKey === undefined) {
           continue;
         }
-        const signalStats = definitionMap.get(node.definitionKey) || [];
-        let localCount = 0;
-        for (const stat of signalStats) {
-          if (matchers.some((matcher) => matcher(stat.signalName))) {
-            localCount += stat.signalCount || 0;
+        let localCount = definitionCounts.get(node.definitionKey);
+        if (localCount === undefined) {
+          localCount = 0;
+          const signalStats = definitionMap.get(node.definitionKey);
+          if (signalStats) {
+            for (const stat of signalStats) {
+              if (matchers.some((matcher) => matcher(stat.signalName))) {
+                localCount += stat.signalCount || 0;
+              }
+            }
           }
+          definitionCounts.set(node.definitionKey, localCount);
         }
         state.analysisLocalCounts[node.id] = localCount;
       }

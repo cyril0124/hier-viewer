@@ -28,7 +28,6 @@ fn is_sqlite_file(path: &str) -> Result<bool, String> {
     Ok(bytes_read == SQLITE_HEADER.len() && header == SQLITE_HEADER)
 }
 
-
 fn parse_sqlite_input(path: &str) -> Result<InputData, String> {
     let connection = Connection::open(path)
         .map_err(|err| format!("failed to open sqlite input '{}': {err}", path))?;
@@ -83,12 +82,6 @@ fn parse_sqlite_input(path: &str) -> Result<InputData, String> {
                 module_signal_bits: to_usize(row.get::<_, i64>(22)?)?,
                 module_internal_signal_count: to_usize(row.get::<_, i64>(23)?)?,
                 module_gen_signal_count: to_usize(row.get::<_, i64>(24)?)?,
-                snippet_start_line: None,
-                snippet_end_line: None,
-                snippet_text: None,
-                definition_snippet_start_line: None,
-                definition_snippet_end_line: None,
-                definition_snippet_text: None,
             })
         })
         .map_err(|err| format!("failed to query sqlite instances: {err}"))?;

@@ -409,7 +409,7 @@ hier-viewer [OPTIONS] [rtl ...]
 
 cache key 会综合这些因素：
 
-- RTL 源文件内容和时间戳
+- RTL 源文件路径、大小和修改时间戳
 - filelist
 - 额外 slang 参数
 - `slang-hier-exporter` 的 fingerprint
@@ -420,7 +420,7 @@ cache key 会综合这些因素：
 - 输入变化时，会自动重建 sqlite
 - 如果你显式传了 `-r` / `--rebuild-sqlite`，一定会强制重建
 
-命令行日志里也会说明这次为什么复用或重建了 cache。
+命令行日志里也会说明这次为什么复用或重建了 cache。复用前还会检查 exporter 实际读取的文件，包括 include 头文件。失效规则和限制见[导出与 bundle 契约](docs/export-and-bundle-contracts.md#cached-source-dependencies)。
 
 ## 输出目录结构
 
@@ -538,6 +538,7 @@ cargo run -- --output out --preview
 ## 相关文档
 
 - [面积策略说明](docs/area-sizing-strategy.md)
+- [导出与 bundle 契约](docs/export-and-bundle-contracts.md)
 
 ## AI Development
 
