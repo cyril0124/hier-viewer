@@ -4,7 +4,9 @@
 
 一个面向大型 RTL 设计的静态 hierarchy viewer。
 
-`hier-viewer` 用 Rust 生成前端 bundle，用内置的 `slang-hier-exporter` 从 RTL 或预构建 sqlite hierarchy DB 中提取层级、模块统计、源码位置和分析数据，最后输出一个可以直接挂到静态文件服务器上的目录。
+`hier-viewer` 用内置的 `slang-hier-exporter` 从 RTL 中提取层级、模块统计、源码位置和分析数据。Rust 读取导出后的 SQLite 数据库，或通过 `--db` 指定的数据库，生成可以由静态文件服务器提供访问的目录。
+
+[安装](#安装) · [快速开始](#快速开始) · [常见命令](#常见命令) · [开发者说明](#开发者说明)
 
 生成后的 viewer 支持：
 
@@ -17,8 +19,6 @@
 
 ## 功能展示
 
-下面这些图片不是单纯的截图堆砌，而是在 README 里按功能点展示 `hier-viewer` 的主要能力，从顶层 hierarchy 浏览一直到源码级调试。
-
 ### 经典 Treemap 总览
 
 ![Classic treemap overview](docs/screenshots/treemap-classic-overview.png)
@@ -29,7 +29,7 @@
 
 ![Weighted accurate treemap](docs/screenshots/treemap-weighted-accurate.png)
 
-这个视图更强调模块“面积贡献”，而不只是层级分组，所以 SRAM、cache 之类的大块会马上凸显出来。
+通过加权信号位数比较模块的相对规模。这是尺寸估算，不是综合后的芯片面积。选择 `Weighted Signal Bits` 时，默认使用 `Accurate` 布局。
 
 ### 可交互的 2D Pie 图
 
@@ -76,13 +76,16 @@
 
 ### 推荐：安装 release 二进制
 
+1. 从 [GitHub Releases](https://github.com/cyril0124/hier-viewer/releases/latest) 下载对应平台的压缩包。
+2. 解压 `hier-viewer` 或 `hier-viewer.exe`，放到 `PATH` 中。
+
+验证安装：
+
 ```bash
-hier-viewer update
+hier-viewer --help
 ```
 
-如果你还没有安装 `hier-viewer`，推荐直接从 GitHub Releases 下载对应平台的压缩包，解压后把 `hier-viewer` 放到 `PATH` 里。
-
-这是最推荐的安装方式，因为它不需要在本地重新编译内置的 `slang-hier-exporter`，并且和 release workflow 实际验证过的二进制一致。
+Release 二进制已内置 exporter，不需要在本地编译 Rust 或 C++。已有 release 二进制可用 `hier-viewer update` 更新。
 
 ### 进阶：用 Cargo 从 GitHub 安装
 
@@ -96,17 +99,7 @@ cargo install --git https://github.com/cyril0124/hier-viewer --locked
 cargo install --path . --locked
 ```
 
-这两种 Cargo 安装方式本质上都还是会编译内置的 `slang-hier-exporter`，所以原生构建依赖和普通源码构建一致：
-
-- `cmake`
-- `ninja`
-- 支持 C++20 的编译器
-
-如果你的环境在安装阶段不能直接从 GitHub 拉取 `slang`，可以先指定本地 checkout：
-
-```bash
-export HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR=/path/to/slang
-```
+这两种 Cargo 安装方式都会编译内置 exporter，需要安装[源码构建依赖](#依赖要求)。
 
 ## 示例
 
@@ -115,10 +108,12 @@ export HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR=/path/to/slang
 
 ## 快速开始
 
-### 1. 构建
+### 1. 从源码构建
+
+如果已安装 release 二进制，跳过这一步。
 
 ```bash
-cargo build --release
+cargo build --release --locked
 ```
 
 第一次构建会比较慢，这是正常的。`build.rs` 会自动：
@@ -131,7 +126,7 @@ cargo build --release
 ### 2. 运行
 
 ```bash
-./target/release/hier-viewer --output out --preview
+hier-viewer --output out --preview
 ```
 
 如果当前是交互式终端，并且你没有传 RTL 输入、filelist 或 `--db`，工具会自动打开内置的 TUI wizard。wizard 可以让你：
@@ -140,6 +135,8 @@ cargo build --release
 - 选择 path match mode：`Literal`、`Wildcard`、`Regex`
 - 添加 filelist
 - 追加额外编译参数，例如 `-I`、`-D`、`+incdir+`、`--top`
+
+内置 TUI wizard 需要交互式终端。在脚本或 CI 中运行时，必须显式传入 RTL 路径、`--filelist` 或 `--db`。
 
 ### 3. 打开生成结果
 
@@ -157,14 +154,24 @@ hier-viewer update
 
 ## 依赖要求
 
-### 构建和运行 `hier-viewer`
+### Release 二进制
+
+Exporter 已内置，运行时不需要 Rust、CMake 或 C++ 编译器。通过 HTTP 提供输出目录，再用浏览器打开。
+
+### 源码构建
 
 - Rust toolchain
-- `cmake`
-- `ninja`
+- CMake 和 Ninja
 - 支持 C++20 的编译器
+- SQLite3 和 zlib 开发库
 
-### 第一次构建内置 exporter 时
+Ubuntu 上，CI 使用的原生依赖可这样安装：
+
+```bash
+sudo apt-get install cmake ninja-build g++ pkg-config libsqlite3-dev zlib1g-dev
+```
+
+### 构建内置 exporter
 
 默认会从 GitHub 拉取：
 
@@ -200,8 +207,11 @@ slang-hier-exporter --sqlite
 
 补充说明：
 
-- 命令行位置参数 `[rtl ...]` 当前按 `Wildcard` 语义解析，同时也支持精确文件路径
-- 如果你想用 `Regex` 模式选择 RTL，推荐用内置 TUI wizard
+- 命令行位置参数 `[rtl ...]` 按 `Wildcard` 语义解析，也支持精确路径和目录
+- 仅使用 filelist、字面路径、目录或绝对 glob 时，不建立整个工作区的 RTL 索引；相对 glob 和 wizard 会建立该索引
+- 如果想用 `Regex` 模式选择 RTL，使用内置 TUI wizard
+
+模块统计反映各实例实际展开后的参数和 generate 分支。等价实例体共享统计缓存；不同变体可以有不同的信号位宽和数量。
 
 ### 2. 直接读取已有 sqlite DB
 
@@ -211,7 +221,7 @@ slang-hier-exporter --sqlite
 hier-viewer --db path/to/hiers.db --output out --preview
 ```
 
-这种模式下不会重新解析 RTL。
+这种模式不会重新解析 RTL，也不会验证导出缓存。生成 bundle 时仍需读取数据库引用的源码文件，将它们复制到输出目录。要获得 RTL 修改后的统计结果，需要通过 RTL 输入模式重新生成数据库。
 
 ## 常见命令
 
@@ -296,7 +306,7 @@ hier-viewer \
 
 ### 例 7：强制重建 sqlite cache
 
-当你明确知道 RTL、filelist、额外 flags 有变化，或者只是想全量重跑时：
+常规源码和依赖变化会自动触发重建。需要强制完整导出时使用此命令；哪些情况必须强制重建，见[缓存失效限制](docs/export-and-bundle-contracts.md#cached-source-dependencies)：
 
 ```bash
 hier-viewer \
@@ -435,21 +445,21 @@ out/
 ├── viewer-chart.js
 ├── viewer-three.module.js
 ├── three.core.js
-├── .hier-viewer-sources/      # source reader 用到的相对源码副本
+├── .hier-viewer-sources/      # source reader 用到的源码副本
 └── .hier-viewer-cache/        # 只有从 RTL 构建 sqlite 时才会出现
 ```
 
-这也是为什么推荐“输出目录 + 静态文件服务器”的方式，而不是单个独立 HTML。
+发布 viewer 时应保留整个目录，包括 `.hier-viewer-sources/`。源码 URL 会编码空格和保留字符；源码文本按需加载，不嵌入 HTML。信号分析数据也按需加载。文件布局细节见[源码打包路径](docs/export-and-bundle-contracts.md#source-bundle-paths)。
 
 ## 预览建议
 
 ### 推荐：内置 preview 模式
 
 ```bash
-hier-viewer --output out --preview
+hier-viewer --db path/to/hiers.db --output out --preview
 ```
 
-这个模式会一直前台运行，直到你按 `Ctrl-C`。
+此命令生成 bundle 后持续在前台提供服务，直到按下 `Ctrl-C`。如果只想访问已生成的 bundle，不重新生成，使用静态文件服务器。
 
 ### 兜底方案：本地或远程静态文件服务
 
@@ -497,22 +507,39 @@ python3 -m http.server 8000
 
 sqlite cache 就放在输出目录下面。如果你每次都换一个新输出目录，也就相当于每次都新建一个 cache 目录。
 
+### 4. preview 模式默认绑定到 `127.0.0.1`
+
+对于远程服务器场景，可以：
+
+- 保持默认值，使用 SSH 或编辑器端口转发
+- 或显式传入 `--preview-host 0.0.0.0`
+
 ## 开发者说明
 
-如果你是在这个仓库里迭代开发，仍然可以继续用 Cargo 直接运行：
+从仓库根目录运行：
 
 ```bash
 cargo run -- --output out --preview
 ```
 
-但这属于仓库内开发者工作流，所以前面的示例都改成了最终用户更容易直接套用的形式。
+交互式终端下会打开 wizard。非交互式运行时，需要传入源码输入或 `--db`。
 
-### 4. preview 模式默认绑定到 `127.0.0.1`
+### 验证
 
-这是有意为之。对于远程服务器场景，你可以：
+除源码构建依赖外，[Linux CI 工作流](.github/workflows/ci.yml) 使用 Node.js 22 和 Python 3 运行 JavaScript 及 exporter 集成测试。在仓库根目录的 Linux shell 中执行：
 
-- 保持默认值，然后走 SSH 或编辑器的端口转发
-- 或者显式传 `--preview-host 0.0.0.0`
+```bash
+cargo fmt --check
+cargo check --locked
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --no-run
+timeout 60s cargo test --locked
+node --test tests/viewer-runtime.test.cjs
+cargo build --locked
+python3 tests/cache-dependencies.py target/debug/hier-viewer
+```
+
+先编译 Rust 测试，再对测试执行施加 60 秒超时。真实 exporter 的参数化回归测试及其验证的数据规则，见[导出与 bundle 契约](docs/export-and-bundle-contracts.md#definition-statistics)。
 
 ## FAQ
 

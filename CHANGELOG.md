@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Updated both READMEs with first-install instructions, source-build requirements, input scanning and parameterized statistics behavior, source availability requirements, and the regression-test workflow.
 - Removed unused source-snippet extraction from bundle generation and compute hierarchy statistics iteratively without cloning child lists.
 - Explicit RTL paths, directories, absolute globs, and filelist-only input skip the workspace-wide RTL index; the wizard and relative wildcard searches still build it.
 - Signal analysis matches each shared definition once per pattern update, and hierarchy depth and analysis totals use iterative traversal for wide and deep trees.

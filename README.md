@@ -4,7 +4,9 @@
 
 A static hierarchy viewer for large RTL designs.
 
-`hier-viewer` uses Rust to generate the frontend bundle and an embedded `slang-hier-exporter` binary to extract hierarchy, module statistics, source locations, and analysis data from RTL or from a prebuilt sqlite hierarchy database. The final output is a directory that can be served by any static file server.
+`hier-viewer` runs an embedded `slang-hier-exporter` to extract hierarchy, module statistics, source locations, and analysis data from RTL. Rust reads the resulting SQLite database, or a database supplied with `--db`, and generates a directory that can be served by any static file server.
+
+[Install](#install) · [Quick Start](#quick-start) · [Common Commands](#common-commands) · [Development](#development)
 
 The generated viewer supports:
 
@@ -17,8 +19,6 @@ The generated viewer supports:
 
 ## Feature Showcase
 
-The images below highlight the main capabilities of `hier-viewer`, from top-level hierarchy exploration to deep source inspection.
-
 ### Classic Treemap Overview
 
 ![Classic treemap overview](docs/screenshots/treemap-classic-overview.png)
@@ -29,7 +29,7 @@ This is the main chip-level view for fast hierarchy exploration. It shows how th
 
 ![Weighted accurate treemap](docs/screenshots/treemap-weighted-accurate.png)
 
-This view emphasizes relative module footprint instead of only hierarchy grouping, which makes SRAM-heavy and cache-heavy blocks stand out immediately.
+Compare relative module footprint using weighted signal-bit counts. This is a sizing estimate, not synthesized silicon area. Selecting `Weighted Signal Bits` starts in `Accurate` layout.
 
 ### Interactive 2D Pie Chart
 
@@ -76,13 +76,16 @@ If you are running directly from the source tree, replace `hier-viewer` with `./
 
 ### Recommended: install a release binary
 
+1. Download the archive for your platform from [GitHub Releases](https://github.com/cyril0124/hier-viewer/releases/latest).
+2. Extract `hier-viewer` or `hier-viewer.exe` and place it on your `PATH`.
+
+Verify the installation:
+
 ```bash
-hier-viewer update
+hier-viewer --help
 ```
 
-If you do not have `hier-viewer` installed yet, download the archive for your platform from GitHub Releases, unpack it, and put the `hier-viewer` binary on your `PATH`.
-
-This is the recommended path because it avoids rebuilding the embedded `slang-hier-exporter` locally and matches the binaries tested by the release workflow.
+Release binaries include the exporter, so they do not require a local Rust or C++ build. Use `hier-viewer update` to update an already-installed release binary.
 
 ### Advanced: install from GitHub with Cargo
 
@@ -96,17 +99,7 @@ cargo install --git https://github.com/cyril0124/hier-viewer --locked
 cargo install --path . --locked
 ```
 
-These Cargo-based installation paths still build the embedded `slang-hier-exporter`, so you need the same native build tools as a normal source build:
-
-- `cmake`
-- `ninja`
-- a C++20 compiler
-
-If your environment cannot fetch `slang` from GitHub during install, point Cargo builds at a local checkout first:
-
-```bash
-export HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR=/path/to/slang
-```
+Both Cargo installation paths compile the embedded exporter and require the [source-build dependencies](#requirements).
 
 ## Examples
 
@@ -115,10 +108,12 @@ export HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR=/path/to/slang
 
 ## Quick Start
 
-### 1. Build
+### 1. Build from source
+
+Skip this step if you installed a release binary.
 
 ```bash
-cargo build --release
+cargo build --release --locked
 ```
 
 The first build can take a while. That is expected. `build.rs` automatically:
@@ -131,7 +126,7 @@ By default it uses CMake `FetchContent` to fetch and build `slang`.
 ### 2. Run
 
 ```bash
-./target/release/hier-viewer --output out --preview
+hier-viewer --output out --preview
 ```
 
 If you are on an interactive terminal and do not provide RTL inputs, filelists, or `--db`, the tool opens the built-in TUI wizard. The wizard lets you:
@@ -140,6 +135,8 @@ If you are on an interactive terminal and do not provide RTL inputs, filelists, 
 - choose path match mode: `Literal`, `Wildcard`, or `Regex`
 - add filelists
 - append extra compiler flags such as `-I`, `-D`, `+incdir+`, and `--top`
+
+The built-in TUI wizard requires an interactive terminal. In scripts or CI, pass RTL paths, `--filelist`, or `--db` explicitly.
 
 ### 3. Open the generated viewer
 
@@ -157,14 +154,24 @@ This checks GitHub Releases, shows staged progress for release lookup, download,
 
 ## Requirements
 
-### To build and run `hier-viewer`
+### Release binaries
+
+The exporter is embedded. Rust, CMake, and a C++ compiler are not required at runtime. Serve the output over HTTP and open it in a browser.
+
+### Source builds
 
 - Rust toolchain
-- `cmake`
-- `ninja`
+- CMake and Ninja
 - a C++20 compiler
+- SQLite3 and zlib development libraries
 
-### When building the embedded exporter for the first time
+On Ubuntu, the native dependencies used by CI are:
+
+```bash
+sudo apt-get install cmake ninja-build g++ pkg-config libsqlite3-dev zlib1g-dev
+```
+
+### Building the embedded exporter
 
 By default the build fetches:
 
@@ -200,8 +207,11 @@ to create or reuse a sqlite cache, then emits the HTML bundle.
 
 Notes:
 
-- command-line positional RTL inputs `[rtl ...]` currently use `Wildcard` semantics, while still accepting exact file paths
-- if you want `Regex` mode for RTL selection, the built-in TUI wizard is the better path
+- command-line positional RTL inputs `[rtl ...]` use `Wildcard` semantics, while also accepting exact paths and directories
+- filelist-only input, literal paths, directories, and absolute globs skip the workspace-wide RTL index; relative globs and the wizard build it
+- for `Regex` mode in RTL selection, use the built-in TUI wizard
+
+Module statistics reflect each instance's elaborated parameters and generate branches. Equivalent instance bodies share cached statistics; different variants can have different signal widths and counts.
 
 ### 2. Read an existing sqlite DB
 
@@ -211,7 +221,7 @@ If you already have a prebuilt hierarchy sqlite DB:
 hier-viewer --db path/to/hiers.db --output out --preview
 ```
 
-In this mode the tool does not reparse RTL.
+This mode does not reparse RTL or validate the export cache. Source files referenced by the database must still be readable during bundle generation, because they are copied into the output directory. To obtain updated statistics from changed RTL, generate a new database through the RTL input mode.
 
 ## Common Commands
 
@@ -296,7 +306,7 @@ hier-viewer \
 
 ### Example 7: force rebuilding the sqlite cache
 
-Use this when you know the RTL, filelists, or extra flags changed, or when you simply want a full rebuild:
+Normal source and dependency changes trigger rebuilding automatically. Use this command to force a full export; see the [cache invalidation limits](docs/export-and-bundle-contracts.md#cached-source-dependencies) for cases that require it:
 
 ```bash
 hier-viewer \
@@ -435,21 +445,21 @@ out/
 ├── viewer-chart.js
 ├── viewer-three.module.js
 ├── three.core.js
-├── .hier-viewer-sources/      # relative source copies used by the source reader
+├── .hier-viewer-sources/      # source copies used by the source reader
 └── .hier-viewer-cache/        # only present when building sqlite from RTL
 ```
 
-That is why the recommended workflow is `output directory + static file server`, not a single standalone HTML file.
+Keep the whole directory when publishing the viewer, including `.hier-viewer-sources/`. Source URLs encode spaces and reserved characters; source text is loaded on demand rather than embedded in the HTML. Signal analysis data is also loaded on demand. See [source bundle paths](docs/export-and-bundle-contracts.md#source-bundle-paths) for the file layout.
 
 ## Preview Recommendations
 
 ### Recommended: built-in preview mode
 
 ```bash
-hier-viewer --output out --preview
+hier-viewer --db path/to/hiers.db --output out --preview
 ```
 
-This keeps the server in the foreground until you press `Ctrl-C`.
+This generates the bundle and keeps the server in the foreground until you press `Ctrl-C`. To serve an already-generated bundle without regenerating it, use a static file server.
 
 ### Fallback: local or remote static file server
 
@@ -497,22 +507,39 @@ Viewer-owned flags such as `--output`, `--db`, and `--debug` must stay before `-
 
 The sqlite cache lives under the output directory. If you use a fresh output directory every time, you also force a fresh cache directory every time.
 
-## Developer Note
+### 4. Preview mode binds to `127.0.0.1` by default
 
-If you are iterating on the codebase itself, you can still run everything through Cargo:
+For remote servers, either:
+
+- keep the default and use SSH or editor port forwarding
+- or bind explicitly with `--preview-host 0.0.0.0`
+
+## Development
+
+Run from the repository root:
 
 ```bash
 cargo run -- --output out --preview
 ```
 
-That workflow is mainly for development inside this repository. The examples above are intentionally written in end-user style.
+This opens the wizard on an interactive terminal. Pass source inputs or `--db` for noninteractive runs.
 
-### 4. Preview mode binds to `127.0.0.1` by default
+### Validation
 
-That is intentional. For remote servers, either:
+The [Linux CI workflow](.github/workflows/ci.yml) uses Node.js 22 and Python 3 for the JavaScript and exporter integration tests, in addition to the source-build dependencies. Run these checks from the repository root in a Linux shell:
 
-- keep the default and use SSH or editor port forwarding
-- or bind explicitly with `--preview-host 0.0.0.0`
+```bash
+cargo fmt --check
+cargo check --locked
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --no-run
+timeout 60s cargo test --locked
+node --test tests/viewer-runtime.test.cjs
+cargo build --locked
+python3 tests/cache-dependencies.py target/debug/hier-viewer
+```
+
+Compile the Rust tests before applying the 60-second execution timeout. The real-exporter parameterization test and the data invariants it checks are documented in [export and bundle contracts](docs/export-and-bundle-contracts.md#definition-statistics).
 
 ## FAQ
 
