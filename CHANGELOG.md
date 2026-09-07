@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Chart content remains scrollable on short or narrow viewports instead of clipping the plot and legend, and the 3D Fit camera frames the complete height of the bars.
 - Wizard input preserves wildcard and regex expressions unless a completion is explicitly selected, and retains quoting for CLI flags containing spaces or quotes.
 - Filelists containing compiler options or inline comments are accepted; slang validates missing sources and invalid options directly.
+- 3D charts fit their complete geometry to the available viewport, including narrow screens, without stretching the canvas or cropping tall bars. Zoom status continues updating after Fit.
+- Advanced settings stay within narrow viewports and have an explicit close button.
 - Parameterized instances now retain their own elaborated signal widths and generate-dependent counts instead of reusing the first instance's statistics.
 - Cached exports are invalidated when an actual source dependency, including an included header, changes or disappears.
 - Bundled source paths no longer collide when different source directories share filenames, and source URLs encode reserved characters in directory and file names.
@@ -27,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Updated both READMEs with first-install instructions, source-build requirements, input scanning and parameterized statistics behavior, source availability requirements, and the regression-test workflow.
+- Redesigned the viewer as a compact, full-width workspace with GitHub Light as the default theme, embedded Lucide toolbar icons, sans-serif chart labels, and flatter panels and source controls. Existing saved themes remain selected.
+- Improved small-screen control wrapping and chart sizing, added keyboard focus and reduced-motion styles, and kept status errors visible without persistent instructional text.
 - Removed unused source-snippet extraction from bundle generation and compute hierarchy statistics iteratively without cloning child lists.
 - Explicit RTL paths, directories, absolute globs, and filelist-only input skip the workspace-wide RTL index; the wizard and relative wildcard searches still build it.
 - Signal analysis matches each shared definition once per pattern update, and hierarchy depth and analysis totals use iterative traversal for wide and deep trees.

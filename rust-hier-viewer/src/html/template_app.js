@@ -481,7 +481,7 @@
       await afterPaint();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      document.body.innerHTML = `<div style="padding: 32px; font: 16px/1.5 Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif; color: #26180e;"><h1 style="margin-top: 0;">Failed to load viewer data</h1><p>Open this bundle through a static server such as VSCode Live Server, and make sure <code>viewer-meta.json</code> and <code>viewer-core.bin</code> are next to <code>index.html</code>.</p><p><strong>Detail:</strong> ${escapeHtml(message)}</p></div>`;
+      document.body.innerHTML = `<div style="padding: 32px; font: 16px/1.5 system-ui, sans-serif; color: #26180e;"><h1 style="margin-top: 0;">Failed to load viewer data</h1><p>Open this bundle through a static server such as VSCode Live Server, and make sure <code>viewer-meta.json</code> and <code>viewer-core.bin</code> are next to <code>index.html</code>.</p><p><strong>Detail:</strong> ${escapeHtml(message)}</p></div>`;
       return;
     }
     const nodes = DATA.nodes;
@@ -612,8 +612,6 @@
     const SOURCE_PLAIN_TEXT_INSTANCE_CHAR_THRESHOLD = 40000000;
     const SOURCE_PLAIN_TEXT_DEFINITION_LINE_THRESHOLD = 300000;
     const SOURCE_PLAIN_TEXT_DEFINITION_CHAR_THRESHOLD = 24000000;
-    const defaultHint = "Wheel to zoom. Drag to pan. Click to drill down. Filter supports text, wc:pattern, and re:regex. Signal analysis supports wildcard/text/regex over internal signal names. Press Escape to close source.";
-    const selectModeHint = "Select mode: single-click pins a node and keeps the hover card open. Double-click enters child hierarchy or opens source at a leaf. Right-click returns to the parent hierarchy.";
     const STORAGE_KEY = `hier-viewer:${window.location.pathname}`;
     let currentSourceView = null;
     let sourceSearchMatchElements = [];
@@ -626,7 +624,7 @@
     const state = {
       homeRoot: DATA.rootId,
       currentRoot: DATA.rootId,
-      theme: "solarized-light",
+      theme: "github-light",
       metric: DATA.defaultMetric,
       weightedVariableWeight: 1,
       weightedNetWeight: 0.15,
@@ -954,13 +952,13 @@
       },
       "github-light": {
         dark: false,
-        canvasClassic: "#eef2f6",
-        canvasAccurate: "#e9eef3",
-        canvasBase: "#eaeef2",
+        canvasClassic: "#f6f8fa",
+        canvasAccurate: "#f0f3f6",
+        canvasBase: "#f0f3f6",
         panel: "#ffffff",
         text: "#1f2328",
         textSoft: "#59636e",
-        accents: ["#1f883d", "#0969da", "#8250df", "#bc4c00", "#cf222e", "#1b7f83", "#bf8700"],
+        accents: ["#368c91", "#397cb8", "#7878b5", "#b16a8b", "#bf8951", "#649b7b", "#689bb5"],
         match: "#fb8f44",
         analysisRamp: ["#fb8f44", "#bc4c00", "#cf222e", "#8250df"],
       },
@@ -1015,7 +1013,7 @@
     };
 
     function currentThemeVisuals() {
-      return THEME_VISUALS[state.theme] || THEME_VISUALS["solarized-light"];
+      return THEME_VISUALS[state.theme] || THEME_VISUALS["github-light"];
     }
 
     function hexToRgb(hex) {
@@ -1445,7 +1443,7 @@
     applyTheme();
     applyToolbarCollapsedState();
     applyZenModeState();
-    pageTitle.textContent = "Hierarchy Viewer";
+    pageTitle.textContent = "hier-viewer";
     pageSubtitle.textContent = buildSubtitleText(DATA.title, Number(DATA.builtAtUnixMs));
     metricSelect.value = state.metric;
     weightedVariableInput.value = state.weightedVariableWeight.toFixed(2);
@@ -2136,7 +2134,7 @@
       if (currentSourceView?.renderMode === "plain") {
         return "Plain large-source mode disables inline line bookmarking.";
       }
-      return "Click a line number to bookmark it.";
+      return "No bookmarks";
     }
 
     function renderSourceBookmarkBar() {
@@ -3600,7 +3598,9 @@
       if (analysisActive()) {
         return mixHexColors(theme.text, theme.canvasBase, theme.dark ? 0.34 : 0.26);
       }
-      return mixHexColors(theme.text, themeNodeAccent(level), theme.dark ? 0.48 : 0.38);
+      return theme.dark
+        ? mixHexColors(theme.text, themeNodeAccent(level), 0.48)
+        : mixHexColors(theme.canvasBase, themeNodeAccent(level), 0.65);
     }
 
     function selfAreaStroke(level) {
@@ -4442,10 +4442,11 @@
         ? mainViewStatus.zoomLabel
         : `${state.zoom.toFixed(2)}x`;
       statusLeft.innerHTML =
-        `<strong>${root.path || "(root)"}</strong> · ${root.children.length} direct children · ` +
-        `${metricLabel()}: <strong>${metricValue}</strong> · layout <strong>${layoutModeLabel()}</strong> · decomp <strong>${decompositionLabel()}</strong> · level <strong>${visibleDepthLabel()}</strong> · ` +
+        `<strong>${escapeHtml(root.path || root.name || "(root)")}</strong> · ${root.children.length} children · ` +
+        `${metricLabel()}: <strong>${metricValue}</strong> · <strong>${layoutModeLabel()}</strong> · depth <strong>${visibleDepthLabel()}</strong> · ` +
         `zoom <strong>${zoomLabel}</strong>${analysisText}${selectText}${matchText}`;
-      statusRight.textContent = state.searchError || state.analysisError || (mainViewStatus && mainViewStatus.hintText) || (state.mainViewMode === "treemap" && state.selectMode ? selectModeHint : defaultHint);
+      statusRight.textContent = state.searchError || state.analysisError;
+      statusRight.classList.toggle("error", Boolean(state.searchError || state.analysisError));
       if (clearTreemapCollapsesBtn) {
         clearTreemapCollapsesBtn.disabled = state.treeCollapsedIds.size === 0;
       }
@@ -5620,7 +5621,7 @@
         const badgeWidth = Math.min(84, Math.max(48, w - 14));
         fillRoundedBadge(x + 8, y + 8, badgeWidth, 18, 9);
         ctx.fillStyle = shouldDim(area.nodeId) ? hexToRgba(theme.text, 0.5) : hexToRgba(theme.text, 0.72);
-        ctx.font = "600 11px Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif";
+        ctx.font = "600 11px system-ui, sans-serif";
         const label = fitLabel("local self", badgeWidth - 16);
         if (label) {
           ctx.fillText(label, x + 16, y + 21);
@@ -5628,9 +5629,9 @@
       } else {
         ctx.font = state.layoutMode === "accurate"
           ? (hovered
-            ? "600 13px Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif"
-            : "600 12px Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif")
-          : "bold 14px Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif";
+            ? "600 13px system-ui, sans-serif"
+            : "600 12px system-ui, sans-serif")
+          : "600 13px system-ui, sans-serif";
         const label = fitLabel(node.name, w - 16);
         if (label) {
           ctx.fillText(
@@ -5839,7 +5840,7 @@
           }
           if (analysisHighlightState === "local" && w >= 96 && h >= 42) {
             const badgeText = analysisValueText(area.nodeId);
-            ctx.font = "600 11px Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif";
+            ctx.font = "600 11px system-ui, sans-serif";
             const badgeWidth = clampValue(ctx.measureText(badgeText).width + 18, 42, Math.max(42, w - 20));
             const badgeHeight = 18;
             const badgeX = x + w - badgeWidth - 8;
@@ -5883,7 +5884,7 @@
               ? 2
               : area.kind === "self"
                 ? (state.layoutMode === "accurate" ? 1.2 : 2)
-                : (state.layoutMode === "accurate" ? 1 : 1.5);
+                : 1;
         ctx.strokeStyle = isHoveredArea(area)
           ? mixHexColors(currentThemeVisuals().text, currentThemeVisuals().match, currentThemeVisuals().dark ? 0.18 : 0.10)
           : analysisActive() && area.kind === "node" && analysisHighlightState === "local"
@@ -6684,13 +6685,11 @@
       if (!state.matchLines.length) return;
       try {
         await copyText(state.matchLines.join("\n"));
-        const original = copyMatchesBtn.textContent;
-        copyMatchesBtn.textContent = "Copied";
-        setTimeout(() => {
-          copyMatchesBtn.textContent = original;
-        }, 1200);
+        statusRight.textContent = `Copied ${state.matchLines.length} matches`;
+        statusRight.classList.remove("error");
       } catch (error) {
         statusRight.textContent = `Copy failed: ${error.message || error}`;
+        statusRight.classList.add("error");
       }
     });
 
@@ -6731,6 +6730,10 @@
       setAdvancedPopoverOpen(!state.advancedPopoverOpen);
     });
 
+    document.getElementById("close-advanced-btn").addEventListener("click", () => {
+      setAdvancedPopoverOpen(false);
+    });
+
     toggleToolbarBtn.addEventListener("click", () => {
       state.toolbarCollapsed = !state.toolbarCollapsed;
       applyToolbarCollapsedState();
@@ -6743,7 +6746,7 @@
     });
 
     advancedPopoverHeader.addEventListener("mousedown", (event) => {
-      if (event.button !== 0) {
+      if (event.button !== 0 || event.target.closest("button")) {
         return;
       }
       const rect = advancedPopover.getBoundingClientRect();

@@ -83,7 +83,7 @@
     const fontSize = 26;
     const horizontalPadding = 18;
     const verticalPadding = 12;
-    const fontSpec = `700 ${fontSize}px "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif`;
+    const fontSpec = `700 ${fontSize}px system-ui, sans-serif`;
     ctx.font = fontSpec;
     const metrics = ctx.measureText(text);
     const textWidth = Math.max(1, Math.ceil(metrics.width));
@@ -324,7 +324,7 @@
         targetY: maxHeight / 2,
         targetZ: 0,
         minDistance: Math.max(2.8, extent * 0.18),
-        maxDistance: Math.max(22, extent * 7.2),
+        maxDistance: Math.max(22, extent * 7.2, fitDistance * 2),
         fitDistance
       };
     }
@@ -334,17 +334,12 @@
       if (!threeViewState || lastThreeDataKey !== key) {
         threeViewState = createThreeViewState(extent, maxHeight);
         lastThreeDataKey = key;
-      } else {
-        threeViewState.minDistance = Math.max(2.8, extent * 0.18);
-        threeViewState.maxDistance = Math.max(22, extent * 7.2);
-        threeViewState.fitDistance = threeFitDistance(extent, maxHeight);
-        threeViewState.targetY = maxHeight / 2;
       }
       return threeViewState;
     }
 
     function resetThreeView(extent, maxHeight) {
-      threeViewState = createThreeViewState(extent, maxHeight);
+      Object.assign(threeViewState, createThreeViewState(extent, maxHeight));
       lastThreeDataKey = threeDataKey();
       return threeViewState;
     }
@@ -1539,7 +1534,7 @@
           }
         };
 
-        chartStatus.textContent = `${chart.status} · 3D ready · drag to pan · right-drag to orbit · wheel to zoom`;
+        chartStatus.textContent = `${chart.status} · 3D ready`;
       }).catch((error) => {
         disposeThreeContext();
         renderEmpty(error.message || "Failed to initialize local Three.js.");

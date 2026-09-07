@@ -1,19 +1,35 @@
+  <!--
+  Lucide v0.468.0 icons, ISC License
+  Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT).
+  All other copyright (c) for Lucide are held by Lucide Contributors 2022.
+
+  Permission to use, copy, modify, and/or distribute this software for any
+  purpose with or without fee is hereby granted, provided that the above
+  copyright notice and this permission notice appear in all copies.
+
+  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+  ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+  WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+  ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  -->
   <div class="loading-overlay" id="loading-overlay" role="status" aria-live="polite" aria-label="Loading hierarchy viewer">
     <div class="loading-card">
-      <div class="loading-eyebrow">Standalone Hierarchy Viewer</div>
+      <div class="loading-eyebrow">hier-viewer</div>
       <h1 class="loading-title">Loading Viewer</h1>
       <div class="loading-stage" id="loading-stage">Opening bundle...</div>
       <div class="loading-detail" id="loading-detail">Waiting for viewer data.</div>
       <div class="loading-bar" aria-hidden="true">
         <div class="loading-bar-fill" id="loading-bar-fill"></div>
       </div>
-      <div class="loading-footnote">The first open can take longer on large hierarchy bundles because the browser still needs to fetch <code>viewer-meta.json</code>, decode <code>viewer-core.bin</code>, and lazy-load optional analysis data.</div>
     </div>
   </div>
   <div class="app">
     <section class="toolbar panel" id="toolbar" data-ui-name="toolbar" data-ui-label="always">
       <div class="title-block" data-ui-name="title-block">
-        <div class="eyebrow">Standalone Hierarchy Viewer</div>
+        <div class="eyebrow">RTL Workspace</div>
         <h1 id="page-title" data-ui-name="page-title"></h1>
         <div class="title-meta-row" data-ui-name="title-meta-row">
           <div class="title-subtitle" id="page-subtitle" data-ui-name="page-subtitle"></div>
@@ -25,15 +41,21 @@
       <div class="controls" data-ui-name="toolbar-controls">
         <div class="control-row" data-ui-name="toolbar-row">
           <div class="control-strip" data-ui-name="toolbar-strip">
-            <button id="home-btn" type="button" data-ui-name="home-btn">Home</button>
-            <button id="up-btn" type="button" data-ui-name="up-btn">Up</button>
-            <button id="zoom-out-btn" type="button" data-ui-name="zoom-out-btn">-</button>
-            <button id="zoom-in-btn" type="button" data-ui-name="zoom-in-btn">+</button>
-            <button id="fit-btn" type="button" data-ui-name="fit-btn">Fit</button>
-            <button id="clear-treemap-collapses-btn" type="button" title="Expand all treemap-collapsed hierarchy nodes" data-ui-name="clear-treemap-collapses-btn">Unfold</button>
-            <button id="select-mode-btn" type="button" title="Select mode: single-click pins a node, double-click enters it or opens source at a leaf" data-ui-name="select-mode-btn" aria-pressed="false">Select</button>
-            <button id="toggle-tree-btn" type="button" data-ui-name="tree-panel-btn">Tree</button>
-            <button id="toggle-match-btn" type="button" data-ui-name="matches-panel-btn">Matches</button>
+            <div class="action-cluster" role="group" aria-label="Navigate hierarchy">
+            <button id="home-btn" type="button" data-ui-name="home-btn" class="icon-button" aria-label="Home" title="Home"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+            <button id="up-btn" type="button" data-ui-name="up-btn" class="icon-button" aria-label="Parent hierarchy" title="Parent hierarchy"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg></button>
+            </div>
+            <div class="action-cluster" role="group" aria-label="Canvas controls">
+            <button id="zoom-out-btn" type="button" data-ui-name="zoom-out-btn" class="icon-button" aria-label="Zoom out" title="Zoom out"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg></button>
+            <button id="zoom-in-btn" type="button" data-ui-name="zoom-in-btn" class="icon-button" aria-label="Zoom in" title="Zoom in"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+            <button id="fit-btn" type="button" data-ui-name="fit-btn" class="icon-button" aria-label="Fit to view" title="Fit to view"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg></button>
+            <button id="clear-treemap-collapses-btn" type="button" data-ui-name="clear-treemap-collapses-btn" class="icon-button" aria-label="Expand collapsed nodes" title="Expand collapsed nodes"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-6"/><path d="M12 8V2"/><path d="M4 12H2"/><path d="M10 12H8"/><path d="M16 12h-2"/><path d="M22 12h-2"/><path d="m15 19-3 3-3-3"/><path d="m15 5-3-3-3 3"/></svg></button>
+            <button id="select-mode-btn" type="button" data-ui-name="select-mode-btn" aria-pressed="false" class="icon-button" aria-label="Select node" title="Select node"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/></svg></button>
+            </div>
+            <div class="action-cluster" role="group" aria-label="Panels">
+            <button id="toggle-tree-btn" type="button" data-ui-name="tree-panel-btn" class="icon-button" aria-label="Hierarchy tree" title="Hierarchy tree"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
+            <button id="toggle-match-btn" type="button" data-ui-name="matches-panel-btn" class="icon-button" aria-label="Filter matches" title="Filter matches"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></svg></button>
+            </div>
             <div class="metric-group" data-ui-name="level-group">
               <label class="metric-inline-label" for="depth-select">Level:</label>
               <select id="depth-select" aria-label="Visible depth" data-ui-name="level-select"></select>
@@ -67,18 +89,17 @@
               </div>
             </div>
             <div class="advanced-group" data-ui-name="advanced-group">
-              <button id="advanced-controls-btn" class="advanced-toggle" type="button" aria-expanded="false" aria-haspopup="dialog" data-ui-name="advanced-btn">Advanced</button>
+              <button id="advanced-controls-btn" class="icon-button advanced-toggle" type="button" aria-expanded="false" aria-haspopup="dialog" data-ui-name="advanced-btn" aria-label="Advanced settings" title="Advanced settings"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg></button>
               <div class="advanced-popover hidden" id="advanced-popover" role="dialog" aria-label="Advanced viewer controls" data-ui-name="advanced-popover">
                 <div class="advanced-popover-header" id="advanced-popover-header" data-ui-name="advanced-popover-header">
                   <div class="advanced-popover-kicker">Workspace Controls</div>
                   <div class="advanced-popover-title">Advanced</div>
-                  <div class="advanced-popover-description">Tune layout, theme, weighted sizing, and signal analysis without leaving the current hierarchy view.</div>
+                  <button id="close-advanced-btn" class="icon-button advanced-close" type="button" aria-label="Close settings" title="Close settings"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
                 </div>
                 <div class="advanced-popover-grid" data-ui-name="advanced-popover-grid">
                   <div class="advanced-section" data-ui-name="theme-layout-section">
                     <div class="advanced-section-copy">
                       <div class="advanced-section-title">Appearance</div>
-                      <div class="advanced-section-hint">Choose the workspace tone.</div>
                     </div>
                     <div class="advanced-section-controls">
                       <div class="metric-group" data-ui-name="theme-group">
@@ -98,7 +119,6 @@
                   <div class="advanced-section" data-ui-name="layout-section">
                     <div class="advanced-section-copy">
                       <div class="advanced-section-title">Treemap Layout</div>
-                      <div class="advanced-section-hint">Switch between classic composition and proportional slicing.</div>
                     </div>
                     <div class="advanced-section-controls">
                       <div class="metric-group" data-ui-name="layout-group">
@@ -130,7 +150,6 @@
                   <div class="advanced-section advanced-section-wide hidden" id="weighted-metric-group" data-ui-name="weighted-sizing-section">
                     <div class="advanced-section-copy">
                       <div class="advanced-section-title">Weighted Signal Bits</div>
-                      <div class="advanced-section-hint">Control how much variables and nets contribute to subtree area.</div>
                     </div>
                     <div class="advanced-section-controls">
                       <div class="metric-group" data-ui-name="weighted-var-group">
@@ -146,7 +165,6 @@
                   <div class="advanced-section" data-ui-name="analysis-section">
                     <div class="advanced-section-copy">
                       <div class="advanced-section-title">Analysis Overlay</div>
-                      <div class="advanced-section-hint">Choose which module statistic should tint the current view.</div>
                     </div>
                     <div class="advanced-section-controls">
                       <div class="metric-group" data-ui-name="analysis-group">
@@ -163,7 +181,6 @@
                   <div class="advanced-section advanced-section-wide hidden" id="analysis-pattern-group" data-ui-name="analysis-pattern-section">
                     <div class="advanced-section-copy">
                       <div class="advanced-section-title">Pattern Analysis</div>
-                      <div class="advanced-section-hint">Match internal signal names with wildcard, text, or regex, then tint contributing modules inside the current view.</div>
                     </div>
                     <div class="advanced-section-controls">
                       <div class="metric-group" data-ui-name="analysis-mode-group">
@@ -208,8 +225,9 @@
             <input
               id="search-input"
               type="search"
-              placeholder="Filter: foo ; bar"
+              placeholder="Filter instances or modules"
               title="Use ';' to combine multiple patterns. Scope and mode are selected by the dropdowns on the left. You can still override with wc:... or re:... prefixes."
+              aria-label="Filter instances or modules"
               data-ui-name="filter-input"
             />
           </div>
@@ -266,11 +284,9 @@
             <div class="chart-toolbar" data-ui-name="chart-toolbar">
               <div class="chart-header">
                 <div class="chart-header-main">
-                  <div class="chart-kicker">Chart Workspace</div>
-                  <div class="side-title">Hierarchy Charts</div>
+                  <div class="side-title">Composition</div>
                   <div class="side-subtitle" id="chart-panel-subtitle"></div>
                 </div>
-                <div class="chart-header-note">Charts follow the current root, filter, and hierarchy depth context.</div>
               </div>
               <div class="chart-controls" data-ui-name="chart-controls">
                 <div class="metric-group" data-ui-name="chart-mode-group">
@@ -347,7 +363,7 @@
           <div class="side-actions">
             <button id="expand-tree-btn" type="button" data-ui-name="expand-tree-btn">Expand All</button>
             <button id="collapse-tree-btn" type="button" data-ui-name="collapse-tree-btn">Collapse All</button>
-            <button id="close-tree-btn" type="button" data-ui-name="close-tree-btn">Close</button>
+            <button id="close-tree-btn" type="button" data-ui-name="close-tree-btn" class="icon-button" aria-label="Close hierarchy tree" title="Close hierarchy tree"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
           </div>
         </div>
         <div class="side-body">
@@ -364,8 +380,8 @@
             <div class="side-subtitle" id="match-panel-subtitle"></div>
           </div>
           <div class="side-actions">
-            <button id="copy-matches-btn" type="button" data-ui-name="copy-matches-btn">Copy</button>
-            <button id="close-match-btn" type="button" data-ui-name="close-match-btn">Close</button>
+            <button id="copy-matches-btn" type="button" data-ui-name="copy-matches-btn" class="icon-button" aria-label="Copy matches" title="Copy matches"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+            <button id="close-match-btn" type="button" data-ui-name="close-match-btn" class="icon-button" aria-label="Close matches" title="Close matches"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
           </div>
         </div>
         <div class="side-body">
@@ -418,7 +434,7 @@
           <div class="source-actions">
             <a class="source-open-link hidden" id="open-raw-source-link" href="#" target="_blank" rel="noopener noreferrer" data-ui-name="open-raw-source-link">Open Raw</a>
             <button class="source-expand" id="toggle-source-fullscreen-btn" type="button" aria-pressed="false" data-ui-name="toggle-source-fullscreen-btn">Fullscreen</button>
-            <button class="source-close" id="close-source-btn" type="button" data-ui-name="close-source-btn">Close</button>
+            <button class="icon-button source-close" id="close-source-btn" type="button" data-ui-name="close-source-btn" aria-label="Close source" title="Close source"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
           </div>
         </div>
         <div class="source-searchbar-shell" data-ui-name="source-searchbar-shell">
@@ -427,7 +443,7 @@
             <div class="source-bookmark-bar" data-ui-name="source-bookmark-bar">
               <div class="source-bookmark-label">Bookmarks</div>
               <div class="source-bookmark-list" id="source-bookmark-list" data-ui-name="source-bookmark-list">
-                <span class="source-bookmark-empty">Click a line number to bookmark it.</span>
+                <span class="source-bookmark-empty">No bookmarks</span>
               </div>
             </div>
             <div class="source-searchbar" data-ui-name="source-searchbar">
@@ -475,7 +491,7 @@
 
     <section class="statusbar panel" data-ui-name="statusbar" data-ui-label="always">
       <div id="status-left" data-ui-name="status-left"></div>
-      <div class="hint" id="status-right" data-ui-name="status-right">Wheel to zoom. Drag to pan. Click to drill down. Filter supports text, wc:pattern, and re:regex. Use ';' to combine patterns.</div>
+      <div class="hint" id="status-right" role="status" aria-live="polite" data-ui-name="status-right"></div>
     </section>
   </div>
   <div class="ui-annotation-layer" id="ui-annotation-layer" aria-hidden="true"></div>
