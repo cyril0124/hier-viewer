@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added `skills/hier-viewer/SKILL.md` guiding agents to generate executable `.hier-viewer/view-<slug>.sh` launchers with per-design bundles, cache reuse, and HTTP preview bound to `0.0.0.0`.
+
 ### Fixed
 
 - Clearing a hierarchy filter or entering an invalid regex refreshes Matches and Tree instead of leaving stale results and highlights.
