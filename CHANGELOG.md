@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Clearing a hierarchy filter or entering an invalid regex refreshes Matches and Tree instead of leaving stale results and highlights.
+- Chart drill-down retains matches inherited from ancestors; deep chart, tree-panel, and analysis traversals no longer overflow the JavaScript stack.
+- Broad hierarchy filters stop revisiting already processed ancestors, avoiding quadratic work on deep designs.
+- Closing or switching the source reader cancels pending rendering and progress updates, and loading a new file clears the previous search and bookmark context.
+- Plain-text source search preserves input focus; virtualized source rows keep stable scroll geometry and reveal long-line matches horizontally.
+- Chart content remains scrollable on short or narrow viewports instead of clipping the plot and legend, and the 3D Fit camera frames the complete height of the bars.
+- Wizard input preserves wildcard and regex expressions unless a completion is explicitly selected, and retains quoting for CLI flags containing spaces or quotes.
+- Filelists containing compiler options or inline comments are accepted; slang validates missing sources and invalid options directly.
 - Parameterized instances now retain their own elaborated signal widths and generate-dependent counts instead of reusing the first instance's statistics.
 - Cached exports are invalidated when an actual source dependency, including an included header, changes or disappears.
 - Bundled source paths no longer collide when different source directories share filenames, and source URLs encode reserved characters in directory and file names.

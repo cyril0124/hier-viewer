@@ -22,7 +22,6 @@ use crate::logging::{color_env_value, info, warn};
 
 const RTL_EXTENSIONS: &[&str] = &["sv", "svh", "v", "vh"];
 const MAX_SUGGESTIONS: usize = 18;
-const MAX_REPORTED_COMMAND_FILE_MISSING_ENTRIES: usize = 12;
 const EXPORTER_BINARY_NAME: &str = if cfg!(windows) {
     "slang-hier-exporter.exe"
 } else {
@@ -433,7 +432,6 @@ pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<Exp
             cache_dir.display()
         )
     })?;
-    validate_command_file_sources(selection)?;
     let cache_key = compute_sqlite_cache_key(selection, &exporter)?;
     let export_path = cache_dir.join(format!("{cache_key}.sqlite"));
     if export_path.is_file()
@@ -1005,64 +1003,6 @@ enum CommandFilePathMode {
     CommandFileDirectory,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct MissingCommandFileEntry {
-    command_file: String,
-    line_number: usize,
-    referenced_path: String,
-    resolved_path: String,
-}
-
-fn validate_command_file_sources(selection: &StartupSelection) -> Result<(), String> {
-    let cwd = env::current_dir()
-        .map_err(|err| format!("failed to determine current directory: {err}"))?;
-    let home = home_dir();
-    let mut visited = BTreeSet::new();
-    let mut missing_entries = Vec::new();
-    let mut previous_was_filelist = false;
-
-    for token in &selection.source_args_tokens {
-        if previous_was_filelist {
-            collect_missing_command_file_entries(
-                Path::new(token),
-                CommandFilePathMode::WorkingDirectory,
-                &cwd,
-                home.as_deref(),
-                &mut visited,
-                &mut missing_entries,
-            )?;
-            previous_was_filelist = false;
-            continue;
-        }
-        previous_was_filelist = token == "-f";
-    }
-
-    if missing_entries.is_empty() {
-        return Ok(());
-    }
-
-    let mut message = format!(
-        "filelist validation failed: {} missing source path(s) referenced by command files",
-        missing_entries.len()
-    );
-    for entry in missing_entries
-        .iter()
-        .take(MAX_REPORTED_COMMAND_FILE_MISSING_ENTRIES)
-    {
-        message.push_str(&format!(
-            "\n  {}:{} -> {}",
-            entry.command_file, entry.line_number, entry.referenced_path
-        ));
-    }
-    if missing_entries.len() > MAX_REPORTED_COMMAND_FILE_MISSING_ENTRIES {
-        message.push_str(&format!(
-            "\n  ... {} more missing path(s) omitted",
-            missing_entries.len() - MAX_REPORTED_COMMAND_FILE_MISSING_ENTRIES
-        ));
-    }
-    Err(message)
-}
-
 fn fingerprint_command_file(
     hasher: &mut StableHasher,
     path: &Path,
@@ -1153,98 +1093,6 @@ fn fingerprint_command_file(
                 hasher,
                 &resolve_command_file_token(command_dir, mode, cwd, home_dir, token),
             )?;
-            index += 1;
-        }
-    }
-
-    Ok(())
-}
-
-fn collect_missing_command_file_entries(
-    path: &Path,
-    mode: CommandFilePathMode,
-    cwd: &Path,
-    home_dir: Option<&Path>,
-    visited: &mut BTreeSet<String>,
-    missing_entries: &mut Vec<MissingCommandFileEntry>,
-) -> Result<(), String> {
-    let command_file =
-        resolve_command_file_token(cwd, mode, cwd, home_dir, &path_to_unix_string(path));
-    let key = path_to_unix_string(&command_file);
-    if !visited.insert(key.clone()) {
-        return Ok(());
-    }
-
-    let text = fs::read_to_string(&command_file).map_err(|err| {
-        format!(
-            "failed to read command file '{}': {err}",
-            command_file.display()
-        )
-    })?;
-    let command_dir = command_file.parent().unwrap_or(cwd);
-    for (line_index, line) in text.lines().enumerate() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with('#') {
-            continue;
-        }
-        let tokens = shell_split(trimmed).unwrap_or_else(|_| vec![trimmed.to_string()]);
-        let mut index = 0usize;
-        while index < tokens.len() {
-            let token = tokens[index].trim();
-            if token.is_empty() {
-                index += 1;
-                continue;
-            }
-            if token == "-f" || token == "-F" {
-                let nested_mode = if token == "-F" {
-                    CommandFilePathMode::CommandFileDirectory
-                } else {
-                    CommandFilePathMode::WorkingDirectory
-                };
-                if let Some(next) = tokens.get(index + 1) {
-                    collect_missing_command_file_entries(
-                        Path::new(next),
-                        nested_mode,
-                        command_dir,
-                        home_dir,
-                        visited,
-                        missing_entries,
-                    )?;
-                    index += 2;
-                    continue;
-                }
-                index += 1;
-                continue;
-            }
-            if let Some(rest) = token.strip_prefix("+incdir+") {
-                for include_dir in rest.split('+').filter(|value| !value.is_empty()) {
-                    let resolved =
-                        resolve_command_file_token(command_dir, mode, cwd, home_dir, include_dir);
-                    if !resolved.exists() {
-                        missing_entries.push(MissingCommandFileEntry {
-                            command_file: key.clone(),
-                            line_number: line_index + 1,
-                            referenced_path: format!("+incdir+{}", include_dir),
-                            resolved_path: path_to_unix_string(&resolved),
-                        });
-                    }
-                }
-                index += 1;
-                continue;
-            }
-            if token.starts_with('-') || token.starts_with('+') {
-                index += 1;
-                continue;
-            }
-            let resolved = resolve_command_file_token(command_dir, mode, cwd, home_dir, token);
-            if !resolved.exists() {
-                missing_entries.push(MissingCommandFileEntry {
-                    command_file: key.clone(),
-                    line_number: line_index + 1,
-                    referenced_path: token.to_string(),
-                    resolved_path: path_to_unix_string(&resolved),
-                });
-            }
             index += 1;
         }
     }
@@ -1869,29 +1717,32 @@ mod tests {
     }
 
     #[test]
-    fn validation_reports_missing_filelist_entries_with_line_numbers() {
-        let temp_dir = temp_test_dir("filelist-validation");
-        let missing_path = temp_dir.join("missing.sv");
+    fn filelist_options_are_validated_by_the_exporter() {
+        let temp_dir = temp_test_dir("filelist-options");
+        let source_path = temp_dir.join("top.sv");
         let filelist_path = temp_dir.join("files.f");
+        fs::write(&source_path, "module top; logic data; endmodule\n").expect("write source");
         fs::write(
             &filelist_path,
-            format!("{}\n", path_to_unix_string(&missing_path)),
+            format!("--top top\n{} // source file\n", path_to_unix_string(&source_path)),
         )
         .expect("write filelist");
-
         let selection = StartupSelection {
-            output_dir: path_to_unix_string(&temp_dir),
+            output_dir: path_to_unix_string(temp_dir.join("out")),
             title: None,
             source_args_tokens: vec!["-f".to_string(), path_to_unix_string(&filelist_path)],
             extra_args_tokens: Vec::new(),
             rebuild_sqlite: false,
         };
+        let export = run_hier_viewer_export(&selection).expect("export valid filelist options");
+        assert!(Path::new(&export.sqlite_path).is_file());
+        let cached = run_hier_viewer_export(&selection).expect("reuse valid export");
+        assert_eq!(cached.sqlite_path, export.sqlite_path);
 
-        let error = validate_command_file_sources(&selection).expect_err("validation should fail");
-        assert!(error.contains("filelist validation failed"));
-        assert!(error.contains(&format!("{}:1", path_to_unix_string(&filelist_path))));
-        assert!(error.contains("missing.sv"));
-
-        let _ = fs::remove_dir_all(&temp_dir);
+        fs::remove_file(&source_path).expect("remove source");
+        let error = run_hier_viewer_export(&selection).expect_err("missing source must fail");
+        assert!(error.contains("hierarchy exporter failed"), "{error}");
+        assert!(error.contains("top.sv"), "{error}");
+        fs::remove_dir_all(&temp_dir).expect("remove test directory");
     }
 }

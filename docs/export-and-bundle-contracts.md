@@ -57,7 +57,19 @@ Rust assigns parents lower node IDs than their children. Aggregate statistics in
 The browser follows child links in iterative postorder for subtree depth and analysis totals. Signal-name matching runs once per referenced definition per pattern update, then assigns those counts to instances. Definitions absent from the filtered hierarchy are not scanned. Completion or failure of lazy analysis loading invalidates the chart render cache.
 
 ```sh
-node --test tests/viewer-runtime.test.cjs
+node --test tests/*.test.cjs
 ```
 
-The runtime tests cover a root with 200,000 children, a 30,000-node chain, shared definitions, mode changes, and asynchronous analysis completion. Rust tests include a 100,000-node chain and source-path collisions.
+The runtime tests cover a root with 200,000 children, a 30,000-node chain, shared definitions, mode changes, asynchronous analysis completion, filter updates, chart drill-down, and source-request cancellation. Rust tests include a 100,000-node chain, source-path collisions, filelist compiler options, and wizard input preservation.
+
+## Source reader verification
+
+Virtualized rows use a measured, fixed height and no intrinsic-size placeholders. Search navigation scrolls the active match into view without taking focus from the search input. Each source request owns its cancellation signal; closing or switching files invalidates pending rendering and progress updates.
+
+With `agent-browser` and its Chromium browser installed, run:
+
+```sh
+node tests/source-reader-browser.cjs
+```
+
+This starts a temporary loopback server and loads the production reader functions, event handlers, HTML, and CSS. At desktop and narrow viewport sizes, it checks 500,000-line plain-text search focus, Enter/Shift+Enter navigation, and horizontal visibility of column-401 matches in virtualized source. The server and browser session close when the script exits.

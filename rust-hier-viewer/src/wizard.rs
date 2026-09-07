@@ -170,6 +170,7 @@ struct WizardState {
     status: String,
     suggestions: Vec<String>,
     suggestion_index: usize,
+    suggestion_explicitly_selected: bool,
     latest_suggestion_seq: u64,
     suggestion_target: Option<SuggestionTarget>,
 }
@@ -198,6 +199,38 @@ struct InputTabLayout {
     help: Rect,
 }
 
+impl WizardState {
+    fn new(config: &Config, file_index: &FileIndex) -> Self {
+        Self {
+            selected: Field::RtlPathInput,
+            pattern_mode: PatternMode::Wildcard,
+            pattern_mode_open: false,
+            rtl_path_input: String::new(),
+            rtl_path_editing: true,
+            filelist_input: String::new(),
+            filelist_editing: false,
+            sources: Vec::new(),
+            source_index: 0,
+            extra_args: shell_words::join(&config.extra_args_tokens),
+            output_dir: config
+                .output_path
+                .clone()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| DEFAULT_OUTPUT_DIR.to_string()),
+            title: config.title.clone().unwrap_or_default(),
+            status: format!(
+                "Scanned {} RTL files from the current workspace. Add RTL paths and optional filelists into the source list, then run slang-hier-exporter --sqlite internally.",
+                file_index.file_count()
+            ),
+            suggestions: Vec::new(),
+            suggestion_index: 0,
+            suggestion_explicitly_selected: false,
+            latest_suggestion_seq: 0,
+            suggestion_target: None,
+        }
+    }
+}
+
 pub(crate) fn run_startup_wizard(
     config: &Config,
     file_index: &FileIndex,
@@ -210,32 +243,7 @@ pub(crate) fn run_startup_wizard(
     let mut terminal =
         Terminal::new(backend).map_err(|err| format!("failed to initialize terminal: {err}"))?;
 
-    let mut state = WizardState {
-        selected: Field::RtlPathInput,
-        pattern_mode: PatternMode::Wildcard,
-        pattern_mode_open: false,
-        rtl_path_input: String::new(),
-        rtl_path_editing: true,
-        filelist_input: String::new(),
-        filelist_editing: false,
-        sources: Vec::new(),
-        source_index: 0,
-        extra_args: config.extra_args_tokens.join(" "),
-        output_dir: config
-            .output_path
-            .clone()
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| DEFAULT_OUTPUT_DIR.to_string()),
-        title: config.title.clone().unwrap_or_default(),
-        status: format!(
-            "Scanned {} RTL files from the current workspace. Add RTL paths and optional filelists into the source list, then run slang-hier-exporter --sqlite internally.",
-            file_index.file_count()
-        ),
-        suggestions: Vec::new(),
-        suggestion_index: 0,
-        latest_suggestion_seq: 0,
-        suggestion_target: None,
-    };
+    let mut state = WizardState::new(config, file_index);
 
     let (request_tx, response_rx) = spawn_suggestion_worker(file_index.clone());
     request_suggestions(&request_tx, &mut state);
@@ -308,6 +316,7 @@ fn handle_key(
         KeyCode::Tab => {
             if active_input_editing(state) && !state.suggestions.is_empty() {
                 state.suggestion_index = (state.suggestion_index + 1) % state.suggestions.len();
+                state.suggestion_explicitly_selected = true;
             } else {
                 clear_transient_state(state);
                 state.selected = state.selected.next();
@@ -321,6 +330,7 @@ fn handle_key(
                     .suggestion_index
                     .checked_sub(1)
                     .unwrap_or_else(|| state.suggestions.len().saturating_sub(1));
+                state.suggestion_explicitly_selected = true;
             } else {
                 clear_transient_state(state);
                 state.selected = state.selected.prev();
@@ -335,6 +345,7 @@ fn handle_key(
                 request_suggestions(request_tx, state);
             } else if active_input_editing(state) && !state.suggestions.is_empty() {
                 state.suggestion_index = (state.suggestion_index + 1) % state.suggestions.len();
+                state.suggestion_explicitly_selected = true;
             } else if state.selected == Field::SourceList && !state.sources.is_empty() {
                 state.source_index = (state.source_index + 1) % state.sources.len();
             } else {
@@ -354,6 +365,7 @@ fn handle_key(
                     .suggestion_index
                     .checked_sub(1)
                     .unwrap_or_else(|| state.suggestions.len().saturating_sub(1));
+                state.suggestion_explicitly_selected = true;
             } else if state.selected == Field::SourceList && !state.sources.is_empty() {
                 state.source_index = state
                     .source_index
@@ -491,6 +503,9 @@ fn handle_source_input_enter(
 }
 
 fn apply_selected_suggestion_if_needed(state: &mut WizardState, kind: SourceEntryKind) -> bool {
+    if !state.suggestion_explicitly_selected {
+        return false;
+    }
     let Some(suggestion) = state.suggestions.get(state.suggestion_index).cloned() else {
         return false;
     };
@@ -649,6 +664,7 @@ fn stop_active_input_editing(state: &mut WizardState) -> bool {
     state.filelist_editing = false;
     state.suggestions.clear();
     state.suggestion_index = 0;
+    state.suggestion_explicitly_selected = false;
     state.suggestion_target = None;
     was_editing
 }
@@ -838,7 +854,7 @@ fn render_input_tab(frame: &mut ratatui::Frame<'_>, area: Rect, state: &WizardSt
         vec![
             "Add each RTL path or pattern as its own item. No comma or semicolon separators are needed.",
             "Use the Filelist field for .f / filelist inputs. They will be passed to slang-hier-exporter with -f.",
-            "While editing RTL Path or Filelist, Tab and Shift+Tab move through suggestions. Enter first accepts the highlighted suggestion, then adds the item to the list.",
+            "Enter adds the typed path or pattern. Tab / Shift+Tab / Up / Down select a suggestion; Enter completes that selection, then Enter adds it.",
             "Focus the source list and press Delete or Backspace to remove the selected item.",
         ],
     );
@@ -1316,6 +1332,7 @@ fn spawn_suggestion_worker(
 }
 
 fn request_suggestions(request_tx: &Sender<SuggestionRequest>, state: &mut WizardState) {
+    state.suggestion_explicitly_selected = false;
     let Some(target) = active_suggestion_target(state) else {
         state.suggestions.clear();
         state.suggestion_index = 0;
@@ -1344,6 +1361,286 @@ fn drain_suggestion_updates(response_rx: &Receiver<SuggestionResponse>, state: &
         {
             state.suggestions = response.suggestions;
             state.suggestion_index = 0;
+            state.suggestion_explicitly_selected = false;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::fs;
+    use std::process::Command;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn with_workspace(test: impl FnOnce(&FileIndex)) {
+        const CHILD_TEST: &str = "HIER_VIEWER_WIZARD_CHILD_TEST";
+        let thread = thread::current();
+        let test_name = thread.name().expect("test thread name");
+        if env::var(CHILD_TEST).as_deref() == Ok(test_name) {
+            test(&FileIndex::build().expect("index fixture files"));
+            return;
+        }
+
+        // FileIndex::build uses cwd. Isolate it from other tests without changing process cwd.
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before epoch")
+            .as_nanos();
+        let dir = env::temp_dir().join(format!(
+            "hier-viewer-wizard-tests-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(dir.join("ibex/rtl")).expect("create RTL directory");
+        fs::create_dir_all(dir.join("ibex/lists")).expect("create filelist directory");
+        for name in ["first.sv", "second.sv", "excluded.v"] {
+            fs::write(dir.join("ibex/rtl").join(name), "module top; endmodule\n")
+                .expect("write RTL fixture");
+        }
+        for name in ["first.f", "second.f", "third.f"] {
+            fs::write(dir.join("ibex/lists").join(name), "ibex/rtl/first.sv\n")
+                .expect("write filelist fixture");
+        }
+        let output = Command::new(env::current_exe().expect("test executable"))
+            .args(["--exact", test_name, "--nocapture"])
+            .env(CHILD_TEST, test_name)
+            .current_dir(&dir)
+            .output()
+            .expect("run isolated wizard test");
+        fs::remove_dir_all(dir).expect("remove fixture directory");
+        assert!(
+            output.status.success(),
+            "isolated test failed:\n{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn config() -> Config {
+        Config {
+            db_path: None,
+            output_path: None,
+            title: None,
+            no_wizard: false,
+            rebuild_sqlite: false,
+            preview: false,
+            preview_host: "127.0.0.1".to_string(),
+            preview_port: 8000,
+            rtl_inputs: Vec::new(),
+            filelists: Vec::new(),
+            extra_args_tokens: Vec::new(),
+            debug: false,
+        }
+    }
+
+    fn press(
+        code: KeyCode,
+        state: &mut WizardState,
+        index: &FileIndex,
+        tx: &Sender<SuggestionRequest>,
+    ) {
+        assert!(
+            handle_key(KeyEvent::new(code, KeyModifiers::NONE), state, index, tx)
+                .expect("handle wizard key")
+                .is_none()
+        );
+    }
+
+    fn type_text(
+        text: &str,
+        state: &mut WizardState,
+        index: &FileIndex,
+        tx: &Sender<SuggestionRequest>,
+    ) {
+        for ch in text.chars() {
+            press(KeyCode::Char(ch), state, index, tx);
+        }
+    }
+
+    fn respond(request: SuggestionRequest, state: &mut WizardState, index: &FileIndex) {
+        let suggestions = match request.target {
+            SuggestionTarget::RtlPath => index.suggestions(&request.input, request.mode),
+            SuggestionTarget::Filelist => index.filelist_suggestions(&request.input),
+        };
+        let (tx, rx) = mpsc::channel();
+        tx.send(SuggestionResponse {
+            seq: request.seq,
+            mode: request.mode,
+            target: request.target,
+            suggestions,
+        })
+        .expect("send suggestions");
+        drain_suggestion_updates(&rx, state);
+    }
+
+    fn respond_latest(rx: &Receiver<SuggestionRequest>, state: &mut WizardState, index: &FileIndex) {
+        respond(
+            rx.try_iter().last().expect("pending suggestion request"),
+            state,
+            index,
+        );
+    }
+
+    #[test]
+    fn enter_preserves_wildcard_and_regex_patterns_and_expands_two_files() {
+        with_workspace(|index| {
+            for (mode, pattern) in [
+                (PatternMode::Wildcard, "ibex/rtl/*.sv"),
+                (PatternMode::Regex, r"^ibex/rtl/.*\.sv$"),
+            ] {
+                let mut state = WizardState::new(&config(), index);
+                state.pattern_mode = mode;
+                let (tx, rx) = mpsc::channel();
+                type_text(pattern, &mut state, index, &tx);
+                respond_latest(&rx, &mut state, index);
+                assert_eq!(state.suggestions.len(), 2);
+                press(KeyCode::Enter, &mut state, index, &tx);
+                assert_eq!(state.sources.len(), 1);
+                assert_eq!(state.sources[0].value, pattern);
+                assert_eq!(state.sources[0].matched_files, Some(2));
+                assert!(state.rtl_path_input.is_empty());
+                state.selected = Field::Run;
+                let selection = handle_key(
+                    KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+                    &mut state,
+                    index,
+                    &tx,
+                )
+                .expect("run wizard selection")
+                .expect("valid startup selection");
+                let cwd = env::current_dir().expect("fixture cwd");
+                let expected = ["first.sv", "second.sv"].map(|name| {
+                    cwd.join("ibex/rtl")
+                        .join(name)
+                        .to_string_lossy()
+                        .replace('\\', "/")
+                });
+                assert_eq!(selection.source_args_tokens, expected);
+            }
+        });
+    }
+
+    #[test]
+    fn explicit_candidate_keys_complete_rtl_and_filelists() {
+        with_workspace(|index| {
+            for mode in pattern_mode_options() {
+                for field in [Field::RtlPathInput, Field::FilelistInput] {
+                    for key in [KeyCode::Tab, KeyCode::BackTab, KeyCode::Up, KeyCode::Down] {
+                        let mut state = WizardState::new(&config(), index);
+                        state.pattern_mode = mode;
+                        state.selected = field;
+                        state.filelist_editing = field == Field::FilelistInput;
+                        let (tx, rx) = mpsc::channel();
+                        let input = if field == Field::FilelistInput {
+                            "ibex/lists/"
+                        } else {
+                            "ibex/rtl/"
+                        };
+                        type_text(input, &mut state, index, &tx);
+                        respond_latest(&rx, &mut state, index);
+                        assert_eq!(state.suggestions.len(), 3);
+                        press(key, &mut state, index, &tx);
+                        let expected_index = if matches!(key, KeyCode::Tab | KeyCode::Down) {
+                            1
+                        } else {
+                            2
+                        };
+                        assert_eq!(state.suggestion_index, expected_index);
+                        let expected = state.suggestions[expected_index].clone();
+                        press(KeyCode::Enter, &mut state, index, &tx);
+                        assert!(state.sources.is_empty());
+                        let kind = if field == Field::FilelistInput {
+                            SourceEntryKind::Filelist
+                        } else {
+                            SourceEntryKind::RtlPath
+                        };
+                        assert_eq!(active_source_input_mut(&mut state, kind), &expected);
+                        assert!(!state.suggestion_explicitly_selected);
+                        respond_latest(&rx, &mut state, index);
+                        press(KeyCode::Enter, &mut state, index, &tx);
+                        assert_eq!(state.sources.len(), 1);
+                        assert_eq!(state.sources[0].kind, kind);
+                        assert_eq!(state.sources[0].value, expected);
+                    }
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn editing_responses_and_cleanup_reset_explicit_candidate_selection() {
+        with_workspace(|index| {
+            for key in [
+                KeyCode::Char('*'),
+                KeyCode::Backspace,
+                KeyCode::Esc,
+                KeyCode::PageDown,
+            ] {
+                let mut state = WizardState::new(&config(), index);
+                let (tx, rx) = mpsc::channel();
+                type_text("ibex/rtl/", &mut state, index, &tx);
+                respond_latest(&rx, &mut state, index);
+                press(KeyCode::Down, &mut state, index, &tx);
+                assert!(state.suggestion_explicitly_selected);
+                press(key, &mut state, index, &tx);
+                assert!(!state.suggestion_explicitly_selected);
+                if matches!(key, KeyCode::Char(_) | KeyCode::Backspace) {
+                    let input = state.rtl_path_input.clone();
+                    // Enter before the edited input's response must not use the old selection.
+                    press(KeyCode::Enter, &mut state, index, &tx);
+                    assert_eq!(state.sources[0].value, input);
+                } else {
+                    assert!(state.suggestions.is_empty());
+                    assert_eq!(state.suggestion_target, None);
+                }
+            }
+
+            let mut state = WizardState::new(&config(), index);
+            let (tx, rx) = mpsc::channel();
+            type_text("ibex/rtl/", &mut state, index, &tx);
+            respond_latest(&rx, &mut state, index);
+            press(KeyCode::Char('*'), &mut state, index, &tx);
+            let stale = rx.try_iter().last().expect("first pending request");
+            type_text(".sv", &mut state, index, &tx);
+            press(KeyCode::Down, &mut state, index, &tx);
+            assert!(state.suggestion_explicitly_selected);
+            respond(stale, &mut state, index);
+            assert!(state.suggestion_explicitly_selected);
+            respond_latest(&rx, &mut state, index);
+            assert!(!state.suggestion_explicitly_selected);
+            assert_eq!(state.suggestions.len(), 2);
+            press(KeyCode::Enter, &mut state, index, &tx);
+            assert_eq!(state.sources[0].value, "ibex/rtl/*.sv");
+            assert_eq!(state.sources[0].matched_files, Some(2));
+        });
+    }
+
+    #[test]
+    fn build_selection_round_trips_special_cli_arguments() {
+        with_workspace(|index| {
+            let mut config = config();
+            config.extra_args_tokens = [
+                "+incdir+/path with spaces/include",
+                "+define+MESSAGE=\"hello world\"",
+                "+define+APOSTROPHE=it's",
+                r"+define+PATH=C:\rtl\include",
+                "",
+                "line one\nline two\tend",
+                "--top",
+                "top module",
+            ]
+            .map(str::to_string)
+            .to_vec();
+            let mut state = WizardState::new(&config, index);
+            let (tx, _rx) = mpsc::channel();
+            type_text("ibex/rtl/*.sv", &mut state, index, &tx);
+            press(KeyCode::Enter, &mut state, index, &tx);
+            let selection = build_selection(&mut state, index)
+                .expect("build selection")
+                .expect("valid selection");
+            assert_eq!(selection.extra_args_tokens, config.extra_args_tokens);
+            assert_eq!(selection.source_args_tokens.len(), 2);
+        });
     }
 }

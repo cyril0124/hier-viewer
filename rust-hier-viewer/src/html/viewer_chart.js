@@ -306,14 +306,22 @@
       ]);
     }
 
+    function threeFitDistance(extent, maxHeight) {
+      const aspect = Math.max(1, chartVisual.clientWidth) / Math.max(1, chartVisual.clientHeight);
+      const verticalHalfFov = 19 * Math.PI / 180;
+      const halfFov = Math.min(verticalHalfFov, Math.atan(Math.tan(verticalHalfFov) * aspect));
+      const radius = Math.hypot(extent, extent, maxHeight) / 2;
+      return radius * 1.1 / Math.sin(halfFov);
+    }
+
     function createThreeViewState(extent, maxHeight) {
-      const fitDistance = Math.max(10.5, extent * 1.18);
+      const fitDistance = threeFitDistance(extent, maxHeight);
       return {
         yaw: 0.72,
         pitch: 1.06,
         distance: fitDistance,
         targetX: 0,
-        targetY: Math.min(2.2, Math.max(0.7, maxHeight * 0.15)),
+        targetY: maxHeight / 2,
         targetZ: 0,
         minDistance: Math.max(2.8, extent * 0.18),
         maxDistance: Math.max(22, extent * 7.2),
@@ -329,8 +337,8 @@
       } else {
         threeViewState.minDistance = Math.max(2.8, extent * 0.18);
         threeViewState.maxDistance = Math.max(22, extent * 7.2);
-        threeViewState.fitDistance = Math.max(10.5, extent * 1.18);
-        threeViewState.targetY = Math.min(2.2, Math.max(0.7, maxHeight * 0.15));
+        threeViewState.fitDistance = threeFitDistance(extent, maxHeight);
+        threeViewState.targetY = maxHeight / 2;
       }
       return threeViewState;
     }
@@ -584,25 +592,38 @@
     function collectLevelNodes(rootId, relativeLevel) {
       const result = [];
 
-      function walk(nodeId, depth, matchedAncestor) {
+      let matchedAncestor = false;
+      let parentId = api.getNode(rootId).parent;
+      while (parentId !== null && parentId !== undefined) {
+        if (state.matchIds.has(parentId)) {
+          matchedAncestor = true;
+          break;
+        }
+        parentId = api.getNode(parentId).parent;
+      }
+
+      const stack = [rootId, 0, matchedAncestor];
+      while (stack.length) {
+        const matchedAncestor = stack.pop();
+        const depth = stack.pop();
+        const nodeId = stack.pop();
         const node = api.getNode(nodeId);
         const nextMatchedAncestor = matchedAncestor || state.matchIds.has(nodeId);
         if (!isBranchIncluded(nodeId, nextMatchedAncestor)) {
-          return;
+          continue;
         }
         // Mirror treemap level semantics instead of exact-depth slicing.
         // Once a branch reaches the requested depth, or it terminates early,
         // that node becomes the frontier entry shown by chart views.
         if (depth >= relativeLevel || !node.children.length) {
           result.push(nodeId);
-          return;
+          continue;
         }
-        for (const childId of node.children) {
-          walk(childId, depth + 1, nextMatchedAncestor);
+        // Push in reverse so the frontier retains left-to-right DFS order.
+        for (let index = node.children.length - 1; index >= 0; index -= 1) {
+          stack.push(node.children[index], depth + 1, nextMatchedAncestor);
         }
       }
-
-      walk(rootId, 0, false);
       return result;
     }
 
@@ -1053,8 +1074,8 @@
         }
         clearVisual();
 
-        const width = Math.max(480, chartVisual.clientWidth || 480);
-        const height = Math.max(320, chartVisual.clientHeight || 320);
+        const width = Math.max(1, chartVisual.clientWidth);
+        const height = Math.max(1, chartVisual.clientHeight);
         const theme = api.currentThemeVisuals();
         const backgroundColor = new THREE.Color(api.mixHexColors(theme.canvasBase, theme.panel, theme.dark ? 0.18 : 0.26));
         const floorColor = new THREE.Color(api.mixHexColors(theme.panel, theme.canvasBase, theme.dark ? 0.18 : 0.12));
@@ -1109,6 +1130,8 @@
         const baseThickness = 0.08;
         const extent = Math.max(columnCount * cellSize, rowCount * cellSize, maxHeight);
         const viewState = ensureThreeView(extent, maxHeight);
+        camera.far = Math.max(240, viewState.maxDistance + extent * 2);
+        camera.updateProjectionMatrix();
         const labelDensityBias = chart.entries.length <= 12 ? 1.02 : chart.entries.length <= 36 ? 1.18 : 1.34;
 
         const floor = new THREE.Mesh(

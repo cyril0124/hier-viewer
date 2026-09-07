@@ -2668,11 +2668,6 @@
       if (!textarea) {
         return;
       }
-      try {
-        textarea.focus({ preventScroll: !scrollIntoView });
-      } catch (_) {
-        textarea.focus();
-      }
       textarea.setSelectionRange(start, end);
       if (scrollIntoView && Number.isInteger(lineNo)) {
         scrollPlainSourceLineIntoView(lineNo, "center");
@@ -2797,8 +2792,8 @@
       if (currentElement) {
         currentElement.classList.add("current");
         currentElement.closest(".source-line")?.classList.add("search-current");
-        if (scrollIntoView && !currentSourceView?.virtualized) {
-          currentElement.scrollIntoView({ block: "center", inline: "nearest" });
+        if (scrollIntoView) {
+          currentElement.scrollIntoView({ block: "nearest", inline: "nearest" });
         }
       }
       updateSourceSearchStatus();
@@ -2899,6 +2894,8 @@
       probe.style.position = "absolute";
       probe.style.visibility = "hidden";
       probe.style.pointerEvents = "none";
+      probe.style.contentVisibility = "visible";
+      probe.style.contain = "none";
       probe.style.inset = "0 auto auto 0";
       if (renderMode === "compact") {
         probe.innerHTML = '<span class="source-code-text"><span class="tok-keyword">module</span> probe;</span>';
@@ -3003,9 +3000,10 @@
       if (!view || !view.virtualized) {
         return;
       }
-      const { topSpacer, content, bottomSpacer } = ensureSourceVirtualElements();
+      const { shell, topSpacer, content, bottomSpacer } = ensureSourceVirtualElements();
       const lineHeight = view.lineHeight || measureSourceLineHeight(view.renderMode);
       view.lineHeight = lineHeight;
+      shell.style.setProperty("--source-line-height", `${lineHeight}px`);
       const viewportHeight = Math.max(sourceCode.clientHeight, lineHeight * 12);
       const startIndex = Math.max(0, Math.floor(sourceCode.scrollTop / lineHeight) - SOURCE_VIRTUALIZED_OVERSCAN_LINES);
       const endIndex = Math.min(
@@ -3299,6 +3297,7 @@
       }
 
       const response = await fetch(sourceUrl, { signal, cache: "no-store" });
+      signal.throwIfAborted();
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -3316,6 +3315,7 @@
         );
         while (true) {
           const { value, done } = await reader.read();
+          signal.throwIfAborted();
           if (done) {
             break;
           }
@@ -3337,6 +3337,7 @@
       } else {
         setSourceLoadProgress(12, "Downloading source...", "Streaming progress is unavailable in this browser.");
         text = await response.text();
+        signal.throwIfAborted();
         fetchedBytes = text.length;
       }
       const sourceData = {
@@ -3382,7 +3383,10 @@
       if (state.sourceAbortController) {
         state.sourceAbortController.abort();
       }
-      state.sourceAbortController = new AbortController();
+      const controller = new AbortController();
+      state.sourceAbortController = controller;
+      currentSourceView = null;
+      renderCurrentSourceView(false);
 
       sourceSubtitle.textContent = `${node.module} · ${target.locationLabel} · ${formatSourceLocation(target)} · loading full file...`;
       sourceCode.innerHTML = '<div class="source-line"><span class="source-lineno">-</span><span class="source-code-text">Loading...</span></div>';
@@ -3395,13 +3399,15 @@
 
       try {
         await nextFrame();
-        const sourceData = await loadFullSource(target, state.sourceAbortController.signal);
+        controller.signal.throwIfAborted();
+        const sourceData = await loadFullSource(target, controller.signal);
         if (state.sourceNodeId !== nodeId || state.sourceRequestToken !== requestToken) {
           return;
         }
         const lineCount = sourceData.lines.length;
         setSourceLoadProgress(100, "Rendering source...", `${lineCount} lines ready`);
         await nextFrame();
+        controller.signal.throwIfAborted();
         if (
           target.kind === "definition" &&
           Number.isFinite(target.line) &&
@@ -3437,11 +3443,11 @@
           targetKind: target.kind,
         });
         await nextFrame();
-        if (state.sourceNodeId === nodeId && state.sourceRequestToken === requestToken) {
-          emphasizeFocusedSourceRange();
-          await nextFrame();
-          emphasizeFocusedSourceRange();
-        }
+        controller.signal.throwIfAborted();
+        emphasizeFocusedSourceRange();
+        await nextFrame();
+        controller.signal.throwIfAborted();
+        emphasizeFocusedSourceRange();
         const modeSuffix = sourceRenderModeStatusSuffix(currentSourceView);
         showSourceStatus(
           modeSuffix
@@ -4132,7 +4138,10 @@
 
       const maxDepth = state.depthLimit === null ? Infinity : state.depthLimit;
 
-      function walk(nodeId, depth) {
+      const order = [state.currentRoot];
+      const depths = [0];
+      for (let i = 0; i < order.length; i += 1) {
+        const nodeId = order[i];
         state.analysisVisibleMaxCount = Math.max(
           state.analysisVisibleMaxCount,
           state.analysisLocalCounts[nodeId] || 0
@@ -4145,19 +4154,22 @@
           state.analysisVisibleMaxRatio,
           state.analysisLocalRatios[nodeId] || 0
         );
-        let subtreeQualified = analysisNodeQualified(nodeId);
-        if (depth < maxDepth) {
+        state.analysisVisibleSubtreeQualified[nodeId] = analysisNodeQualified(nodeId);
+        if (depths[i] < maxDepth) {
           for (const childId of getNode(nodeId).children) {
-            if (walk(childId, depth + 1)) {
-              subtreeQualified = true;
-            }
+            order.push(childId);
+            depths.push(depths[i] + 1);
           }
         }
-        state.analysisVisibleSubtreeQualified[nodeId] = subtreeQualified;
-        return subtreeQualified;
       }
-
-      walk(state.currentRoot, 0);
+      // Children are complete before their parents, including depth-limited frontiers.
+      for (let i = order.length - 1; i >= 0; i -= 1) {
+        if (depths[i] >= maxDepth) continue;
+        const nodeId = order[i];
+        for (const childId of getNode(nodeId).children) {
+          state.analysisVisibleSubtreeQualified[nodeId] ||= state.analysisVisibleSubtreeQualified[childId];
+        }
+      }
     }
 
     function analysisNodeQualified(nodeId) {
@@ -4226,18 +4238,25 @@
       }
 
       const maxDepth = state.depthLimit === null ? Infinity : state.depthLimit;
-      function walk(nodeId, depth) {
-        let subtreeQualified = analysisLegendLocalBucketMatches(nodeId);
-        if (depth < maxDepth) {
+      const order = [state.currentRoot];
+      const depths = [0];
+      for (let i = 0; i < order.length; i += 1) {
+        const nodeId = order[i];
+        state.analysisLegendVisibleSubtree[nodeId] = analysisLegendLocalBucketMatches(nodeId);
+        if (depths[i] < maxDepth) {
           for (const childId of getNode(nodeId).children) {
-            subtreeQualified = walk(childId, depth + 1) || subtreeQualified;
+            order.push(childId);
+            depths.push(depths[i] + 1);
           }
         }
-        state.analysisLegendVisibleSubtree[nodeId] = subtreeQualified;
-        return subtreeQualified;
       }
-
-      walk(state.currentRoot, 0);
+      for (let i = order.length - 1; i >= 0; i -= 1) {
+        if (depths[i] >= maxDepth) continue;
+        const nodeId = order[i];
+        for (const childId of getNode(nodeId).children) {
+          state.analysisLegendVisibleSubtree[nodeId] ||= state.analysisLegendVisibleSubtree[childId];
+        }
+      }
     }
 
     function analysisBaseHighlightState(nodeId) {
@@ -4363,6 +4382,8 @@
       state.matchVisibleIds = new Set();
       state.matchSubtreeIds = new Set();
       state.matchLines = [];
+      state.treePanelDirty = true;
+      state.matchPanelDirty = true;
       if (!raw) {
         return;
       }
@@ -4384,20 +4405,16 @@
         const node = getNode(id);
         return `${node.path} <${node.module}>`;
       });
-      state.treePanelDirty = true;
-      state.matchPanelDirty = true;
-
       const visible = new Set();
       const subtree = new Set();
       for (const id of state.matches) {
         let cursor = id;
-        while (cursor !== null && cursor !== undefined) {
-          subtree.add(cursor);
+        while (cursor !== null && cursor !== undefined && !visible.has(cursor)) {
           visible.add(cursor);
           cursor = visibleParent(cursor);
         }
-        cursor = getNode(id).parent;
-        while (cursor !== null && cursor !== undefined) {
+        cursor = id;
+        while (cursor !== null && cursor !== undefined && !subtree.has(cursor)) {
           subtree.add(cursor);
           cursor = getNode(cursor).parent;
         }
@@ -4483,24 +4500,19 @@
         cursor = visibleParent(cursor);
       }
 
-      function walk(nodeId, depth) {
+      const stack = [treeRootId, 0];
+      while (stack.length) {
+        const depth = stack.pop();
+        const nodeId = stack.pop();
         visitor(nodeId, depth);
         const node = getNode(nodeId);
-        if (!node.children.length) {
-          return;
+        if ((depth >= maxDepth && !currentPathIds.has(nodeId)) || state.treeCollapsedIds.has(nodeId)) {
+          continue;
         }
-        if (depth >= maxDepth && !currentPathIds.has(nodeId)) {
-          return;
-        }
-        if (state.treeCollapsedIds.has(nodeId)) {
-          return;
-        }
-        for (const childId of node.children) {
-          walk(childId, depth + 1);
+        for (let i = node.children.length - 1; i >= 0; i -= 1) {
+          stack.push(node.children[i], depth + 1);
         }
       }
-
-      walk(treeRootId, 0);
     }
 
     function renderTreePanel() {
@@ -4543,16 +4555,7 @@
         return !state.treeCollapsedIds.has(nodeId);
       }
 
-      function countRows(nodeId, depth) {
-        rowCount += 1;
-        if (!isExpanded(nodeId, depth)) {
-          return;
-        }
-        for (const childId of getNode(nodeId).children) {
-          countRows(childId, depth + 1);
-        }
-      }
-      countRows(treeRootId, 0);
+      forEachVisibleTreeNode(() => { rowCount += 1; });
 
       treePanelSubtitle.textContent = state.currentRoot === treeRootId
         ? `${root.path || "(root)"} · ${rowCount} rows`
@@ -4638,16 +4641,9 @@
         button.addEventListener("click", () => focusNodeInMainView(nodeId));
         row.appendChild(button);
         fragment.appendChild(row);
-
-        if (!childrenVisible || !isExpanded(nodeId, depth)) {
-          return;
-        }
-        for (const childId of node.children) {
-          appendRow(childId, depth + 1);
-        }
       }
 
-      appendRow(treeRootId, 0);
+      forEachVisibleTreeNode(appendRow);
       treePanelBody.appendChild(fragment);
       state.treePanelDirty = false;
     }
