@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Revised both READMEs with consistent RTL terminology, explicit statistics semantics, and consolidated installation, command, cache, and preview documentation.
 - Refreshed all eight README screenshots for the current viewer UI, using consistent 2880 x 1800 PNG captures at 2x pixel density.
 - Updated the embedded slang dependency from v10.0 to v11.0.
 - Frontend development uses strict TypeScript modules and Vite builds. Generated scripts remain embedded in the Rust binary, so Cargo installation and viewer use do not require Node.js.

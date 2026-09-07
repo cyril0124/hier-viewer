@@ -2,274 +2,170 @@
 
 [中文说明](README.zh-CN.md)
 
-A static hierarchy viewer for large RTL designs.
+RTL hierarchy visualization and structural analysis.
 
-`hier-viewer` runs an embedded `slang-hier-exporter` to extract hierarchy, module statistics, source locations, and analysis data from RTL. Rust reads the resulting SQLite database, or a database supplied with `--db`, and generates a directory that can be served by any static file server.
+`hier-viewer` generates an interactive static site for inspecting elaborated instance hierarchies, comparing module statistics, and navigating RTL source. It supports treemaps, 2D pie charts, and 3D charts.
 
-[Install](#install) · [Quick Start](#quick-start) · [Common Commands](#common-commands) · [Development](#development)
+The embedded `slang-hier-exporter` extracts hierarchy, signal statistics, and source locations into SQLite. The Rust application generates the site from this export or an existing database supplied with `--db`. The generated site requires an HTTP file server, but no application backend.
 
-The generated viewer supports:
-
-- Treemap, 2D Pie, and 3D main views
-- hierarchy drill-down, tree panel, and matches panel
-- source reader for both instance locations and module definitions
-- filter, analysis pattern, LOC, and weighted signal bits
-- release-binary self-update with staged download progress
-- persisted UI settings, bookmarks, and collapse state
-
-## Feature Showcase
-
-### Classic Treemap Overview
-
-![Classic treemap overview](docs/screenshots/treemap-classic-overview.png)
-
-This is the main chip-level view for fast hierarchy exploration. It shows how the design is decomposed into large top-level regions before you drill further into specific instances.
-
-### Weighted Accurate Treemap
-
-![Weighted accurate treemap](docs/screenshots/treemap-weighted-accurate.png)
-
-Compare relative module footprint using weighted signal-bit counts. This is a sizing estimate, not synthesized silicon area. Selecting `Weighted Signal Bits` starts in `Accurate` layout.
-
-### Interactive 2D Pie Chart
-
-![2D pie chart](docs/screenshots/chart-2d-pie.png)
-
-This is the same hierarchy context rendered as area composition, useful when you want to compare which modules dominate the current root or depth level.
-
-### 3D Weighted Chart
-
-![3D weighted chart](docs/screenshots/chart-3d-weighted-bits.png)
-
-This view turns the same sizing data into draggable 3D bars so deep module distributions can be compared from another angle.
-
-### Instance Wildcard Filtering
-
-![Instance wildcard filter](docs/screenshots/filter-instance-wildcard.png)
-
-Here the viewer is isolating `sram_*` instances, highlighting matches while fading unrelated nodes so SRAM structures are easy to spot.
-
-### Advanced Controls And Themes
-
-![Advanced controls and theme switching](docs/screenshots/advanced-theme-controls.png)
-
-This panel exposes layout mode, decomposition mode, weighted-bit coefficients, analysis overlays, and built-in themes such as Tokyo Night.
-
-### Zen Mode
-
-![Zen mode treemap](docs/screenshots/zen-mode-treemap.png)
-
-This strips away most of the chrome and leaves the visualization itself, which is useful for presentations or uninterrupted hierarchy inspection.
-
-### Source Reader With Bookmarks
-
-![Source reader with bookmarks](docs/screenshots/source-reader-bookmarks.png)
-
-This view shows module source code, bookmark chips with custom labels, in-file search, raw-file opening, and fullscreen reading for real debug work.
-
-If you are using it for the first time, read `Quick Start` and `Common Commands` first.
-
-Unless noted otherwise, the command examples below assume `hier-viewer` is already available on your `PATH`.
-If you are running directly from the source tree, replace `hier-viewer` with `./target/release/hier-viewer`.
+[Install](#install) · [Quick start](#quick-start) · [Common commands](#common-commands) · [Development](#development)
 
 ## Install
 
-### Recommended: install a release binary
+### Release binary
 
 1. Download the archive for your platform from [GitHub Releases](https://github.com/cyril0124/hier-viewer/releases/latest).
-2. Extract `hier-viewer` or `hier-viewer.exe` and place it on your `PATH`.
+2. Extract `hier-viewer` or `hier-viewer.exe` into a directory listed in `PATH`.
+3. Verify the installation:
 
-Verify the installation:
+   ```bash
+   hier-viewer --help
+   ```
 
-```bash
-hier-viewer --help
-```
+Release binaries include the exporter. Rust, CMake, and a C++ compiler are not required at runtime.
 
-Release binaries include the exporter, so they do not require a local Rust or C++ build. Use `hier-viewer update` to update an already-installed release binary.
+### Install with Cargo
 
-### Advanced: install from GitHub with Cargo
+Install the [source-build dependencies](#requirements), then run:
 
 ```bash
 cargo install --git https://github.com/cyril0124/hier-viewer --locked
 ```
 
-### Advanced: install from a local checkout with Cargo
+For a local checkout:
 
 ```bash
 cargo install --path . --locked
 ```
 
-Both Cargo installation paths compile the embedded exporter and require the [source-build dependencies](#requirements).
+To build without installing, run `cargo build --release --locked` and use `./target/release/hier-viewer` in place of `hier-viewer` below.
 
-## Examples
-
-- [`examples/ibex-example`](examples/ibex-example) is the recommended first example. It uses a pinned `lowRISC/ibex` submodule, static filelists, and two short wrapper scripts for `ibex_top` and `ibex_simple_system`.
-- [`examples/openpiton-example`](examples/openpiton-example) is a more advanced real-world example that flattens a fixed 2x2 OpenPiton chip design into a generated filelist and opens it with `hier-viewer` using only open-source tooling.
-
-## Quick Start
-
-### 1. Build from source
-
-Skip this step if you installed a release binary.
-
-```bash
-cargo build --release --locked
-```
-
-The first build can take a while. That is expected. `build.rs` automatically:
-
-1. Configures and builds an embedded `slang-hier-exporter` with static third-party linkage where the platform allows it
-2. Embeds that exporter into the Rust executable
-
-By default it uses CMake `FetchContent` to fetch and build `slang`.
-
-### 2. Run
-
-```bash
-hier-viewer --output out --preview
-```
-
-If you are on an interactive terminal and do not provide RTL inputs, filelists, or `--db`, the tool opens the built-in TUI wizard. The wizard lets you:
-
-- add RTL paths
-- choose path match mode: `Literal`, `Wildcard`, or `Regex`
-- add filelists
-- append extra compiler flags such as `-I`, `-D`, `+incdir+`, and `--top`
-
-The built-in TUI wizard requires an interactive terminal. In scripts or CI, pass RTL paths, `--filelist`, or `--db` explicitly.
-
-### 3. Open the generated viewer
-
-This starts a built-in local preview server, prints the final viewer URL, and by default tries to open a browser on local desktop sessions.
-
-If you use VSCode Remote or Live Server, serving the output directory directly is still a valid fallback.
-
-### 4. Update the installed binary
+### Update the executable
 
 ```bash
 hier-viewer update
 ```
 
-This checks GitHub Releases, shows staged progress for release lookup, download, extraction, and in-place replacement, then installs the latest stable binary over the current executable.
-
-## Requirements
-
-### Release binaries
-
-The exporter is embedded. Rust, CMake, and a C++ compiler are not required at runtime. Serve the output over HTTP and open it in a browser.
-
-### Source builds
-
-- Rust toolchain
-- CMake and Ninja
-- a C++20 compiler
-- SQLite3 and zlib development libraries
-
-On Ubuntu, the native dependencies used by CI are:
-
-```bash
-sudo apt-get install cmake ninja-build g++ pkg-config libsqlite3-dev zlib1g-dev
-```
-
-### Building the embedded exporter
-
-By default the build fetches:
-
-- [MikePopoloski/slang](https://github.com/MikePopoloski/slang)
-
-If your environment cannot access the network, or if you want to force a local `slang` checkout, set:
-
-```bash
-export HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR=/path/to/slang
-```
-
-`HIER_VIEWER_EXPORTER_FULLY_STATIC=1` is enabled by default. On Linux it produces a fully static exporter, on Windows it also switches the exporter to the static MSVC runtime, and on macOS it keeps `slang` static but still relies on the platform dynamic linker because Apple does not support fully static executables.
-
-To disable the static-linking preference:
-
-```bash
-export HIER_VIEWER_EXPORTER_FULLY_STATIC=0
-```
-
-## Input Modes
-
-The viewer has two main input modes.
-
-### 1. Build from RTL
-
-You can pass RTL files, wildcard patterns, and filelists directly to the viewer. It internally runs:
-
-```text
-slang-hier-exporter --sqlite
-```
-
-to create or reuse a sqlite cache, then emits the HTML bundle.
-
-Notes:
-
-- command-line positional RTL inputs `[rtl ...]` use `Wildcard` semantics, while also accepting exact paths and directories
-- filelist-only input, literal paths, directories, and absolute globs skip the workspace-wide RTL index; relative globs and the wizard build it
-- for `Regex` mode in RTL selection, use the built-in TUI wizard
-
-Module statistics reflect each instance's elaborated parameters and generate branches. Equivalent instance bodies share cached statistics; different variants can have different signal widths and counts.
-
-### 2. Read an existing sqlite DB
-
-If you already have a prebuilt hierarchy sqlite DB:
-
-```bash
-hier-viewer --db path/to/hiers.db --output out --preview
-```
-
-This mode does not reparse RTL or validate the export cache. Source files referenced by the database must still be readable during bundle generation, because they are copied into the output directory. To obtain updated statistics from changed RTL, generate a new database through the RTL input mode.
-
-## Common Commands
-
-### Example 0: self-update the installed binary
-
-```bash
-hier-viewer update
-```
-
-Install a specific release tag instead:
+The command downloads the latest stable release from GitHub and replaces the current executable. Progress reports cover download, extraction, and installation. To select a release tag:
 
 ```bash
 hier-viewer update --to v1.0.0
 ```
 
-### Example 1: recommended first run, open the wizard
+## Quick start
+
+1. Launch the interactive configuration wizard:
+
+   ```bash
+   hier-viewer --output out --preview
+   ```
+
+2. Configure RTL paths, filelists, and compiler options. The wizard supports `Literal`, `Wildcard`, and `Regex` path matching, with options such as `-I`, `-D`, `+incdir+`, and `--top`.
+3. After generation completes, open the URL printed in the terminal. On local desktop sessions, the application also attempts to launch the default browser. Press `Ctrl-C` to stop the preview server.
+
+The wizard opens only in an interactive terminal when no RTL inputs, filelists, or `--db` are supplied. In scripts or CI, pass those inputs explicitly.
+
+## Features
+
+### Classic treemap
+
+![Classic treemap overview](docs/screenshots/treemap-classic-overview.png)
+
+The treemap displays the instance hierarchy as nested regions and supports drill-down from the top level to individual instances. The hierarchy tree and filter results provide additional navigation.
+
+### Weighted treemap
+
+![Weighted accurate treemap](docs/screenshots/treemap-weighted-accurate.png)
+
+Weighted signal-bit counts provide a relative measure of module size. This metric does not represent synthesized cell area or physical layout. Selecting `Weighted Signal Bits` enables the area-proportional `Accurate` layout by default.
+
+### 2D pie chart
+
+![2D pie chart](docs/screenshots/chart-2d-pie.png)
+
+The pie chart displays module proportions for the selected metric, hierarchy root, and display depth.
+
+### 3D chart
+
+![3D weighted chart](docs/screenshots/chart-3d-weighted-bits.png)
+
+The 3D chart represents module statistics as bars and supports interactive rotation. The example uses weighted signal-bit counts.
+
+### Instance filtering
+
+![Instance wildcard filter](docs/screenshots/filter-instance-wildcard.png)
+
+Instance filters highlight matching nodes while retaining the surrounding hierarchy for context. The example selects instances matching `sram_*`.
+
+### Settings and themes
+
+![Advanced controls and theme switching](docs/screenshots/advanced-theme-controls.png)
+
+Settings include layout and decomposition modes, source line counts (`LOC`) or weighted signal-bit metrics, signal-analysis patterns, and weighting coefficients. Themes include Tokyo Night. The browser retains UI settings and hierarchy collapse state across reloads.
+
+### Zen mode
+
+![Zen mode treemap](docs/screenshots/zen-mode-treemap.png)
+
+Zen mode hides most interface controls to expand the visualization area.
+
+### Source reader
+
+![Source reader with bookmarks](docs/screenshots/source-reader-bookmarks.png)
+
+The source reader navigates to instance declarations and module definitions. It supports in-file search, labeled bookmarks, raw-source access, and fullscreen display. The browser retains bookmarks across reloads.
+
+## Examples
+
+- [`examples/ibex-example`](examples/ibex-example) provides entry scripts for `ibex_top` and `ibex_simple_system`, with a pinned `lowRISC/ibex` submodule and static filelists.
+- [`examples/openpiton-example`](examples/openpiton-example) generates a filelist for a fixed 2x2 OpenPiton chip configuration using an open-source toolchain.
+
+## Input modes
+
+### RTL files and filelists
+
+RTL input mode accepts files, directories, wildcard patterns, and filelists. The application reuses a valid SQLite export cache or invokes `slang-hier-exporter --sqlite` to rebuild it, then generates the static site.
+
+Positional RTL arguments use `Wildcard` matching and accept exact paths and directories. Input resolution determines whether a workspace-wide RTL index is required:
+
+| Input | Workspace-wide index |
+| --- | --- |
+| Filelists only, literal paths, directories, or absolute globs | Not required |
+| Relative globs or interactive wizard | Required |
+
+`Regex` path matching is available through the wizard.
+
+Statistics use each instance's elaborated parameters and active generate branches. Instance bodies that slang identifies as equivalent share cached statistics. Different parameterizations can produce different signal widths and counts.
+
+### Existing SQLite database
 
 ```bash
-hier-viewer --output out --preview
+hier-viewer --db path/to/hiers.db --output out --preview
 ```
 
-This is the easiest way to start, especially when you have many RTL paths, filelists, `+incdir+`, and `-D` flags.
+`--db` is mutually exclusive with RTL inputs and filelists. It reads the database without reparsing RTL or validating the export cache. `--output` remains required as the destination for the generated site.
 
-### Example 2: pass RTL files directly
+Source files referenced by the database must be readable during generation so the application can include copies in the site. After RTL changes, regenerate the database through RTL input mode to obtain updated statistics.
+
+## Common commands
+
+### Pass RTL files
 
 ```bash
-hier-viewer \
-  rtl/top.sv \
-  rtl/core.sv \
-  --output out \
-  --preview
+hier-viewer rtl/top.sv rtl/core.sv --output out --preview
 ```
 
-### Example 3: use wildcard RTL inputs
+### Use wildcard patterns
 
-Quote the patterns so the viewer resolves them itself instead of your shell expanding them first.
+Quote patterns so the viewer resolves them instead of the shell:
 
 ```bash
-hier-viewer \
-  'rtl/**/*.sv' \
-  'tb/**/*.v' \
-  --output out \
-  --preview
+hier-viewer 'rtl/**/*.sv' 'tb/**/*.v' --output out --preview
 ```
 
-### Example 4: RTL plus extra slang flags
+### Pass compiler flags
 
-Everything after `--` is passed through to `slang-hier-exporter` / the slang driver.
+Arguments after `--` are forwarded to the embedded exporter for processing by slang. Application options such as `--output`, `--db`, and `--debug` must precede `--`.
 
 ```bash
 hier-viewer \
@@ -282,18 +178,15 @@ hier-viewer \
   +incdir+third_party/include
 ```
 
-### Example 5: use filelists
+### Use filelists
+
+Repeat `-f` to add filelists:
 
 ```bash
-hier-viewer \
-  -f rtl/files.f \
-  -f tb/files.f \
-  --output out \
-  -- \
-  --top SimTop
+hier-viewer -f rtl/files.f -f tb/files.f --output out -- --top SimTop
 ```
 
-### Example 6: mix filelists and positional RTL inputs
+Filelists can also be combined with positional RTL inputs:
 
 ```bash
 hier-viewer \
@@ -304,215 +197,115 @@ hier-viewer \
   +incdir+rtl/include
 ```
 
-### Example 7: force rebuilding the sqlite cache
-
-Normal source and dependency changes trigger rebuilding automatically. Use this command to force a full export; see the [cache invalidation limits](docs/export-and-bundle-contracts.md#cached-source-dependencies) for cases that require it:
+### Rebuild the export cache
 
 ```bash
-hier-viewer \
-  -r \
-  'rtl/**/*.sv' \
-  --output out \
-  -- \
-  --top Top
+hier-viewer -r 'rtl/**/*.sv' --output out -- --top Top
 ```
 
-### Example 8: read an existing sqlite DB
+Normal source and dependency changes trigger rebuilding automatically. See the [cache invalidation limits](docs/export-and-bundle-contracts.md#cached-source-dependencies) for cases that require `-r`.
 
-```bash
-hier-viewer \
-  --db path/to/hiers.db \
-  --output out
-```
-
-### Example 9: disable the wizard and require explicit CLI inputs
-
-```bash
-hier-viewer \
-  --no-wizard \
-  'rtl/**/*.sv' \
-  --output out \
-  -- \
-  --top Top
-```
-
-### Example 10: enable debug overlays
-
-```bash
-hier-viewer \
-  --db path/to/hiers.db \
-  --output out \
-  --debug
-```
-
-`--debug` enables extra viewer overlays such as UI labels.
-
-### Example 11: use the release binary
-
-```bash
-./target/release/hier-viewer \
-  --db path/to/hiers.db \
-  --output out \
-  --preview
-```
-
-### Example 12: choose a preferred preview port
-
-```bash
-hier-viewer \
-  --db path/to/hiers.db \
-  --output out \
-  --preview \
-  --preview-port 9000
-```
-
-### Example 13: bind preview to all interfaces
-
-```bash
-hier-viewer \
-  --db path/to/hiers.db \
-  --output out \
-  --preview \
-  --preview-host 0.0.0.0
-```
-
-## CLI Reference
+## CLI reference
 
 ```text
 hier-viewer [OPTIONS] [rtl ...]
 ```
 
-Common options:
+Run `hier-viewer --help` for the full option list.
 
-- `[rtl ...]`
-  RTL file paths or wildcard patterns resolved by the viewer
-- `--db <file>`
-  Read a prebuilt sqlite DB directly
-- `-f, --filelist <file>`
-  Add a filelist; repeatable
-- `-o, --output <dir>`
-  Output directory; required
-- `-r, --rebuild-sqlite`
-  Ignore the sqlite cache under the output directory and rebuild it
-- `--preview`
-  Start the built-in local preview server after bundle generation
-- `--preview-host <h>`
-  Bind host for `--preview`; defaults to `127.0.0.1`; use `0.0.0.0` for remote access or port forwarding
-- `--preview-port <n>`
-  Preferred starting port for `--preview`; defaults to `8000` and auto-increments if occupied
-- `--no-wizard`
-  Never open the TUI wizard
-- `-t, --title <text>`
-  Override the page title
-- `--debug`
-  Enable debug overlays in the viewer
-- `-- <args...>`
-  Pass the remaining arguments through to slang / the exporter, for example `-I`, `-D`, `+incdir+`, and `--top`
+| Option | Meaning |
+| --- | --- |
+| `[rtl ...]` | RTL paths or wildcard patterns resolved by the viewer |
+| `--db <file>` | Read a prebuilt SQLite database |
+| `-f, --filelist <file>` | Add a filelist; repeatable |
+| `-o, --output <dir>` | Output directory; required |
+| `-r, --rebuild-sqlite` | Ignore the export cache and rebuild it |
+| `--preview` | Start the preview server after generation |
+| `--preview-host <h>` | Bind address; default `127.0.0.1` |
+| `--preview-port <n>` | Starting port; default `8000`, increments if occupied |
+| `--no-wizard` | Disable the wizard; require explicit inputs |
+| `-t, --title <text>` | Override the page title |
+| `--debug` | Enable viewer debug overlays, such as UI labels |
+| `-- <args...>` | Forward remaining arguments to the embedded exporter |
 
-## sqlite Cache Behavior
+## Requirements
 
-When the input comes from RTL rather than `--db`, the viewer stores cache files under:
+Source builds need:
 
-```text
-<output>/.hier-viewer-cache/
+- Rust toolchain
+- CMake and Ninja
+- a C++20 compiler
+- SQLite3 and zlib development libraries
+
+On Ubuntu, install the native dependencies used by CI:
+
+```bash
+sudo apt-get install cmake ninja-build g++ pkg-config libsqlite3-dev zlib1g-dev
 ```
 
-The cache key includes:
+### Embedded exporter
 
-- RTL source file paths, sizes, and modification timestamps
-- filelists
-- extra slang flags
-- the `slang-hier-exporter` fingerprint
+The first Cargo build also compiles the C++ exporter and embeds it in the Rust executable. By default, CMake `FetchContent` downloads and builds [slang](https://github.com/MikePopoloski/slang).
 
-So:
+To use a local `slang` checkout, set this before building:
 
-- if nothing changed, the sqlite cache is reused
-- if inputs changed, the sqlite export is rebuilt automatically
-- if you pass `-r` / `--rebuild-sqlite`, rebuild is always forced
+```bash
+export HIER_VIEWER_EXPORTER_SLANG_SOURCE_DIR=/path/to/slang
+```
 
-The command-line logs also explain why a cache was reused or rebuilt. Cache reuse also checks the files actually read by the exporter, including included headers. See [export and bundle contracts](docs/export-and-bundle-contracts.md#cached-source-dependencies) for the invalidation rules and limits.
+`HIER_VIEWER_EXPORTER_FULLY_STATIC=1` is enabled by default. On Linux it produces a fully static exporter. On Windows it also selects the static MSVC runtime. On macOS, `slang` is linked statically, but the exporter still uses the system dynamic linker because Apple does not support fully static executables.
 
-## Output Directory Layout
+To disable the static-linking preference:
 
-The tool generates a directory, not a single HTML file. A typical output looks like:
+```bash
+export HIER_VIEWER_EXPORTER_FULLY_STATIC=0
+```
+
+## SQLite cache
+
+RTL input mode stores its SQLite export cache in `<output>/.hier-viewer-cache/`. Repeated runs can reuse this cache when they target the same output directory.
+
+Cache validation covers RTL paths, file sizes and modification times, filelists, compiler options, and the exporter fingerprint. It also checks recorded source dependencies, including headers. Command-line logs report cache reuse and rebuild decisions.
+
+Use `-r` / `--rebuild-sqlite` to force an export. See [cached source dependencies](docs/export-and-bundle-contracts.md#cached-source-dependencies) for invalidation rules and limits. `--db` bypasses cache validation.
+
+## Output directory
 
 ```text
 out/
 ├── index.html
 ├── viewer-meta.json
 ├── viewer-core.bin
-├── viewer-analysis.bin        # only generated when analysis data exists
+├── viewer-analysis.bin        # only when analysis data exists
 ├── viewer-chart.js
 ├── viewer-three.module.js
 ├── three.core.js
-├── .hier-viewer-sources/      # source copies used by the source reader
-└── .hier-viewer-cache/        # only present when building sqlite from RTL
+├── .hier-viewer-sources/      # source copies for the reader
+└── .hier-viewer-cache/        # only when exporting RTL to SQLite
 ```
 
-Keep the whole directory when publishing the viewer, including `.hier-viewer-sources/`. Source URLs encode spaces and reserved characters; source text is loaded on demand rather than embedded in the HTML. Signal analysis data is also loaded on demand. See [source bundle paths](docs/export-and-bundle-contracts.md#source-bundle-paths) for the file layout.
+Publish the complete output directory, including `.hier-viewer-sources/`. The browser loads source text and signal-analysis data on demand. Source URLs encode spaces and reserved characters; see [source bundle paths](docs/export-and-bundle-contracts.md#source-bundle-paths) for details.
 
-## Preview Recommendations
+## Preview
 
-### Recommended: built-in preview mode
+`--preview` serves the generated bundle on `127.0.0.1`, starting at port `8000`. To choose a different starting port:
 
 ```bash
-hier-viewer --db path/to/hiers.db --output out --preview
+hier-viewer --db path/to/hiers.db --output out --preview --preview-port 9000
 ```
 
-This generates the bundle and keeps the server in the foreground until you press `Ctrl-C`. To serve an already-generated bundle without regenerating it, use a static file server.
+On a remote host, use SSH or editor port forwarding with the default bind address. To allow direct remote access, bind to all interfaces with `--preview-host 0.0.0.0`.
 
-### Fallback: local or remote static file server
+To serve an existing bundle without regenerating it:
 
 ```bash
 cd out
 python3 -m http.server 8000
 ```
 
-### Fallback: VSCode Live Server
+VSCode Live Server can also serve the output directory, including through VSCode Remote.
 
-- good for direct preview of `index.html`
-- good for remote development hosts when used through VSCode Remote
-
-### Not recommended: direct `file://` opening
-
-Some browsers restrict:
-
-- binary asset loading
-- relative source-file loading
-- `Open Raw` and source-reader behavior
-
-## Usage Notes
-
-### 1. Let the viewer resolve wildcard patterns
-
-Write patterns like:
-
-```bash
-'rtl/**/*.sv'
-```
-
-Do not omit the quotes, otherwise your shell may expand the pattern before the viewer sees it.
-
-### 2. Put only slang pass-through flags after `--`
-
-For example:
-
-```bash
--- --top Top -I rtl/include -D FOO=1 +incdir+rtl/include
-```
-
-Viewer-owned flags such as `--output`, `--db`, and `--debug` must stay before `--`.
-
-### 3. Reuse the same output directory if you want fast incremental runs
-
-The sqlite cache lives under the output directory. If you use a fresh output directory every time, you also force a fresh cache directory every time.
-
-### 4. Preview mode binds to `127.0.0.1` by default
-
-For remote servers, either:
-
-- keep the default and use SSH or editor port forwarding
-- or bind explicitly with `--preview-host 0.0.0.0`
+Access the site over HTTP. Opening `index.html` through `file://` can prevent the browser from loading binary assets, source text, or `Open Raw` links. If source loading fails over HTTP, verify that the server exposes the complete output directory.
 
 ## Development
 
@@ -526,7 +319,7 @@ This opens the wizard on an interactive terminal. Pass source inputs or `--db` f
 
 ### Frontend development
 
-The viewer's TypeScript modules live in `rust-hier-viewer/src/html/frontend/`. To edit them, use Node.js 22.12+ on the 22.x line, 24.x, or 26+, and npm:
+TypeScript source lives in `rust-hier-viewer/src/html/frontend/`. Frontend builds require Node.js 22.12+ on the 22.x line, 24.x, or 26+, and npm.
 
 ```bash
 npm ci
@@ -535,7 +328,7 @@ npm run build
 cargo run -- --db path/to/hiers.db --output out --preview
 ```
 
-Include the regenerated files under `rust-hier-viewer/src/html/generated/` with frontend changes. Cargo embeds these files without invoking Node; release binaries and Cargo installation do not require Node. See the [frontend asset contract](docs/export-and-bundle-contracts.md#frontend-assets) for the build and packaging rules.
+Include the regenerated files under `rust-hier-viewer/src/html/generated/` with frontend changes. Cargo embeds them without invoking Node; release binaries and Cargo installation do not require Node. See [frontend assets](docs/export-and-bundle-contracts.md#frontend-assets) for build and packaging rules.
 
 ### Validation
 
@@ -558,41 +351,15 @@ npm run test:ui
 python3 tests/cache-dependencies.py target/debug/hier-viewer
 ```
 
-Compile the Rust tests before applying the 60-second execution timeout. The real-exporter parameterization test and the data invariants it checks are documented in [export and bundle contracts](docs/export-and-bundle-contracts.md#definition-statistics).
+Compile the Rust tests before applying the 60-second execution timeout. See [definition statistics](docs/export-and-bundle-contracts.md#definition-statistics) for the real-exporter parameterization test and the data invariants it checks.
 
-## FAQ
-
-### 1. Why is the first `cargo build` slow?
-
-Because it also builds the C++ `slang-hier-exporter`, and the build may need to fetch `slang` source code first.
-
-### 2. Why do I still need `--output` if I already have `hiers.db`?
-
-Because this tool does not display the sqlite DB directly. It renders that DB into a complete static viewer bundle.
-
-### 3. Why can I not pass both `--db` and RTL inputs?
-
-Because the two modes are intentionally exclusive:
-
-- `--db` means "consume an existing sqlite DB"
-- RTL inputs and `--filelist` mean "build sqlite first, then render the viewer"
-
-### 4. Why does source reader or `Open Raw` behave oddly in some setups?
-
-Usually because the page was opened through `file://`, or because the static server is not serving the whole output directory. Serving the bundle over HTTP fixes that.
-
-## Related Documents
+## Related documents
 
 - [Area sizing strategy](docs/area-sizing-strategy.md)
 - [Export and bundle contracts](docs/export-and-bundle-contracts.md)
 
-## AI Development
-
-This project was developed entirely with AI assistance using GPT-5.4.
-I defined the features, provided technical implementation details where needed, and guided the AI through the implementation of the project.
-
 ## Credits
 
-This project relies on [slang](https://github.com/MikePopoloski/slang) for hierarchy parsing, semantic analysis, and elaboration.
+The embedded exporter uses the [slang](https://github.com/MikePopoloski/slang) C++ API for SystemVerilog parsing, semantic analysis, and elaboration. The project acknowledges the work of the slang author and contributors.
 
-Special thanks to the `slang` author and contributors for providing a high-quality and extensible SystemVerilog frontend and elaboration infrastructure. The built-in `slang-hier-exporter` in this project is implemented directly on top of the `slang` C++ API.
+Development used GPT-5.4 assistance throughout, with feature specifications and technical direction provided by the author.
