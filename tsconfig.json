@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "verbatimModuleSyntax": true,
+    "types": ["node"],
+    "skipLibCheck": false
+  },
+  "include": [
+    "rust-hier-viewer/src/html/frontend/**/*.ts",
+    "tests/**/*.test.ts",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ]
+}

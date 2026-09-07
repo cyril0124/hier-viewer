@@ -18,7 +18,11 @@ include = [
   "/build.rs",
   "/cpp-hier-exporter/CMakeLists.txt",
   "/cpp-hier-exporter/src/**",
-  "/rust-hier-viewer/src/**",
+  "/rust-hier-viewer/src/**/*.rs",
+  "/rust-hier-viewer/src/html/*.html",
+  "/rust-hier-viewer/src/html/*.css",
+  "/rust-hier-viewer/src/html/generated/*.js",
+  "/rust-hier-viewer/src/html/vendor/*.js",
 ]
 
 [[bin]]

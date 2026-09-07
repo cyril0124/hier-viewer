@@ -1,62 +1,68 @@
-'use strict';
+import assert from 'node:assert/strict';
+import { test, vi } from 'vitest';
+import { createHierarchyRuntime } from '../rust-hier-viewer/src/html/frontend/hierarchy-core';
+import type {
+  HierarchyDependencies, HierarchyModelNode, HierarchyState,
+} from '../rust-hier-viewer/src/html/frontend/hierarchy-core';
+import type { AnalysisDefinition } from '../rust-hier-viewer/src/html/frontend/types';
 
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const test = require('node:test');
-const vm = require('node:vm');
-
-const source = fs.readFileSync(path.join(__dirname, '../rust-hier-viewer/src/html/template_app.js'), 'utf8');
-const functionNames = [
-  'getNode', 'getAnalysisDefinitionMap', 'subtreeDepth', 'wildcardToRegExp',
-  'splitSearchTerms', 'buildSignalMatcher', 'moduleLocalLoc', 'computeAnalysisSubtree',
-  'ensureAnalysisDefinitionsRequested', 'buildSignalAnalysis',
-];
-// These declarations share the IIFE's four-space indentation; nested blocks do not.
-const functions = functionNames.map((name) => {
-  const matches = [...source.matchAll(new RegExp(`^    function ${name}\\([^\\n]*\\) \\{[\\s\\S]*?^    \\}`, 'gm'))];
-  assert.equal(matches.length, 1, `complete declaration for ${name}`);
-  return matches[0][0];
-}).join('\n');
-
-function node(id, children = [], definitionKey = null) {
+function node(id: number, children: number[] = [], definitionKey: string | null = null): HierarchyModelNode {
   return {
     id, children, definitionKey,
+    name: `hit-${id}`, module: 'Block', path: `hit-${id}`, parent: null,
     moduleInternalSignalCount: 10, subtreeInternalSignalCount: 10,
     definitionLine: 2, definitionEndLine: 4,
   };
 }
 
-function runtime(nodes, definitions = []) {
-  const state = {
-    analysisMode: 'count', analysisPatternMode: 'substring', analysisPattern: 'hit',
+function runtime(
+  nodes: HierarchyModelNode[],
+  definitions: AnalysisDefinition[] | null = [],
+  callbacks: Partial<Pick<HierarchyDependencies, 'loadAnalysisDefinitions' | 'draw'>> = {},
+) {
+  const state: HierarchyState = {
+    homeRoot: 0, currentRoot: 0, depthLimit: null, treeCollapsedIds: new Set(),
+    search: '', filterScope: 'instance', filterMode: 'substring' as HierarchyState['filterMode'], searchError: '',
+    matches: [], matchIds: new Set(), matchVisibleIds: new Set(), matchSubtreeIds: new Set(),
+    matchLines: [], treePanelDirty: false, matchPanelDirty: false,
+    analysisMode: 'count', analysisPatternMode: 'substring' as HierarchyState['analysisPatternMode'], analysisPattern: 'hit',
     analysisError: '', analysisMaxSubtreeCount: 0, chartPanelDirty: false,
+    analysisLocalCounts: new Array<number>(nodes.length).fill(0),
+    analysisSubtreeCounts: new Array<number>(nodes.length).fill(0),
+    analysisLocalLocs: new Array<number>(nodes.length).fill(0),
+    analysisSubtreeLocs: new Array<number>(nodes.length).fill(0),
+    analysisLocalRatios: new Array<number>(nodes.length).fill(0),
+    analysisSubtreeRatios: new Array<number>(nodes.length).fill(0),
+    analysisVisibleMaxCount: 0, analysisVisibleMaxLoc: 0, analysisVisibleMaxRatio: 0,
+    analysisVisibleSubtreeQualified: new Array<boolean>(nodes.length).fill(false),
+    analysisLegendVisibleSubtree: new Array<boolean>(nodes.length).fill(false),
   };
-  for (const field of ['LocalCounts', 'SubtreeCounts', 'LocalLocs', 'SubtreeLocs', 'LocalRatios', 'SubtreeRatios']) {
-    state[`analysis${field}`] = new Array(nodes.length).fill(0);
-  }
-  const context = vm.createContext({
-    nodes, state, analysisDefinitions: definitions, analysisDefinitionMap: null,
-    analysisDefinitionsPromise: null, analysisDefinitionsLoadError: '',
-    subtreeDepthCache: new Array(nodes.length).fill(-1), DATA: { analysisFile: 'analysis.bin' },
+  const hierarchy = createHierarchyRuntime(nodes, state, {
+    analysisDefinitions: definitions,
+    analysisFile: 'analysis.bin',
+    loadAnalysisDefinitions: async () => { throw new Error('Unexpected analysis load'); },
     draw() {},
+    selectedAnalysisLegendBuckets: () => [],
+    analysisLegendLocalBucketMatches: () => false,
+    ...callbacks,
   });
-  vm.runInContext(functions, context, { filename: 'template_app.runtime.js' });
-  return context;
+  return Object.assign(hierarchy, { nodes, state });
 }
 
-function chain(length) {
+function chain(length: number) {
   return Array.from({ length }, (_, id) => node(id, id + 1 < length ? [id + 1] : []));
 }
 
 test('subtreeDepth handles 200,000 children and caches every node', () => {
   const nodes = Array.from({ length: 200001 }, (_, id) => node(id));
   nodes[0].children = Array.from({ length: 200000 }, (_, i) => i + 1);
-  const context = runtime(nodes);
+  const { proxy, revoke } = Proxy.revocable(nodes, {});
+  const context = runtime(proxy);
   assert.equal(context.subtreeDepth(0), 1);
   assert.equal(context.subtreeDepthCache[0], 1);
   assert.ok(context.subtreeDepthCache.slice(1).every((depth) => depth === 0));
-  context.getNode = () => { throw new Error('cached depth must not traverse'); };
+  // Revoking the input makes every getNode array access fail after caching.
+  revoke();
   assert.equal(context.subtreeDepth(0), 1);
   assert.equal(context.subtreeDepth(100000), 0);
 });
@@ -105,7 +111,7 @@ test('shared definitions read and match each stat once per pattern build', () =>
   let reads = 0;
   const definitions = ['a', 'b'].map((definitionKey) => ({
     definitionKey,
-    signalStats: ['hit', 'miss', 'hit_again'].map((name) => ({
+    signalStats: ['hit', 'miss', 'hit_again'].map((name) => ({ signalKind: 'wire', totalBits: 1,
       get signalName() { reads += 1; return name; }, signalCount: 2,
     })),
   }));
@@ -113,27 +119,29 @@ test('shared definitions read and match each stat once per pattern build', () =>
   nodes[0].children = nodes.slice(1).map((entry) => entry.id);
   const context = runtime(nodes, definitions);
   let matches = 0;
-  const buildMatcher = context.buildSignalMatcher;
-  context.buildSignalMatcher = (term) => {
-    const matcher = buildMatcher(term);
-    return (name) => { matches += 1; return matcher(name); };
-  };
+  // Observe the real substring matcher without replacing a production function.
+  const firstMatches = vi.spyOn(String.prototype, 'includes');
   context.buildSignalAnalysis();
+  matches += firstMatches.mock.calls.length;
+  firstMatches.mockRestore();
   assert.equal(context.state.analysisSubtreeCounts[0], nodes.length * 4);
   assert.equal(reads, 6);
   assert.equal(matches, 6);
   context.state.analysisPattern = 'miss';
+  const secondMatches = vi.spyOn(String.prototype, 'includes');
   context.buildSignalAnalysis();
+  matches += secondMatches.mock.calls.length;
+  secondMatches.mockRestore();
   assert.equal(context.state.analysisSubtreeCounts[0], nodes.length * 2);
   assert.equal(reads, 12);
   assert.equal(matches, 12);
 });
 
 test('unreferenced definitions are not scanned after hierarchy filtering', () => {
-  const definitions = [{ definitionKey: 'used', signalStats: [{ signalName: 'hit', signalCount: 4 }] }];
+  const definitions = [{ definitionKey: 'used', signalStats: [{ signalKind: 'wire', totalBits: 1, signalName: 'hit', signalCount: 4 }] }];
   for (let i = 0; i < 1000; i += 1) {
-    definitions.push({ definitionKey: `unused-${i}`, signalStats: [{
-      get signalName() { throw new Error('unreferenced signal was scanned'); }, signalCount: 1,
+    definitions.push({ definitionKey: `unused-${i}`, signalStats: [{ signalKind: 'wire', totalBits: 1,
+      get signalName(): string { throw new Error('unreferenced signal was scanned'); }, signalCount: 1,
     }] });
   }
   const context = runtime([node(0, [1], 'used'), node(1, [], 'used')], definitions);
@@ -147,7 +155,7 @@ test('pattern and mode changes reset counts, ratios, LOC and unknown definitions
   nodes[0].definitionLine = 0;
   nodes[0].subtreeInternalSignalCount = 30;
   const context = runtime(nodes, [{ definitionKey: 'shared', signalStats: [
-    { signalName: 'hit', signalCount: 2 }, { signalName: 'miss', signalCount: 3 },
+    { signalKind: 'wire', totalBits: 1, signalName: 'hit', signalCount: 2 }, { signalKind: 'wire', totalBits: 1, signalName: 'miss', signalCount: 3 },
   ] }]);
   const state = context.state;
   context.buildSignalAnalysis();
@@ -173,7 +181,7 @@ test('pattern and mode changes reset counts, ratios, LOC and unknown definitions
   assert.equal(state.analysisSubtreeLocs[0], 9);
   state.analysisMode = 'none';
   context.buildSignalAnalysis();
-  for (const field of ['LocalCounts', 'SubtreeCounts', 'LocalLocs', 'SubtreeLocs', 'LocalRatios', 'SubtreeRatios']) {
+  for (const field of ['LocalCounts', 'SubtreeCounts', 'LocalLocs', 'SubtreeLocs', 'LocalRatios', 'SubtreeRatios'] as const) {
     assert.ok(state[`analysis${field}`].every((value) => value === 0));
   }
   state.analysisMode = 'count';
@@ -191,31 +199,32 @@ test('pattern and mode changes reset counts, ratios, LOC and unknown definitions
 
 for (const outcome of ['success', 'failure']) {
   test(`analysis load ${outcome} marks charts dirty before drawing`, async () => {
-    const context = runtime([node(0, [], 'a')], null);
-    let resolveLoad;
-    let rejectLoad;
-    context.loadAnalysisDefinitions = () => new Promise((resolve, reject) => {
-      resolveLoad = resolve;
-      rejectLoad = reject;
-    });
-    const draws = [];
-    context.draw = () => draws.push({
-      dirty: context.state.chartPanelDirty,
-      count: context.state.analysisLocalCounts[0],
-      error: context.state.analysisError,
+    let resolveLoad!: (definitions: AnalysisDefinition[]) => void;
+    let rejectLoad!: (reason: unknown) => void;
+    const draws: Array<{ dirty: boolean; count: number; error: string }> = [];
+    const context = runtime([node(0, [], 'a')], null, {
+      loadAnalysisDefinitions: () => new Promise((resolve, reject) => {
+        resolveLoad = resolve;
+        rejectLoad = reject;
+      }),
+      draw: () => { draws.push({
+        dirty: context.state.chartPanelDirty,
+        count: context.state.analysisLocalCounts[0],
+        error: context.state.analysisError,
+      }); },
     });
     context.ensureAnalysisDefinitionsRequested();
-    const pending = context.analysisDefinitionsPromise;
+    const pending = context.pendingAnalysis;
     context.ensureAnalysisDefinitionsRequested();
-    assert.equal(context.analysisDefinitionsPromise, pending);
+    assert.equal(context.pendingAnalysis, pending);
     assert.equal(draws.length, 0);
     if (outcome === 'success') {
-      resolveLoad([{ definitionKey: 'a', signalStats: [{ signalName: 'hit', signalCount: 7 }] }]);
+      resolveLoad([{ definitionKey: 'a', signalStats: [{ signalKind: 'wire', totalBits: 1, signalName: 'hit', signalCount: 7 }] }]);
     } else {
       rejectLoad(new Error('load failed'));
     }
     await pending;
-    assert.equal(context.analysisDefinitionsPromise, null);
+    assert.equal(context.pendingAnalysis, null);
     assert.equal(draws.length, 1);
     assert.equal(draws[0].dirty, true);
     if (outcome === 'success') {

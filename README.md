@@ -524,18 +524,37 @@ cargo run -- --output out --preview
 
 This opens the wizard on an interactive terminal. Pass source inputs or `--db` for noninteractive runs.
 
-### Validation
+### Frontend development
 
-The [Linux CI workflow](.github/workflows/ci.yml) uses Node.js 22 and Python 3 for the JavaScript and exporter integration tests, in addition to the source-build dependencies. Run these checks from the repository root in a Linux shell:
+The viewer's TypeScript modules live in `rust-hier-viewer/src/html/frontend/`. To edit them, use Node.js 22.12+ on the 22.x line, 24.x, or 26+, and npm:
 
 ```bash
+npm ci
+npm run typecheck
+npm run build
+cargo run -- --db path/to/hiers.db --output out --preview
+```
+
+Include the regenerated files under `rust-hier-viewer/src/html/generated/` with frontend changes. Cargo embeds these files without invoking Node; release binaries and Cargo installation do not require Node. See the [frontend asset contract](docs/export-and-bundle-contracts.md#frontend-assets) for the build and packaging rules.
+
+### Validation
+
+The [Linux CI workflow](.github/workflows/ci.yml) uses Node.js 22 and Python 3 in addition to the source-build dependencies. Run these checks from the repository root in a Linux shell:
+
+```bash
+npm ci
+npm run typecheck
+npm run check:generated
+npm test
+npx playwright install --with-deps chromium
+npm run test:browser
 cargo fmt --check
 cargo check --locked
 cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo test --locked --no-run
 timeout 60s cargo test --locked
-node --test tests/viewer-runtime.test.cjs
 cargo build --locked
+npm run test:ui
 python3 tests/cache-dependencies.py target/debug/hier-viewer
 ```
 

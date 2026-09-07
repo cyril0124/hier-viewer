@@ -1,0 +1,24 @@
+{
+  "name": "hier-viewer-frontend",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "vite build --mode app && vite build --mode chart",
+    "test": "vitest run --exclude tests/source-reader-browser.test.ts",
+    "check:generated": "node scripts/check-generated.mjs",
+    "test:browser": "vitest run tests/source-reader-browser.test.ts --testTimeout 60000 --hookTimeout 60000",
+    "test:ui": "node tests/run-viewer-ui.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "@types/three": "0.183.1",
+    "playwright": "1.63.0",
+    "typescript": "5.9.3",
+    "vite": "8.2.2",
+    "vitest": "4.1.0"
+  }
+}

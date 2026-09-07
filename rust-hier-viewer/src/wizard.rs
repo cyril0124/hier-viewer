@@ -1474,7 +1474,11 @@ mod tests {
         drain_suggestion_updates(&rx, state);
     }
 
-    fn respond_latest(rx: &Receiver<SuggestionRequest>, state: &mut WizardState, index: &FileIndex) {
+    fn respond_latest(
+        rx: &Receiver<SuggestionRequest>,
+        state: &mut WizardState,
+        index: &FileIndex,
+    ) {
         respond(
             rx.try_iter().last().expect("pending suggestion request"),
             state,

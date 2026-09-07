@@ -57,7 +57,7 @@ Rust assigns parents lower node IDs than their children. Aggregate statistics in
 The browser follows child links in iterative postorder for subtree depth and analysis totals. Signal-name matching runs once per referenced definition per pattern update, then assigns those counts to instances. Definitions absent from the filtered hierarchy are not scanned. Completion or failure of lazy analysis loading invalidates the chart render cache.
 
 ```sh
-node --test tests/*.test.cjs
+npm test
 ```
 
 The runtime tests cover a root with 200,000 children, a 30,000-node chain, shared definitions, mode changes, asynchronous analysis completion, filter updates, chart drill-down, and source-request cancellation. Rust tests include a 100,000-node chain, source-path collisions, filelist compiler options, and wizard input preservation.
@@ -66,10 +66,22 @@ The runtime tests cover a root with 200,000 children, a 30,000-node chain, share
 
 Virtualized rows use a measured, fixed height and no intrinsic-size placeholders. Search navigation scrolls the active match into view without taking focus from the search input. Each source request owns its cancellation signal; closing or switching files invalidates pending rendering and progress updates.
 
-With `agent-browser` and its Chromium browser installed, run:
+With the local npm dependencies and Playwright Chromium installed, run:
 
 ```sh
-node tests/source-reader-browser.cjs
+npm run test:browser
 ```
 
-This starts a temporary loopback server and loads the production reader functions, event handlers, HTML, and CSS. At desktop and narrow viewport sizes, it checks 500,000-line plain-text search focus, Enter/Shift+Enter navigation, and horizontal visibility of column-401 matches in virtualized source. The server and browser session close when the script exits.
+This starts a temporary loopback server and loads the production TypeScript reader module with the viewer HTML and CSS. At desktop and narrow viewport sizes, it checks 500,000-line plain-text search focus, Enter/Shift+Enter navigation, and horizontal visibility of column-401 matches in virtualized source. The server and browser close when the script exits.
+
+`npm run test:ui` uses the built CLI to export the parameterized RTL fixture and serves the generated bundle. It checks desktop/mobile controls, Canvas pixels, treemap zoom/pan, filters, source navigation, bookmark persistence, persisted theme, and 2D/3D interactions. Its screenshots and bundle are written to `target/frontend-ui/`.
+
+## Frontend assets
+
+`rust-hier-viewer/src/html/frontend/` contains the authored TypeScript. HTML, CSS, and the vendored Three.js r183 modules remain under `rust-hier-viewer/src/html/`.
+
+Vite builds two minified IIFE scripts into `rust-hier-viewer/src/html/generated/`: `viewer-app.js` and `viewer-chart.js`. These generated files are versioned and must be regenerated with `npm run build` whenever their sources change. Do not edit them by hand. Type checking is separate: `npm run typecheck` runs TypeScript in strict mode.
+
+Rust embeds the generated scripts at compile time. The app script remains inline in `index.html`; the chart script remains `viewer-chart.js`. Three.js is loaded from the existing local module files only when the 3D view needs it. Bundle binary formats, source URLs, and persisted UI state are unchanged by the frontend build.
+
+`npm run check:generated` builds into a temporary directory, compares filenames and bytes with the versioned scripts, and fails on missing, extra, or stale files. CI and release builds run this check without first overwriting the versioned scripts. Cargo builds and release binaries do not invoke npm or require a Node runtime.

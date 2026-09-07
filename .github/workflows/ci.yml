@@ -30,6 +30,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build g++ pkg-config libsqlite3-dev zlib1g-dev
 
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Check frontend types
+        run: npm run typecheck
+
+      - name: Verify embedded frontend assets
+        run: npm run check:generated
+
+      - name: Test frontend modules
+        run: npm test
+
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Test source reader
+        run: npm run test:browser
+
       - name: Format
         run: cargo fmt --check
 
@@ -45,11 +63,19 @@ jobs:
       - name: Test
         run: timeout 60s cargo test --locked
 
-      - name: Test viewer runtime
-        run: node --test tests/viewer-runtime.test.cjs
-
       - name: Build CLI
         run: cargo build --locked
+
+      - name: Test generated viewer
+        run: npm run test:ui
+
+      - name: Upload browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: viewer-ui-screenshots
+          path: target/frontend-ui/screenshots
+          if-no-files-found: ignore
 
       - name: Test exporter statistics
         run: |

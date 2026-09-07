@@ -524,18 +524,37 @@ cargo run -- --output out --preview
 
 交互式终端下会打开 wizard。非交互式运行时，需要传入源码输入或 `--db`。
 
-### 验证
+### 前端开发
 
-除源码构建依赖外，[Linux CI 工作流](.github/workflows/ci.yml) 使用 Node.js 22 和 Python 3 运行 JavaScript 及 exporter 集成测试。在仓库根目录的 Linux shell 中执行：
+viewer 的 TypeScript 模块位于 `rust-hier-viewer/src/html/frontend/`。修改前端需要 Node.js 22.x 中的 22.12+、24.x 或 26+，以及 npm：
 
 ```bash
+npm ci
+npm run typecheck
+npm run build
+cargo run -- --db path/to/hiers.db --output out --preview
+```
+
+前端变更需同时包含 `rust-hier-viewer/src/html/generated/` 下重新生成的文件。Cargo 直接嵌入这些文件，不调用 Node；release 二进制和 Cargo 安装均不需要 Node。构建和打包规则见[前端资源契约](docs/export-and-bundle-contracts.md#frontend-assets)。
+
+### 验证
+
+除源码构建依赖外，[Linux CI 工作流](.github/workflows/ci.yml) 使用 Node.js 22 和 Python 3。在仓库根目录的 Linux shell 中执行：
+
+```bash
+npm ci
+npm run typecheck
+npm run check:generated
+npm test
+npx playwright install --with-deps chromium
+npm run test:browser
 cargo fmt --check
 cargo check --locked
 cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo test --locked --no-run
 timeout 60s cargo test --locked
-node --test tests/viewer-runtime.test.cjs
 cargo build --locked
+npm run test:ui
 python3 tests/cache-dependencies.py target/debug/hier-viewer
 ```
 

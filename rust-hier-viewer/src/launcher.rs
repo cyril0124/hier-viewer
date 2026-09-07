@@ -1724,7 +1724,10 @@ mod tests {
         fs::write(&source_path, "module top; logic data; endmodule\n").expect("write source");
         fs::write(
             &filelist_path,
-            format!("--top top\n{} // source file\n", path_to_unix_string(&source_path)),
+            format!(
+                "--top top\n{} // source file\n",
+                path_to_unix_string(&source_path)
+            ),
         )
         .expect("write filelist");
         let selection = StartupSelection {

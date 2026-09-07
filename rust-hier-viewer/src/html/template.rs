@@ -3,7 +3,7 @@ use crate::model::ViewerData;
 const TEMPLATE: &str = include_str!("template.html");
 const TEMPLATE_STYLES: &str = include_str!("template_styles.css");
 const TEMPLATE_BODY: &str = include_str!("template_body.html");
-const TEMPLATE_APP: &str = include_str!("template_app.js");
+const TEMPLATE_APP: &str = include_str!("generated/viewer-app.js");
 
 pub(crate) fn render_html(data: &ViewerData) -> String {
     let escaped_title = html_escape(&data.title);
