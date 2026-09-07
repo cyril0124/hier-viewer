@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-07
+
 ### Added
 
 - Added `skills/hier-viewer/SKILL.md` guiding agents to generate executable `.hier-viewer/view-<slug>.sh` launchers with per-design bundles, cache reuse, and HTTP preview bound to `0.0.0.0`.
@@ -110,7 +112,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interrupted `slang` FetchContent checkouts by automatically discarding incomplete cached sources before reconfiguring.
 - Release packaging now keeps the downloaded archive names platform-specific while restoring the actual executable name inside each archive to `hier-viewer` or `hier-viewer.exe`.
 
-[Unreleased]: https://github.com/cyril0124/hier-viewer/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/cyril0124/hier-viewer/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/cyril0124/hier-viewer/releases/tag/v1.2.0
 [1.1.1]: https://github.com/cyril0124/hier-viewer/releases/tag/v1.1.1
 [1.1.0]: https://github.com/cyril0124/hier-viewer/releases/tag/v1.1.0
 [1.0.0]: https://github.com/cyril0124/hier-viewer/releases/tag/v1.0.0
