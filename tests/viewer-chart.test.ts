@@ -4,8 +4,18 @@ import {
   collectLevelNodes,
   threeFitDistance,
   createThreeViewState,
+  coverageBarHeight,
 } from "../rust-hier-viewer/src/html/frontend/chart-model.js";
 import type { ChartFilterState, ChartTraversal } from "../rust-hier-viewer/src/html/frontend/chart-types.js";
+
+test("coverage heights use a fixed linear percent scale including real zero", () => {
+  const maximumHeight = 10.5;
+  assert.equal(coverageBarHeight(0, maximumHeight), 0);
+  assert.equal(coverageBarHeight(25, maximumHeight), 2.625);
+  assert.equal(coverageBarHeight(50, maximumHeight), 5.25);
+  assert.equal(coverageBarHeight(100, maximumHeight), maximumHeight);
+  assert.equal(coverageBarHeight(0.1, maximumHeight), 0.0105);
+});
 
 type TraversalNode = ReturnType<ChartTraversal["getNode"]>;
 

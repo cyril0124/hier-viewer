@@ -1,0 +1,11 @@
+<session version="1.1" release="synthetic-1">
+  <old_coverage>
+    <scope type="instance" name="chip">
+      <metric name="Line" value="3/4" excl="0"/>
+      <metric name="Branch" value="0/0" excl="0"/>
+      <scope type="instance" name="core">
+        <metric name="Toggle" value="5/8" excl="1"/>
+      </scope>
+    </scope>
+  </old_coverage>
+</session>

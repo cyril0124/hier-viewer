@@ -16,6 +16,9 @@ import type { PersistenceDependencies } from "./persistence.js";
 import { createSourceReader } from "./source-reader.js";
 import type { SourceReaderDependencies } from "./source-reader.js";
 import { createTreemapRuntime } from "./treemap.js";
+import type { createCoverageImport } from "./coverage-import.js";
+import { disposeCoverage } from "./coverage-display.js";
+import type { CoverageSelection } from "./coverage-types.js";
 
 import { decodeCoreBundle, decodeAnalysisBundle } from "./binary.js";
 import { createViewerState } from "./state.js";
@@ -23,6 +26,10 @@ import { createHierarchyRuntime } from "./hierarchy-core.js";
 import type { HierarchyNode, ViewerData, ViewerState } from "./types.js";
 import type { LegendRow } from "./main-types.js";
 import type { ChartApi } from "./chart-types.js";
+
+declare global {
+  interface Window { HierarchyCoverage?: { createCoverageImport: typeof createCoverageImport } }
+}
 
     (async () => {
     const loadingOverlay = (document.getElementById("loading-overlay") as HTMLDivElement);
@@ -320,6 +327,8 @@ import type { ChartApi } from "./chart-types.js";
     const ADVANCED_POPOVER_MIN_VISIBLE_WIDTH = 160;
     const ADVANCED_POPOVER_MIN_VISIBLE_HEADER = 72;
     const state = createViewerState(DATA);
+    let activeCoverage: CoverageSelection | null = null;
+    let coverageImport: ReturnType<typeof createCoverageImport> | null = null;
     const {
       getNode,
       getAnalysisDefinitionMap,
@@ -378,8 +387,10 @@ import type { ChartApi } from "./chart-types.js";
       renderSourceLines,
       applySourceSearchValue,
       moveSourceSearch,
-      bindSourceEvents
+      bindSourceEvents,
+      refreshCoverage,
     } = createSourceReader({
+      getCoverage: () => activeCoverage,
       state,
       getNode,
       savePersistedState,
@@ -607,6 +618,10 @@ import type { ChartApi } from "./chart-types.js";
     }
 
     function syncAnalysisControls() {
+      if (state.analysisMode !== "none" && state.coverage) {
+        state.coverage.metric = "off";
+        coverageImport?.disableColor();
+      }
       const usesSignalPattern = state.analysisMode === "count" || state.analysisMode === "ratio";
       analysisPatternGroup.classList.toggle("hidden", state.analysisMode === "none");
       if (analysisPatternModeField) {
@@ -787,6 +802,7 @@ import type { ChartApi } from "./chart-types.js";
     };
 
     function applyMainViewMode() {
+      coverageImport?.setViewVisible(state.mainViewMode === "treemap");
       state.chartPanelOpen = state.mainViewMode !== "treemap";
       treemapStage.classList.toggle("active", state.mainViewMode === "treemap");
       chartPanel.classList.toggle("active", state.chartPanelOpen);
@@ -836,6 +852,8 @@ import type { ChartApi } from "./chart-types.js";
     function setMainViewMode(mode: string) {
       const nextMode = ["treemap", "pie2d", "three3d"].includes(mode) ? mode : "treemap";
       state.mainViewMode = nextMode as ViewerState["mainViewMode"];
+      if (nextMode === "three3d" && state.coverage && state.coverage.metric !== "off") state.chartMode = "coverage";
+      else if (state.chartMode === "coverage") state.chartMode = "weighted_bits";
       hideTreemapToggleTooltip();
       if (nextMode !== "treemap") {
         resetLockedSelection();
@@ -1450,6 +1468,76 @@ import type { ChartApi } from "./chart-types.js";
         } as ChartApi & { setMainViewMode: typeof setMainViewMode; updateHover: typeof updateHover })
       : null;
 
+    function initializeCoverageImport(factory: typeof createCoverageImport) {
+    coverageImport = factory({
+      nodes, homeRoot: state.homeRoot,
+      getTargetRoot: () => state.selectedId ?? state.currentRoot,
+      onApply: selection => {
+        disposeCoverage(activeCoverage);
+        activeCoverage = selection;
+        state.coverage = selection.display;
+        state.chartMode = state.mainViewMode === "three3d" ? "coverage" : "weighted_bits";
+        state.chartPanelDirty = true;
+        state.analysisMode = "none";
+        analysisSelect.value = "none";
+        syncAnalysisControls();
+        refreshCoverage();
+        updateHover(state.hoverId, state.hoverAreaKind, { force: true });
+        draw();
+      },
+      onClear: () => {
+        disposeCoverage(activeCoverage);
+        activeCoverage = null;
+        delete state.coverage;
+        state.chartPanelDirty = true;
+        refreshCoverage();
+        updateHover(state.hoverId, state.hoverAreaKind, { force: true });
+        draw();
+      },
+      onMetricChange: metric => {
+        if (!state.coverage) return;
+        state.coverage.metric = metric;
+        state.chartPanelDirty = true;
+        if (metric !== "off") {
+          state.chartMode = state.mainViewMode === "three3d" ? "coverage" : "weighted_bits";
+          state.analysisMode = "none";
+          analysisSelect.value = "none";
+          syncAnalysisControls();
+        }
+        draw();
+      },
+    });
+    }
+    const importCoverageButton = document.getElementById("coverage-import-btn") as HTMLButtonElement;
+    async function loadCoverageImporter() {
+      importCoverageButton.disabled = true;
+      try {
+        if (!coverageImport) {
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = "./viewer-coverage.js";
+            script.onload = () => {
+              try {
+                const factory = window.HierarchyCoverage?.createCoverageImport;
+                if (!factory) throw new Error("Coverage importer did not initialize.");
+                initializeCoverageImport(factory);
+                resolve();
+              } catch (error) { script.remove(); reject(error); }
+            };
+            script.onerror = () => { script.remove(); reject(new Error("Unable to load viewer-coverage.js.")); };
+            document.head.appendChild(script);
+          });
+        }
+        return coverageImport!;
+      } finally { importCoverageButton.disabled = false; }
+    }
+    importCoverageButton.addEventListener("click", () => {
+      void loadCoverageImporter().then(importer => importer.open()).catch(error => {
+        statusRight.textContent = error instanceof Error ? error.message : String(error);
+      });
+    });
+    window.addEventListener("pagehide", () => disposeCoverage(activeCoverage));
+
     homeBtn.addEventListener("click", () => {
       setRootAndReset(state.homeRoot);
     });
@@ -2050,6 +2138,15 @@ import type { ChartApi } from "./chart-types.js";
     setLoadingState(97, "Rendering first view...", "Computing the initial hierarchy layout.");
     await afterPaint();
     draw();
+    const bundledCoverage = document.body.dataset.coverageManifest;
+    if (bundledCoverage) {
+      setLoadingState(97, "Loading bundled coverage...", "Matching coverage instances.");
+      try {
+        await (await loadCoverageImporter()).loadBundled(bundledCoverage);
+      } catch (error) {
+        statusRight.textContent = `Coverage import failed: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
     setLoadingState(100, "Ready", `${nodes.length} hierarchy nodes ready.`);
     requestAnimationFrame(() => {
       loadingOverlay.classList.add("hidden");

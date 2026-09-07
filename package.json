@@ -7,7 +7,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "vite build --mode app && vite build --mode chart",
+    "build": "vite build --mode app && vite build --mode chart && vite build --mode coverage",
     "test": "vitest run --exclude tests/source-reader-browser.test.ts",
     "check:generated": "node scripts/check-generated.mjs",
     "test:browser": "vitest run tests/source-reader-browser.test.ts --testTimeout 60000 --hookTimeout 60000",
@@ -20,5 +20,8 @@
     "typescript": "5.9.3",
     "vite": "8.2.2",
     "vitest": "4.1.0"
+  },
+  "dependencies": {
+    "parse5": "8.0.0"
   }
 }

@@ -1,0 +1,21 @@
+<!doctype html><html><body>
+<span>Source File(s) : </span><a>rtl/multi.sv</a>
+<span>Module self-instances :</span><table>
+<tr><td><a href="#inst_tag_a">top.a</a></td><td><a href="#inst_tag_a_Line">100</a></td></tr>
+<tr><td><a href="#inst_tag_b">top.b</a></td><td><a href="#inst_tag_b_Line">50</a></td></tr>
+</table>
+<a name="inst_tag_a"></a><span>Module Instance : <a>top.a</a></span>
+<a name="inst_tag_b"></a><span>Module Instance : <a>top.b</a></span>
+<a name="inst_tag_a_Line"></a><b>Line Coverage for Instance : <a>top.a</a></b>
+<table><tr><td>TOTAL</td><td></td><td>2</td><td>2</td></tr></table>
+<pre class="code">
+20         1/1              first();
+21         1/1              second();
+</pre><a name="inst_tag_a_Branch"></a>
+<a name="inst_tag_b_Line"></a><b>Line Coverage for Instance : <a>top.b</a></b>
+<table><tr><td>TOTAL</td><td></td><td>2</td><td>1</td></tr></table>
+<pre class="code">
+20         1/1              first();
+21         0/1     ==>      second();
+</pre><a name="inst_tag_b_Branch"></a>
+</body></html>

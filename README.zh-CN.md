@@ -6,7 +6,7 @@ RTL 层级可视化与结构分析工具。
 
 `hier-viewer` 将展开后的实例层级生成为交互式静态站点，用于层级浏览、模块统计比较和 RTL 源码定位。支持矩形树图、2D 饼图和 3D 图表。
 
-内置的 `slang-hier-exporter` 将层级、信号统计和源码位置导出至 SQLite。Rust 程序读取导出结果，或通过 `--db` 指定的已有数据库，生成静态站点。部署仅需 HTTP 文件服务器，无需应用后端。
+内置的 `slang-hier-exporter` 将层级、信号统计和源码位置导出至 SQLite。Rust 程序读取导出结果，或通过 `--db` 指定的已有数据库，生成静态站点。浏览和浏览器文件覆盖率导入仅需 HTTP 文件服务器；可选的服务端 VDB 转换使用内置本地服务。
 
 [安装](#安装) · [快速开始](#快速开始) · [常见命令](#常见命令) · [开发者说明](#开发者说明)
 
@@ -115,6 +115,14 @@ Zen 模式隐藏大部分界面控件，扩大可视化显示区域。
 
 源码阅读器支持定位实例声明和模块定义，并提供文件内搜索、自定义标签书签、原始源码访问及全屏显示。浏览器保存书签，刷新后仍然有效。
 
+## 覆盖率
+
+在网页点击 **Import coverage**，选择 URG 报告目录或 `session.xml`。矩形图和 2D 饼图保留规模面积，用颜色显示覆盖率；3D 默认使用固定 0–100% 纵轴，柱高线性表示覆盖率。各视图均显示实例级 Line、Condition、Branch、Toggle 计数；包含 HTML 明细时，模块源码窗口可显示当前实例的逐行覆盖率，并通过 Condition、Branch、Toggle 页签查看其他明细。
+
+报告包含断言覆盖率时，还会显示可选的 Assert 指标和明细表。
+
+导入服务端报告路径或转换 VDB 时，使用 `hier-viewer serve out` 打开已有站点。VDB 转换要求服务端为 Linux 且已安装 Synopsys URG，超时可在导入框设置。流程、实例映射、源码校验和限制见[覆盖率导入文档](docs/coverage.md)。
+
 ## 示例
 
 - [`examples/ibex-example`](examples/ibex-example) 提供 `ibex_top` 和 `ibex_simple_system` 的启动脚本，使用固定版本的 `lowRISC/ibex` 子模块和静态文件列表。
@@ -209,6 +217,7 @@ hier-viewer -r 'rtl/**/*.sv' --output out -- --top Top
 
 ```text
 hier-viewer [OPTIONS] [rtl ...]
+hier-viewer serve <output-dir> [--host IP] [--port N]
 ```
 
 完整参数列表见 `hier-viewer --help`。
@@ -278,6 +287,7 @@ out/
 ├── viewer-core.bin
 ├── viewer-analysis.bin        # 仅在存在分析数据时生成
 ├── viewer-chart.js
+├── viewer-coverage.js        # 打开覆盖率导入时加载
 ├── viewer-three.module.js
 ├── three.core.js
 ├── .hier-viewer-sources/      # 源码阅读器使用的源码副本
@@ -299,9 +309,10 @@ hier-viewer --db path/to/hiers.db --output out --preview --preview-port 9000
 仅提供已有站点的访问服务，不重新生成：
 
 ```bash
-cd out
-python3 -m http.server 8000
+hier-viewer serve out --port 8000
 ```
+
+内置服务也提供本地覆盖率导入。`python3 -m http.server --directory out 8000` 等普通服务器支持静态浏览和浏览器文件导入，但不能执行 URG。非 loopback 绑定会禁用覆盖率 API。
 
 也可使用 VSCode Live Server 托管输出目录，支持通过 VSCode Remote 访问。
 

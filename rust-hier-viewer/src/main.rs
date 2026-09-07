@@ -1,4 +1,5 @@
 mod cli;
+mod coverage_import;
 mod html;
 mod input;
 mod launcher;
@@ -16,8 +17,8 @@ use std::process;
 
 use cli::parse_args;
 use html::{
-    render_analysis_bin, render_chart_js, render_core_bin, render_html, render_meta_json,
-    render_three_core_js, render_three_js,
+    render_analysis_bin, render_chart_js, render_core_bin, render_coverage_js, render_html,
+    render_meta_json, render_three_core_js, render_three_js,
 };
 use input::load_input_data;
 use launcher::{FileIndex, PatternMode, StartupSelection, run_hier_viewer_export};
@@ -32,6 +33,7 @@ const VIEWER_META_NAME: &str = "viewer-meta.json";
 const VIEWER_CORE_NAME: &str = "viewer-core.bin";
 const VIEWER_ANALYSIS_NAME: &str = "viewer-analysis.bin";
 const VIEWER_CHART_NAME: &str = "viewer-chart.js";
+const VIEWER_COVERAGE_NAME: &str = "viewer-coverage.js";
 const VIEWER_THREE_NAME: &str = "viewer-three.module.js";
 const VIEWER_THREE_CORE_NAME: &str = "three.core.js";
 
@@ -41,6 +43,7 @@ struct BundleAssets<'a> {
     core_bin: &'a [u8],
     analysis_bin: Option<&'a [u8]>,
     chart_js: &'a str,
+    coverage_js: &'a str,
     three_js: &'a str,
     three_core_js: &'a str,
 }
@@ -55,6 +58,12 @@ fn main() {
 fn run() -> Result<(), String> {
     match parse_args(std::env::args().skip(1))? {
         AppCommand::Generate(config) => run_generate(config),
+        AppCommand::Serve(config) => serve_output_dir(
+            &config.output_path,
+            &config.host,
+            config.port,
+            std::io::stdin().is_terminal(),
+        ),
         AppCommand::Update(config) => run_update(&config),
     }
 }
@@ -165,6 +174,7 @@ fn run_generate(mut config: Config) -> Result<(), String> {
         core_bin: &core_bin,
         analysis_bin: analysis_bin.as_deref(),
         chart_js,
+        coverage_js: render_coverage_js(),
         three_js,
         three_core_js,
     };
@@ -245,6 +255,14 @@ fn write_bundle(output_dir: &str, assets: &BundleAssets<'_>) -> Result<(), Strin
         format!(
             "failed to write chart asset '{}': {err}",
             chart_path.display()
+        )
+    })?;
+
+    let coverage_path = output_dir.join(VIEWER_COVERAGE_NAME);
+    fs::write(&coverage_path, assets.coverage_js).map_err(|err| {
+        format!(
+            "failed to write viewer coverage '{}': {err}",
+            coverage_path.display()
         )
     })?;
 

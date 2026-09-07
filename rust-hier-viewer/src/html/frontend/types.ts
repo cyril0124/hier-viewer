@@ -1,3 +1,5 @@
+import type { CoverageDisplay } from "./coverage-types.js";
+
 export type Nullable<T> = T | null;
 
 export interface DefinitionSignalStat {
@@ -108,6 +110,7 @@ export interface SourceBookmark {
 }
 
 export interface ViewerState {
+  coverage?: CoverageDisplay;
   homeRoot: number;
   currentRoot: number;
   theme: string;

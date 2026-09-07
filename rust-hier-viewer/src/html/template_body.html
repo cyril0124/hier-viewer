@@ -56,6 +56,12 @@
             <button id="toggle-tree-btn" type="button" data-ui-name="tree-panel-btn" class="icon-button" aria-label="Hierarchy tree" title="Hierarchy tree"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button>
             <button id="toggle-match-btn" type="button" data-ui-name="matches-panel-btn" class="icon-button" aria-label="Filter matches" title="Filter matches"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></svg></button>
             </div>
+            <div class="action-cluster" role="group" aria-label="Coverage">
+              <button id="coverage-import-btn" type="button" class="icon-button" aria-label="Import coverage" title="Import coverage"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg></button>
+              <label class="metric-inline-label" for="coverage-metric-select">Coverage:</label>
+              <select id="coverage-metric-select" aria-label="Coverage metric" disabled><option value="off">Off</option><option value="line">Line</option><option value="condition">Condition</option><option value="branch">Branch</option><option value="toggle">Toggle</option><option value="assert" hidden disabled>Assert</option></select>
+              <button id="coverage-clear-btn" type="button" class="icon-button" aria-label="Remove coverage" title="Remove coverage" disabled><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+            </div>
             <div class="metric-group" data-ui-name="level-group">
               <label class="metric-inline-label" for="depth-select">Level:</label>
               <select id="depth-select" aria-label="Visible depth" data-ui-name="level-select"></select>
@@ -292,6 +298,7 @@
                 <div class="metric-group" data-ui-name="chart-mode-group">
                   <label class="metric-inline-label" for="chart-mode-select">Mode:</label>
                   <select id="chart-mode-select" aria-label="Chart mode" data-ui-name="chart-mode-select">
+                    <option value="coverage">Coverage (%)</option>
                     <option value="weighted_bits">Weighted Bits</option>
                     <option value="analysis">Analysis Pattern</option>
                   </select>
@@ -396,10 +403,14 @@
         <div class="hover-path" id="hover-path"></div>
         <div class="hover-title" id="hover-title"></div>
         <div class="hover-meta" id="hover-meta"></div>
+        <div id="coverage-node-details" class="coverage-node-details" hidden></div>
         <div class="hover-actions hidden" id="hover-actions">
           <button id="open-instance-source-btn" type="button" data-ui-name="open-instance-source-btn">Open Instance</button>
           <button id="open-module-source-btn" type="button" data-ui-name="open-module-source-btn">Open Module</button>
         </div>
+      </div>
+      <div id="coverage-legend" class="coverage-legend" hidden aria-label="Subtree coverage legend">
+        <span>Subtree coverage</span><span><i style="background:#c44949"></i>0–49%</span><span><i style="background:#d89425"></i>50–79%</span><span><i style="background:#7b9833"></i>80–94%</span><span><i style="background:#23866a"></i>95–100%</span><span><i style="background:#899198"></i>No data</span>
       </div>
       <div class="treemap-toggle-tooltip hidden" id="treemap-toggle-tooltip" aria-hidden="true">
         <div class="treemap-toggle-tooltip-line">
@@ -436,6 +447,22 @@
             <button class="source-expand" id="toggle-source-fullscreen-btn" type="button" aria-pressed="false" data-ui-name="toggle-source-fullscreen-btn">Fullscreen</button>
             <button class="icon-button source-close" id="close-source-btn" type="button" data-ui-name="close-source-btn" aria-label="Close source" title="Close source"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
           </div>
+        </div>
+        <div id="source-coverage-bar" class="source-coverage-bar" hidden>
+          <div class="coverage-detail-tabs" role="tablist" aria-label="Coverage details">
+            <button type="button" role="tab" data-coverage-metric="line" aria-selected="true" class="active">Line</button>
+            <button type="button" role="tab" data-coverage-metric="condition" aria-selected="false" tabindex="-1">Condition</button>
+            <button type="button" role="tab" data-coverage-metric="branch" aria-selected="false" tabindex="-1">Branch</button>
+            <button type="button" role="tab" data-coverage-metric="toggle" aria-selected="false" tabindex="-1">Toggle</button>
+            <button type="button" role="tab" data-coverage-metric="assert" aria-selected="false" tabindex="-1" hidden>Assert</button>
+          </div>
+          <label><input id="source-coverage-toggle" type="checkbox" checked> Line coverage</label>
+          <span id="source-coverage-status" role="status"></span>
+          <div class="source-coverage-actions">
+            <button id="source-coverage-prev" class="icon-button" type="button" aria-label="Previous uncovered line" title="Previous uncovered line" disabled><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg></button>
+            <button id="source-coverage-next" class="icon-button" type="button" aria-label="Next uncovered line" title="Next uncovered line" disabled><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+          </div>
+          <span id="source-coverage-line-detail"></span>
         </div>
         <div class="source-searchbar-shell" data-ui-name="source-searchbar-shell">
           <div class="source-search-status" id="source-search-status" data-ui-name="source-search-status">Search current view</div>
@@ -486,6 +513,12 @@
           </div>
         </div>
       </div>
+      <div id="coverage-detail-view" class="coverage-detail-view" hidden>
+        <div class="coverage-detail-heading"><div><h2 id="coverage-detail-title"></h2><div id="coverage-detail-subtitle"></div></div><label><input id="coverage-detail-missing" type="checkbox"> <span id="coverage-detail-filter-label">Uncovered only</span></label></div>
+        <div class="coverage-detail-status-row"><span id="coverage-detail-status" role="status"></span><button id="coverage-detail-retry" type="button" hidden>Retry</button></div>
+        <div id="coverage-detail-content"></div>
+      </div>
+      <div id="source-coverage-plain" class="source-coverage-plain" hidden><div class="source-coverage-page-controls"><label for="source-coverage-line-select">Line coverage</label><button id="source-coverage-page-prev" type="button" class="icon-button" aria-label="Previous coverage page" title="Previous coverage page">&lt;</button><span id="source-coverage-page"></span><button id="source-coverage-page-next" type="button" class="icon-button" aria-label="Next coverage page" title="Next coverage page">&gt;</button></div><select id="source-coverage-line-select" size="5" aria-label="Line coverage details"></select></div>
       <div class="source-code" id="source-code" data-ui-name="source-code"></div>
     </aside>
 
@@ -495,3 +528,27 @@
     </section>
   </div>
   <div class="ui-annotation-layer" id="ui-annotation-layer" aria-hidden="true"></div>
+  <dialog id="coverage-import-dialog" class="coverage-import-dialog" aria-labelledby="coverage-import-title">
+    <h2 id="coverage-import-title">Import Coverage</h2>
+    <label class="coverage-field">Input<select id="coverage-import-mode"><option value="files">URG report files</option><option value="report">URG report server directory</option><option value="vdb">VDB server directory</option></select></label>
+    <div id="coverage-browser-fields" class="coverage-input-files">
+      <label class="coverage-file-label">Choose files<input id="coverage-files" type="file" multiple accept=".xml,.html"></label>
+      <label class="coverage-file-label">Choose folder<input id="coverage-folder" type="file" webkitdirectory multiple></label>
+      <label id="coverage-session-field" class="coverage-field" hidden>Report session<select id="coverage-session-select"></select></label>
+    </div>
+    <div id="coverage-server-fields" class="coverage-form-grid" hidden>
+      <label class="coverage-field">Server directory<input id="coverage-server-path" type="text" autocomplete="off" spellcheck="false" placeholder="/path/to/merged.vdb"></label>
+      <label id="coverage-timeout-field" class="coverage-field">Timeout (minutes, 0 = unlimited)<input id="coverage-timeout" type="number" min="0" step="1" value="60"></label>
+    </div>
+    <div id="coverage-import-status" class="coverage-import-status" role="status" aria-live="polite"></div>
+    <div id="coverage-mapping-fields" hidden>
+      <div class="coverage-form-grid">
+        <label class="coverage-field">Coverage root<input id="coverage-root-input" type="text" spellcheck="false" autocomplete="off"></label>
+        <label class="coverage-field">Target hierarchy<select id="coverage-target-select"></select></label>
+      </div>
+      <button id="coverage-preview-btn" type="button">Check mapping</button>
+      <div id="coverage-mapping-result" class="coverage-import-status"></div>
+      <details id="coverage-unmatched-details" hidden><summary>Unmatched instances</summary><textarea id="coverage-unmatched" readonly rows="6" aria-label="Unmatched instances"></textarea></details>
+    </div>
+    <div class="coverage-dialog-actions"><button id="coverage-cancel-btn" type="button">Cancel</button><button id="coverage-load-btn" type="button" hidden>Load report</button><button id="coverage-apply-btn" type="button" disabled>Apply</button></div>
+  </dialog>

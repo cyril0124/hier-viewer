@@ -6,7 +6,7 @@ RTL hierarchy visualization and structural analysis.
 
 `hier-viewer` generates an interactive static site for inspecting elaborated instance hierarchies, comparing module statistics, and navigating RTL source. It supports treemaps, 2D pie charts, and 3D charts.
 
-The embedded `slang-hier-exporter` extracts hierarchy, signal statistics, and source locations into SQLite. The Rust application generates the site from this export or an existing database supplied with `--db`. The generated site requires an HTTP file server, but no application backend.
+The embedded `slang-hier-exporter` extracts hierarchy, signal statistics, and source locations into SQLite. The Rust application generates the site from this export or an existing database supplied with `--db`. The generated site requires only an HTTP file server for browsing and browser-file coverage imports. Optional server-side VDB conversion uses the built-in local service.
 
 [Install](#install) · [Quick start](#quick-start) · [Common commands](#common-commands) · [Development](#development)
 
@@ -115,6 +115,14 @@ Zen mode hides most interface controls to expand the visualization area.
 
 The source reader navigates to instance declarations and module definitions. It supports in-file search, labeled bookmarks, raw-source access, and fullscreen display. The browser retains bookmarks across reloads.
 
+## Coverage
+
+Use **Import coverage** in the viewer to load a URG report folder or `session.xml`. The treemap and 2D pie retain structural areas and use coverage colors; 3D defaults to linear percentage heights on a fixed 0-100% scale. All views show instance-level Line, Condition, Branch, or Toggle counts, and the module source reader shows per-instance line coverage and Condition/Branch/Toggle detail tabs when HTML detail files are available.
+
+Optional Assert metrics and detail tables appear when the report contains assertion coverage.
+
+For server-side report paths or VDB conversion, open the existing bundle with `hier-viewer serve out`. VDB conversion requires Linux and Synopsys URG on the server; its timeout is configurable in the import dialog. See [coverage import](docs/coverage.md) for the workflow, mapping rules, source validation, and limitations.
+
 ## Examples
 
 - [`examples/ibex-example`](examples/ibex-example) provides entry scripts for `ibex_top` and `ibex_simple_system`, with a pinned `lowRISC/ibex` submodule and static filelists.
@@ -209,6 +217,7 @@ Normal source and dependency changes trigger rebuilding automatically. See the [
 
 ```text
 hier-viewer [OPTIONS] [rtl ...]
+hier-viewer serve <output-dir> [--host IP] [--port N]
 ```
 
 Run `hier-viewer --help` for the full option list.
@@ -278,6 +287,7 @@ out/
 ├── viewer-core.bin
 ├── viewer-analysis.bin        # only when analysis data exists
 ├── viewer-chart.js
+├── viewer-coverage.js        # loaded when opening coverage import
 ├── viewer-three.module.js
 ├── three.core.js
 ├── .hier-viewer-sources/      # source copies for the reader
@@ -299,9 +309,10 @@ On a remote host, use SSH or editor port forwarding with the default bind addres
 To serve an existing bundle without regenerating it:
 
 ```bash
-cd out
-python3 -m http.server 8000
+hier-viewer serve out --port 8000
 ```
+
+The built-in server also supplies local coverage import. An ordinary server such as `python3 -m http.server --directory out 8000` supports static viewing and browser-file report import, but cannot run URG. Coverage APIs are disabled on non-loopback bindings.
 
 VSCode Live Server can also serve the output directory, including through VSCode Remote.
 

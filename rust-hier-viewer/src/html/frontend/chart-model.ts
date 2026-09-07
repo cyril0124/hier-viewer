@@ -91,6 +91,10 @@ export function createThreeViewState(
   };
 }
 
+export function coverageBarHeight(percentage: number, maximumHeight: number): number {
+  return Math.max(0, Math.min(100, percentage)) / 100 * maximumHeight;
+}
+
 export function threeBarVisualRatio(value: number, maxValue: number, minValue: number): number {
   if (!(maxValue > 0) || !(value > 0)) {
     return 0;

@@ -30,9 +30,11 @@ name = "hier-viewer"
 path = "rust-hier-viewer/src/main.rs"
 
 [dependencies]
+ctrlc = { version = "3.4.7", features = ["termination"] }
 crossterm = "0.28.1"
 flate2 = "1.1.2"
 fuzzy-matcher = "0.3.7"
+getrandom = "0.3.4"
 globset = "0.4.16"
 libc = "0.2.177"
 ratatui = "0.29.0"
@@ -42,9 +44,13 @@ reqwest = { version = "0.12.24", default-features = false, features = ["blocking
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 self-replace = "1.5.0"
 serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+socket2 = "0.6.3"
 shell-words = "1.1.0"
 tar = "0.4.44"
+tempfile = "3.23.0"
 time = { version = "0.3.44", features = ["formatting", "local-offset", "macros"] }
+tiny_http = "0.12.0"
 walkdir = "2.5.0"
 zip = { version = "2.4.2", default-features = false, features = ["deflate"] }
 

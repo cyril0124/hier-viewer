@@ -17,6 +17,7 @@ import type {
   AnalysisBucketStyle,
 } from "./main-types.js";
 import type { ChartController } from "./chart-types.js";
+import { coverageColor, coverageDetailsHtml } from "./coverage-display.js";
 import {
   mixHexColors,
   hexToRgba,
@@ -1582,9 +1583,10 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
         .filter((area) => area.level === 0 || rectIntersectsViewport(area.rect, width, height));
 
       ctx.clearRect(0, 0, width, height);
-      ctx.fillStyle = state.layoutMode === "accurate"
-        ? currentThemeVisuals().canvasAccurate
-        : currentThemeVisuals().canvasClassic;
+      const rootCoverageColor = coverageColor(state.coverage, state.currentRoot);
+      ctx.fillStyle = rootCoverageColor
+        ? mixHexColors(currentThemeVisuals().canvasBase, rootCoverageColor, currentThemeVisuals().dark ? 0.45 : 0.3)
+        : state.layoutMode === "accurate" ? currentThemeVisuals().canvasAccurate : currentThemeVisuals().canvasClassic;
       ctx.fillRect(0, 0, width, height);
 
       for (const area of state.areas) {
@@ -1592,7 +1594,10 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
         const { x, y, w, h } = visibleAreaRect(area);
         if (w <= 0 || h <= 0) continue;
         const analysisHighlightState = analysisNodeHighlightState(area.nodeId);
-        ctx.fillStyle = area.kind === "self" ? selfAreaColor(area.level) : nodeColor(area.level);
+        const fillCoverage = area.kind === "node" ? coverageColor(state.coverage, area.nodeId) : null;
+        ctx.fillStyle = fillCoverage
+          ? mixHexColors(currentThemeVisuals().canvasBase, fillCoverage, currentThemeVisuals().dark ? 0.6 : 0.42)
+          : area.kind === "self" ? selfAreaColor(area.level) : nodeColor(area.level);
         ctx.fillRect(x, y, w, h);
         if (analysisActive() && area.kind === "node" && getNode(area.nodeId).children.length > 0) {
           const contentRect = visibleNodeContentRect(area, { x, y, w, h });
@@ -2012,6 +2017,11 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
         );
       }
       hoverMeta.innerHTML = hoverMetaLines.join("");
+      const coverageDetails = document.getElementById("coverage-node-details");
+      if (coverageDetails) {
+        coverageDetails.hidden = !state.coverage;
+        coverageDetails.innerHTML = coverageDetailsHtml(state.coverage, nodeId);
+      }
       hoverSelectedPill.textContent = areaKind === "self" ? "Selected Self" : "Selected";
       applyHoverCardLockState();
       const hasInstanceSource = nodeHasInstanceSource(node);

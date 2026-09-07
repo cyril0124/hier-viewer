@@ -18,7 +18,10 @@ import {
   collectLevelNodes,
   createThreeViewState,
   threeBarVisualRatio,
+  coverageBarHeight,
 } from "./chart-model.js";
+
+import { coverageColor, coverageCounts, coverageDetailsHtml, formatCoverage, COVERAGE_COLORS } from "./coverage-display.js";
 
 const THREE_MODULE_URL = new URL("./viewer-three.module.js", window.location.href).href;
 
@@ -191,7 +194,8 @@ function makeLabelTexture(
   return texture;
 }
 
-function valueDisplay(entry: { value: number }, chart: Chart): string {
+function valueDisplay(entry: { value: number; coverageMissing?: boolean }, chart: Chart): string {
+  if (chart.mode === "coverage") return entry.coverageMissing ? "No data" : `${entry.value.toFixed(2)}%`;
   if (chart.mode === "analysis" && chart.analysisMode === "ratio") {
     return `${chart.formatValue(entry.value * 100)}%`;
   }
@@ -283,6 +287,8 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
 
   const state = api.state;
   let lastRenderSignature = "";
+  let lastCoverage = state.coverage;
+  let renderGeneration = 0;
   let lastLevelSignature = "";
   let chartResizeObserver: ResizeObserver | null = null;
   let threeLoadPromise: Promise<THREE> | null = null;
@@ -325,10 +331,10 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
     chartDetailMeta!.innerHTML = [
       detailMetaLine("Module", node.module),
       detailMetaLine(
-        "Area",
-        `${formatPercent(entry.fraction)} · ${valueDisplay(entry, chart)}`
+        chart.mode === "coverage" ? "Coverage height" : "Area",
+        chart.mode === "coverage" ? valueDisplay(entry, chart) : `${formatPercent(entry.fraction)} · ${valueDisplay(entry, chart)}`
       ),
-    ].join("");
+    ].join("") + (coverageLabel() ? coverageDetailsHtml(state.coverage, entry.id) : "");
     chartDetailCard!.classList.remove("hidden");
   }
 
@@ -573,6 +579,10 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
 
   function syncControls(): void {
     chartPanel!.classList.toggle("active", !!state.chartPanelOpen);
+    const canUseCoverage = state.chartRenderMode === "three3d" && !!state.coverage && state.coverage.metric !== "off";
+    const coverageOption = chartModeSelect!.querySelector<HTMLOptionElement>('option[value="coverage"]');
+    if (coverageOption) coverageOption.disabled = !canUseCoverage;
+    if (state.chartMode === "coverage" && !canUseCoverage) state.chartMode = "weighted_bits";
     chartModeSelect!.value = state.chartMode;
     chartAnalysisEditor!.classList.toggle(
       "hidden",
@@ -676,6 +686,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
       state.theme,
       state.weightedVariableWeight,
       state.weightedNetWeight,
+      state.coverage?.metric ?? "off",
       chartVisual!.clientWidth,
       chartVisual!.clientHeight,
     ]);
@@ -695,12 +706,20 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
   }
 
   function buildEntryStyle(
-    entry: { value: number },
+    entry: { id: number; value: number },
     index: number,
     maxValue: number,
     mode: ChartMode
   ): ChartEntryStyle {
     const theme = api.currentThemeVisuals();
+    const coverage = coverageColor(state.coverage, entry.id);
+    if (coverage) {
+      return {
+        fill: api.mixHexColors(theme.canvasBase, coverage, theme.dark ? 0.72 : 0.66),
+        stroke: api.mixHexColors(theme.text, coverage, 0.55),
+        background: api.hexToRgba(api.mixHexColors(theme.panel, coverage, theme.dark ? 0.2 : 0.08), 0.96),
+      };
+    }
     if (mode === "analysis") {
       const ramp = theme.analysisRamp || [theme.match];
       const normalized = maxValue > 0 ? entry.value / maxValue : 0;
@@ -741,7 +760,14 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
     };
   }
 
+  function coverageLabel(): string {
+    const metric = state.coverage?.metric;
+    if (!metric || metric === "off") return "";
+    return metric.charAt(0).toUpperCase() + metric.slice(1);
+  }
+
   function modeSummary(mode: ChartMode, analysisMode: AnalysisMode): string {
+    if (mode === "coverage") return `${coverageLabel()} Coverage (0–100%)`;
     if (mode === "analysis") {
       if (analysisMode === "ratio") return "Analysis Pattern Ratio";
       if (analysisMode === "loc") return "Module LOC";
@@ -763,7 +789,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
     chartPanelSubtitle!.textContent = `${root.path || "(root)"} · ${modeSummary(
       mode,
       analysisMode
-    )} · level ${chartLevelLabel()}`;
+    )} · level ${chartLevelLabel()}${coverageLabel() ? ` · color: ${coverageLabel()} coverage` : ""}`;
     renderChartBreadcrumbs();
 
     if (mode === "analysis" && !api.analysisActive()) {
@@ -790,17 +816,18 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
     const entries = nodeIds
       .map((nodeId) => {
         const node = api.getNode(nodeId);
-        const value =
-          mode === "analysis"
-            ? analysisValue(nodeId)
-            : api.subtreeWeightedBits(node);
+        const counts = state.coverage?.metric && state.coverage.metric !== "off" ? coverageCounts(state.coverage, nodeId, state.coverage.metric) : undefined;
+        const value = mode === "coverage"
+          ? counts && counts.total > 0 ? counts.covered / counts.total * 100 : 0
+          : mode === "analysis" ? analysisValue(nodeId) : api.subtreeWeightedBits(node);
         return {
           id: nodeId,
           node,
           value,
+          coverageMissing: mode === "coverage" && (!counts || counts.total === 0),
         };
       })
-      .filter((entry) => entry.value > 0);
+      .filter((entry) => mode === "coverage" || entry.value > 0);
 
     if (!entries.length) {
       return {
@@ -812,9 +839,9 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
       };
     }
 
-    entries.sort((left, right) => right.value - left.value);
-    const total = entries.reduce((sum, entry) => sum + entry.value, 0);
-    const maxValue = entries.reduce(
+    entries.sort((left, right) => Number(left.coverageMissing) - Number(right.coverageMissing) || right.value - left.value);
+    const total = mode === "coverage" ? 0 : entries.reduce((sum, entry) => sum + entry.value, 0);
+    const maxValue = mode === "coverage" ? 100 : entries.reduce(
       (max, entry) => Math.max(max, entry.value),
       0
     );
@@ -841,7 +868,9 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
       }),
       status: "",
     };
-    chart.status = `${chart.entries.length} slices · level ${chartLevelLabel()} · ${totalCaption(
+    chart.status = mode === "coverage"
+      ? `${chart.entries.length} instances · level ${chartLevelLabel()} · height: ${coverageLabel()} 0–100% · ${chart.entries.filter(entry => entry.coverageMissing).length} without data`
+      : `${chart.entries.length} slices · level ${chartLevelLabel()} · ${totalCaption(
       chart
     )} ${valueDisplay({ value: total }, chart)}${
       filterActive(state) ? " · filter active" : ""
@@ -865,6 +894,25 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
     chartLegend!.innerHTML = "";
     const legendMap = new Map<number, HTMLElement>();
     const fragment = document.createDocumentFragment();
+    const metric = state.coverage?.metric;
+    if (metric && metric !== "off") {
+      const key = document.createElement("div");
+      key.className = "chart-coverage-key";
+      key.setAttribute("aria-label", "Coverage legend");
+      const heading = document.createElement("div");
+      heading.className = "chart-coverage-key-title";
+      heading.textContent = `Subtree ${coverageLabel()}: ${formatCoverage(coverageCounts(state.coverage, state.currentRoot, metric))}`;
+      key.appendChild(heading);
+      const colors = [...COVERAGE_COLORS, "#899198"];
+      for (const [index, range] of ["0–49%", "50–79%", "80–94%", "95–100%", "No data"].entries()) {
+        const item = document.createElement("span");
+        const swatch = document.createElement("i");
+        swatch.style.backgroundColor = colors[index];
+        item.append(swatch, range);
+        key.appendChild(item);
+      }
+      fragment.appendChild(key);
+    }
     for (const entry of chart.entries) {
       const button = document.createElement("button");
       button.type = "button";
@@ -890,10 +938,16 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
       module.className = "chart-legend-module";
       module.textContent = `<${entry.node.module}>`;
       main.appendChild(module);
+      if (metric && metric !== "off") {
+        const coverage = document.createElement("div");
+        coverage.className = "chart-legend-coverage";
+        coverage.textContent = `${coverageLabel()} ${formatCoverage(coverageCounts(state.coverage, entry.id, metric))}`;
+        main.appendChild(coverage);
+      }
 
       const value = document.createElement("span");
       value.className = "chart-legend-value";
-      value.textContent = `${valueDisplay(entry, chart)} · ${formatPercent(
+      value.textContent = chart.mode === "coverage" ? valueDisplay(entry, chart) : `${valueDisplay(entry, chart)} · ${formatPercent(
         entry.fraction
       )}`;
 
@@ -1181,6 +1235,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
   }
 
   function renderThreeChart(chart: Chart): Promise<void> {
+    const generation = renderGeneration;
     disposeThreeContext();
     clearVisual();
 
@@ -1194,6 +1249,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
     return loadThree()
       .then((THREE) => {
         if (
+          generation !== renderGeneration ||
           !state.chartPanelOpen ||
           state.chartRenderMode !== "three3d" ||
           state.mainViewMode === "treemap"
@@ -1241,6 +1297,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
         renderer.setSize(width, height, false);
         renderer.setClearColor(backgroundColor, theme.dark ? 0.2 : 0.12);
         renderer.domElement.className = "chart-three-canvas";
+        renderer.domElement.setAttribute("aria-label", chart.mode === "coverage" ? `3D ${coverageLabel()} coverage, fixed 0 to 100 percent scale` : "3D structural statistics");
         renderer.domElement.style.width = "100%";
         renderer.domElement.style.height = "100%";
         renderer.domElement.style.display = "block";
@@ -1276,6 +1333,20 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
         const pedestals: THREEMesh[] = [];
         const labelSprites: THREESprite[] = [];
         let hoveredMesh: THREEMesh | null = null;
+        let coverageAxis: InstanceType<THREE["LineSegments"]> | null = null;
+        function fixedLabel(text: string, x: number, y: number, z: number, width: number, screenSpace = false) {
+          const texture = makeLabelTexture(THREE, text, theme);
+          if (!texture) return;
+          const image = texture.image as HTMLCanvasElement;
+          const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false, sizeAttenuation: !screenSpace }));
+          const labelHeight = screenSpace ? 22 * 2 * Math.tan(19 * Math.PI / 180) / height : width * image.height / image.width;
+          const labelWidth = screenSpace ? labelHeight * image.width / image.height : width;
+          sprite.scale.set(labelWidth, labelHeight, 1);
+          if (screenSpace) sprite.center.set(1, 0.5);
+          sprite.position.set(x, y, z);
+          scene.add(sprite);
+          labelSprites.push(sprite);
+        }
 
         const columnCount = Math.max(1, Math.ceil(Math.sqrt(chart.entries.length)));
         const rowCount = Math.max(1, Math.ceil(chart.entries.length / columnCount));
@@ -1288,7 +1359,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
         const maxHeight = 10.5;
         const minHeight = 0.14;
         const baseThickness = 0.08;
-        const extent = Math.max(columnCount * cellSize, rowCount * cellSize, maxHeight);
+        const extent = Math.max(columnCount * cellSize, rowCount * cellSize, maxHeight) + (chart.mode === "coverage" ? cellSize * 2 : 0);
         const viewState = ensureThreeView(extent, maxHeight);
         camera.far = Math.max(240, viewState.maxDistance + extent * 2);
         camera.updateProjectionMatrix();
@@ -1319,6 +1390,19 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
         gridHelper.position.y = 0.002;
         scene.add(gridHelper);
 
+        if (chart.mode === "coverage") {
+          const axisX = -halfWidth - cellSize;
+          const axisZ = halfDepth + cellSize * 0.7;
+          const points = [new THREE.Vector3(axisX, 0, axisZ), new THREE.Vector3(axisX, maxHeight, axisZ)];
+          for (const percent of [0, 25, 50, 75, 100]) {
+            const y = coverageBarHeight(percent, maxHeight);
+            points.push(new THREE.Vector3(axisX - 0.1, y, axisZ), new THREE.Vector3(axisX + 0.22, y, axisZ));
+            fixedLabel(`${percent}%`, axisX - 0.58, y, axisZ, 1.05, true);
+          }
+          coverageAxis = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: theme.textSoft }));
+          scene.add(coverageAxis);
+        }
+
         const unitBarGeometry = new THREE.BoxGeometry(1, 1, 1);
 
         chart.entries.forEach((entry, index) => {
@@ -1326,12 +1410,12 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
           const column = index % columnCount;
           const x = column * cellSize - halfWidth;
           const z = row * cellSize - halfDepth;
-          const normalized = threeBarVisualRatio(
+          const normalized = chart.mode === "coverage" ? 0 : threeBarVisualRatio(
             entry.value,
             chart.maxValue,
             chart.minValue
           );
-          const barHeight = minHeight + normalized * (maxHeight - minHeight);
+          const barHeight = chart.mode === "coverage" ? coverageBarHeight(entry.value, maxHeight) : minHeight + normalized * (maxHeight - minHeight);
           const material = new THREE.MeshStandardMaterial({
             color: entry.style.fill,
             roughness: 0.54,
@@ -1363,7 +1447,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
               metalness: 0.02,
             })
           );
-          pedestal.position.set(x, baseThickness * 0.5, z);
+          pedestal.position.set(x, chart.mode === "coverage" ? -baseThickness * 0.5 + 0.003 : baseThickness * 0.5, z);
           scene.add(pedestal);
           mesh.userData.pedestal = pedestal;
           pedestals.push(pedestal);
@@ -1376,8 +1460,10 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
             entry.node.name || entry.node.module || "",
             maxLabelChars
           );
+          const emptyCoverageBar = chart.mode === "coverage" && (entry.coverageMissing || entry.value === 0);
+          if (emptyCoverageBar) fixedLabel(entry.coverageMissing ? "No data" : "0%", x, 0.16, z, Math.min(barSize, 1));
           const shouldShowLabel =
-            labelText && (chart.entries.length <= 80 || cellSize >= 1.2);
+            !emptyCoverageBar && labelText && (chart.entries.length <= 80 || cellSize >= 1.2);
           if (shouldShowLabel) {
             const labelTexture = makeLabelTexture(THREE, labelText, theme);
             if (labelTexture) {
@@ -1726,6 +1812,12 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
               sprite.material.dispose();
               scene.remove(sprite);
             });
+            if (coverageAxis) {
+              coverageAxis.geometry.dispose();
+              if (Array.isArray(coverageAxis.material)) coverageAxis.material.forEach(material => material.dispose());
+              else coverageAxis.material.dispose();
+              scene.remove(coverageAxis);
+            }
             unitBarGeometry.dispose();
             floor.geometry.dispose();
             floor.material.dispose();
@@ -1747,6 +1839,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
         chartStatus!.textContent = `${chart.status} · 3D ready`;
       })
       .catch((error) => {
+        if (generation !== renderGeneration) return;
         disposeThreeContext();
         renderEmpty(error.message || "Failed to initialize local Three.js.");
         chartStatus!.textContent = `3D unavailable: ${error.message || error}`;
@@ -1756,6 +1849,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
   function renderChart(force = false): void {
     syncControls();
     if (!state.chartPanelOpen) {
+      renderGeneration++;
       disposeThreeContext();
       clearHoverState();
       clearPieHoverBindings();
@@ -1764,14 +1858,14 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
     }
 
     const signature = currentSignature();
-    if (!force && !state.chartPanelDirty && signature === lastRenderSignature) {
+    if (!force && !state.chartPanelDirty && signature === lastRenderSignature && lastCoverage === state.coverage) {
       return;
     }
     state.chartPanelDirty = false;
     lastRenderSignature = signature;
-    if (hoveredSliceId === null) {
-      clearNodeDetails();
-    }
+    lastCoverage = state.coverage;
+    renderGeneration++;
+    clearNodeDetails();
 
     const chart = buildChart();
     if ("emptyMessage" in chart) {
@@ -1790,7 +1884,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
 
   chartModeSelect.addEventListener("change", () => {
     state.chartMode =
-      chartModeSelect!.value === "analysis" ? "analysis" : "weighted_bits";
+      chartModeSelect!.value === "coverage" ? "coverage" : chartModeSelect!.value === "analysis" ? "analysis" : "weighted_bits";
     invalidate();
     api.savePersistedState();
     api.requestDraw();

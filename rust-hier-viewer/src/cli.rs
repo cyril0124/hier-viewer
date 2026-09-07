@@ -1,6 +1,6 @@
 use std::process;
 
-use crate::model::{AppCommand, Config, UpdateConfig};
+use crate::model::{AppCommand, Config, ServeConfig, UpdateConfig};
 use crate::preview::{DEFAULT_PREVIEW_HOST, DEFAULT_PREVIEW_PORT};
 
 pub(crate) fn parse_args<I>(args: I) -> Result<AppCommand, String>
@@ -17,6 +17,7 @@ where
             print_help();
             process::exit(0);
         }
+        "serve" => parse_serve_args(iter).map(AppCommand::Serve),
         "update" => parse_update_args(iter).map(AppCommand::Update),
         _ => {
             let mut forwarded_args = vec![first_arg];
@@ -153,6 +154,47 @@ where
     })
 }
 
+fn parse_serve_args<I>(args: I) -> Result<ServeConfig, String>
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut output_path = None;
+    let mut host = DEFAULT_PREVIEW_HOST.to_string();
+    let mut port = DEFAULT_PREVIEW_PORT;
+    let mut iter = args.into_iter();
+
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--host" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "--host requires a host or IP address".to_string())?;
+                host = parse_preview_host(&value)?;
+            }
+            "--port" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "--port requires a port number".to_string())?;
+                port = parse_preview_port(&value)?;
+            }
+            "-h" | "--help" => {
+                print_serve_help();
+                process::exit(0);
+            }
+            _ if arg.starts_with('-') => return Err(format!("unknown serve argument: {arg}")),
+            _ if output_path.is_none() => output_path = Some(arg),
+            _ => return Err(format!("unexpected serve argument: {arg}")),
+        }
+    }
+
+    Ok(ServeConfig {
+        output_path: output_path
+            .ok_or_else(|| "serve requires an output directory path".to_string())?,
+        host,
+        port,
+    })
+}
+
 fn parse_update_args<I>(args: I) -> Result<UpdateConfig, String>
 where
     I: IntoIterator<Item = String>,
@@ -250,9 +292,11 @@ If no RTL paths, filelists, or `--db` are provided on an interactive terminal, a
 
 Usage:
   hier-viewer [OPTIONS] [rtl ...]
+  hier-viewer serve <output-dir> [--host <IP>] [--port <N>]
   hier-viewer update [--to <tag>]
 
 Commands:
+  serve                  Open an existing bundle through the built-in server
   update                 Download and install the latest released binary in place
 
 Arguments:
@@ -275,6 +319,25 @@ Options:
 
 Update Options:
       --to <tag>           Install a specific GitHub release tag such as `v1.0.0`
+"
+    );
+}
+
+fn print_serve_help() {
+    println!(
+        "\
+hier-viewer serve
+
+Open an existing hierarchy viewer bundle through the built-in server.
+Coverage import APIs are available only when bound to a loopback address.
+
+Usage:
+  hier-viewer serve <output-dir> [--host <IP>] [--port <N>]
+
+Options:
+      --host <IP>          Bind host (default: 127.0.0.1; use 0.0.0.0 for remote static access)
+      --port <N>           Preferred starting port (default: 8000; auto-increments if occupied)
+  -h, --help               Show this help
 "
     );
 }
@@ -311,7 +374,28 @@ mod tests {
         .expect("update command should parse");
         match command {
             AppCommand::Update(config) => assert_eq!(config.target_tag.as_deref(), Some("v1.2.3")),
-            AppCommand::Generate(_) => panic!("expected update command"),
+            AppCommand::Generate(_) | AppCommand::Serve(_) => panic!("expected update command"),
+        }
+    }
+
+    #[test]
+    fn parses_serve_subcommand() {
+        let command = parse_args(vec![
+            "serve".to_string(),
+            "bundle".to_string(),
+            "--host".to_string(),
+            "::1".to_string(),
+            "--port".to_string(),
+            "9000".to_string(),
+        ])
+        .expect("serve command should parse");
+        match command {
+            AppCommand::Serve(config) => {
+                assert_eq!(config.output_path, "bundle");
+                assert_eq!(config.host, "::1");
+                assert_eq!(config.port, 9000);
+            }
+            AppCommand::Generate(_) | AppCommand::Update(_) => panic!("expected serve command"),
         }
     }
 

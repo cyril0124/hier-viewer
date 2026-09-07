@@ -6,13 +6,20 @@ import { afterAll, beforeAll, describe, test } from 'vitest';
 import { createServer, type ViteDevServer } from 'vite';
 import { chromium, type Browser, type Page } from 'playwright';
 import type { createSourceReader } from '../rust-hier-viewer/src/html/frontend/source-reader';
-import type { ViewerState } from '../rust-hier-viewer/src/html/frontend/types';
+import type { ViewerState, HierarchyNode } from '../rust-hier-viewer/src/html/frontend/types';
+import type { CoverageSummary, CoverageSelection } from '../rust-hier-viewer/src/html/frontend/coverage-types';
 
 declare global {
   interface Window {
     reader: ReturnType<typeof createSourceReader>;
     readerState: ViewerState;
     readerReady: boolean;
+    parseCoverageSummary: (xml: string) => CoverageSummary;
+    readerCoverage: CoverageSelection | null;
+    readerNodes: HierarchyNode[];
+    deferCoverage: boolean;
+    largeCoverage: boolean;
+    releaseCoverage: (() => void) | null;
   }
 }
 
@@ -32,12 +39,15 @@ beforeAll(async () => {
 import { createSourceReader } from '/rust-hier-viewer/src/html/frontend/source-reader.ts';
 import { createViewerState } from '/rust-hier-viewer/src/html/frontend/state.ts';
 import { createPersistence } from '/rust-hier-viewer/src/html/frontend/persistence.ts';
+import { parseCoverageSummary } from '/rust-hier-viewer/src/html/frontend/coverage.ts';
+window.parseCoverageSummary = parseCoverageSummary;
 const data = { rootId: 0, defaultMetric: 'instances', title: 'Reader fixture', builtAtUnixMs: 0, debugUiLabels: false, analysisDefinitions: null, analysisFile: null, nodes: [] };
 const state = createViewerState(data);
 // These tests render source lines directly; hierarchy navigation is exercised by the full viewer test.
 const reader = createSourceReader({
   state,
-  getNode() { throw new Error('Unexpected hierarchy lookup in source-only fixture'); },
+  getNode(id) { if (window.readerNodes?.[id]) return window.readerNodes[id]; throw new Error('Unexpected hierarchy lookup in source-only fixture'); },
+  getCoverage() { return window.readerCoverage ?? null; },
   savePersistedState: () => persistence.savePersistedState(),
   registerSearchHistoryInput: (...args) => persistence.registerSearchHistoryInput(...args),
   scheduleUiAnnotations() {}, cancelScheduledHoverUpdate() {}, clearUiAnnotationHoverTargetWithin() {},
@@ -50,10 +60,11 @@ reader.sourcePanel.classList.add('visible');
 window.reader = reader;
 window.readerState = state;
 window.readerReady = true;
+document.getElementById('loading-overlay').classList.add('hidden');
 </script></body></html>`;
   server = await createServer({
     configFile: false, root, publicDir: false, appType: 'custom',
-    server: { host: '127.0.0.1', port: 0 },
+    server: { host: '127.0.0.1', port: 0, watch: null },
     plugins: [{
       name: 'source-reader-fixture',
       configureServer(vite) {
@@ -179,6 +190,107 @@ async function checkHorizontalSearch(page: Page) {
 }
 
 describe('production source reader', () => {
+  test('coverage follows cached-file instances, rejects stale responses, and keeps plain mode bounded', async () => {
+    const page = await openPage(1280, 900);
+    let sourceRequests = 0;
+    const sourceLines = Array.from({ length: 400 }, (_, index) => `wire signal_${index};`);
+    const sourceText = sourceLines.join('\n');
+    await page.route('**/coverage-fixture.sv', route => { sourceRequests++; return route.fulfill({ contentType: 'text/plain', body: sourceText }); });
+    try {
+      await page.evaluate(lines => {
+        window.readerNodes = [0, 1].map(id => ({ id, name: `q${id}`, path: `dut.q${id}`, module: 'Queue', parent: null, children: [], definitionFilePath: '/fixtures/queue.sv', definitionSourceHref: '/coverage-fixture.sv', definitionLine: 1, definitionEndLine: 400 } as unknown as HierarchyNode));
+        const scopes = [0, 1].map(id => ({ name: `q${id}`, path: `dut.q${id}`, parent: null, children: [], metrics: {} }));
+        window.readerCoverage = {
+          display: { name: 'fixture', metric: 'line', summary: { release: 'test', roots: [0, 1], byPath: new Map(scopes.map((scope, id) => [scope.path, id])), scopes }, mapping: { sourceRoot: 0, targetRoot: 0, scopeByNode: new Int32Array([0, 1]), matched: 2, unmatchedScopes: [], unmatchedNodeIds: [] } },
+          source: { id: 'fixture', name: 'fixture', files: [], readText: async () => '' },
+          report: {
+            async getMetricDetail(instancePath, _moduleName, metric) {
+              return { instancePath, metric, filePath: '/fixtures/queue.sv', blocks: [{ kind: 'table', rows: [{ cells: ['Total', 'Covered'], header: true, status: 'neutral' }, { cells: ['205', '204'], header: false, status: 'neutral' }] }, { kind: 'table', rows: [{ cells: ['Signal', 'Status'], header: true, status: 'neutral' }, ...Array.from({ length: 205 }, (_, index) => ({ cells: [`signal_${index}<img src=x onerror=alert(1)>`, index === 204 ? 'No' : 'Yes'], header: false, status: index === 204 ? 'uncovered' as const : 'covered' as const }))] }] };
+            },
+            clear() {},
+            async getLineCoverage(path) {
+              const second = path === 'dut.q1';
+              const numbers = window.largeCoverage ? Array.from({ length: 400 }, (_, index) => index + 1) : [25, 26, 27, 28, 31, 32, 33, 34];
+              const rows = numbers.map(line => ({ line, covered: window.largeCoverage ? Number(line !== 400) : Number(second || ![28, 32, 33, 34].includes(line)), total: 1, sourceText: lines[line - 1] }));
+              const result = { instancePath: path, filePath: '/fixtures/queue.sv', lines: rows, totals: { covered: rows.reduce((sum, row) => sum + row.covered, 0), total: rows.length, excluded: 0 }, reportPath: 'mod0.html#Line' };
+              if (window.deferCoverage && !second) return new Promise(resolve => { window.releaseCoverage = () => resolve(result); });
+              return result;
+            },
+          },
+        };
+      }, sourceLines);
+      await page.evaluate(() => window.reader.renderSource(0, 'definition'));
+      await page.waitForFunction(() => document.querySelector('[data-coverage-line="28"]')?.textContent === '0/1');
+      await page.locator('.source-lineno[data-line="28"]').click();
+      assert.equal(await page.locator('.source-lineno[data-line="28"]').getAttribute('aria-pressed'), 'true');
+      const heights = await page.locator('.source-virtual-content .source-line').evaluateAll(rows => rows.map(row => row.getBoundingClientRect().height));
+      assert.ok(Math.max(...heights) - Math.min(...heights) < 1);
+      await page.evaluate(async () => { window.deferCoverage = true; await window.reader.renderSource(0, 'definition'); });
+      await page.waitForFunction(() => !!window.releaseCoverage);
+      await page.evaluate(() => window.reader.renderSource(1, 'definition'));
+      await page.waitForFunction(() => document.querySelector('[data-coverage-line="28"]')?.textContent === '1/1');
+      await page.evaluate(() => window.releaseCoverage!());
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.equal(await page.locator('[data-coverage-line="28"]').textContent(), '1/1');
+      assert.equal(sourceRequests, 1, 'Source text cache remains shared by file');
+      await page.locator('[data-coverage-metric="toggle"]').click();
+      await page.waitForFunction(() => document.querySelectorAll('#coverage-detail-content .coverage-result-table tbody tr').length === 100);
+      assert.equal(await page.locator('#coverage-detail-content img').count(), 0, 'Report cells remain inert text');
+      await page.getByRole('button', { name: 'Next rows', exact: true }).click();
+      assert.equal(await page.locator('.coverage-table-pagination span').textContent(), '101–200 / 205');
+      await page.getByRole('button', { name: 'Next rows', exact: true }).click();
+      assert.equal(await page.locator('#coverage-detail-content .coverage-result-table tbody tr').count(), 5);
+      await page.locator('#coverage-detail-missing').check();
+      assert.equal(await page.locator('#coverage-detail-content .coverage-result-table tbody tr').count(), 1);
+      await page.locator('[data-coverage-metric="line"]').click();
+      await page.evaluate(lines => {
+        window.largeCoverage = true;
+        const large = new Array<string>(500000).fill('wire padding;');
+        large.splice(0, lines.length, ...lines);
+        window.reader.renderSourceLines(large, 1, 1, 1, { targetKind: 'definition' });
+      }, sourceLines);
+      await page.waitForFunction(() => !document.querySelector<HTMLElement>('#source-coverage-plain')!.hidden && document.querySelector<HTMLSelectElement>('#source-coverage-line-select')!.options.length === 200);
+      assert.equal(await page.evaluate(() => window.reader.currentSourceView!.renderMode), 'plain');
+      await page.locator('#source-coverage-page-next').click();
+      assert.equal(await page.locator('#source-coverage-page').textContent(), '201–400 / 400');
+      await page.locator('#source-coverage-next').click();
+      const selected = await page.locator('.source-plain-text').evaluate((textarea: HTMLTextAreaElement) => textarea.value.slice(textarea.selectionStart, textarea.selectionEnd));
+      assert.equal(selected, sourceLines[399]);
+      await page.evaluate(() => { window.readerCoverage = null; window.reader.refreshCoverage(); });
+      assert.equal(await page.locator('#source-coverage-bar').isVisible(), false);
+      assert.deepEqual(errors.get(page), []);
+    } finally { await page.context().close(); }
+  });
+  test('native XML coverage parser preserves scopes and rejects invalid coverage', async () => {
+    const page = await openPage(1280, 900);
+    try {
+      const result = await page.evaluate(() => {
+        const wrap = (body: string) => `<session version="1.1" release="U-2023.03"><old_coverage>${body}</old_coverage></session>`;
+        const xml = wrap('<scope type="instance" name="tb"><metric name="Line" value="1/2" excl="1"/><metric name="Cond" value="3/4"/><metric name="Assert" value="2/5" excl="0"/><scope type="instance" name="dut"><metric name="Toggle" value="0/0" excl="0"/><metric name="Branch" value="0/0" excl="2"/></scope></scope><scope type="Groups" name="top"/><scope type="Asserts" name="top"/>');
+        const summary = window.parseCoverageSummary(xml);
+        const invalid = [
+          '<broken>',
+          '<!DOCTYPE session [<!ENTITY x SYSTEM "http://invalid.test/external">]>' + xml,
+          wrap('<scope type="instance" name="tb"><metric name="Line" value="3/2"/></scope>'),
+          wrap('<scope type="instance" name="tb"><metric name="Line" value="-1/2"/></scope>'),
+          wrap('<scope type="instance" name="tb"><metric name="Line" value="1/9007199254740992"/></scope>'),
+          wrap('<scope type="instance" name="tb"/><scope type="instance" name="tb"/>'),
+          wrap('<scope type="instance" name="tb"><metric name="Line" value="0/0"/><metric name="Line" value="0/0"/></scope>'),
+          '<session version="2.0" release="test"/>',
+        ];
+        return {
+          scopes: summary.scopes.map(scope => ({ path: scope.path, parent: scope.parent, metrics: scope.metrics })),
+          rejected: invalid.map(input => { try { window.parseCoverageSummary(input); return false; } catch { return true; } }),
+        };
+      });
+      assert.deepEqual(result.scopes, [
+        { path: 'tb', parent: null, metrics: { line: { covered: 1, total: 2, excluded: 1 }, condition: { covered: 3, total: 4, excluded: 0 }, assert: { covered: 2, total: 5, excluded: 0 } } },
+        { path: 'tb.dut', parent: 0, metrics: { toggle: { covered: 0, total: 0, excluded: 0 }, branch: { covered: 0, total: 0, excluded: 2 } } },
+      ]);
+      assert.ok(result.rejected.every(Boolean), JSON.stringify(result));
+      assert.deepEqual(errors.get(page), []);
+    } finally { await page.context().close(); }
+  });
   for (const [width, height] of [[1280, 900], [390, 844]] as const) {
     for (const [name, check] of [['virtual long-line search', checkHorizontalSearch], ['500000-line plain search', checkPlainSearch]] as const) {
       test(`${width}x${height}: ${name}`, async () => {

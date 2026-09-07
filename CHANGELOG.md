@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- With imported coverage active, the 3D view defaults to Coverage (%) mode: linear bar heights on a fixed 0-100% axis, preserving zero-coverage entries and distinguishing missing data. 2D pie areas continue to represent structural size.
+- Coverage coloring, fixed percentage legends, and instance coverage counts are available in 2D pie and 3D charts as well as the treemap. Metric changes, report replacement, and removal refresh charts; 2D pie areas keep structural sizing.
+- Optional Assert coverage is imported and shown only when present, with per-instance assertion attempts, real successes, failures, incomplete attempts, and cover-directive matches.
+- Module source views include per-instance Condition, Branch, and Toggle detail tabs with expression tables, missing-point filtering, signal-direction status, and paginated rows.
+
+- Static deployments can preload a bundled URG report and restore instance coverage automatically on page load.
+
+- Browser import of URG reports and server-side VDB conversion, with explicit instance-root mapping, Line/Condition/Branch/Toggle treemap coloring, and per-instance source-line coverage and uncovered-line navigation.
+- `hier-viewer serve <output-dir>` opens an existing bundle without regenerating RTL. Loopback coverage APIs support cancellable URG jobs with a configurable 60-minute default timeout and an unlimited option.
+
+### Fixed
+
+- 3D coverage bars and their legend are sorted by descending coverage, with no-data entries last and stable ordering for equal scores.
+- Condition coverage is included in URG conversion, imported from XML, and available in instance details and the coverage metric selector. Line parsing stops before Condition detail sections.
+
+### Changed
+
+- Coverage import code loads on demand in `viewer-coverage.js`; original report pages are sandboxed, and coverage data stays separate from cached source text and structural statistics.
+- Source-reader browser tests disable unused filesystem watching to avoid exhausting watch limits in large checkouts.
+
 ## [1.2.0] - 2026-09-07
 
 ### Added

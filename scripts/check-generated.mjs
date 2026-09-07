@@ -7,10 +7,10 @@ import { build } from 'vite';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const generated = join(root, 'rust-hier-viewer/src/html/generated');
-const expectedFiles = ['viewer-app.js', 'viewer-chart.js'];
+const expectedFiles = ['viewer-app.js', 'viewer-chart.js', 'viewer-coverage.js'];
 const temporary = await mkdtemp(join(tmpdir(), 'hier-viewer-assets-'));
 try {
-  for (const mode of ['app', 'chart']) {
+  for (const mode of ['app', 'chart', 'coverage']) {
     await build({ root, configFile: join(root, 'vite.config.ts'), mode,
       build: { outDir: temporary },
     });

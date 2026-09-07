@@ -137,7 +137,7 @@ export function createPersistence(deps: PersistenceDependencies) {
           state.mainViewMode = saved.chartRenderMode === "three3d" ? "three3d" : "pie2d" as ViewerState["mainViewMode"];
         }
         state.chartPanelOpen = state.mainViewMode !== "treemap";
-        if ((["weighted_bits", "analysis"] as readonly unknown[]).includes(saved.chartMode)) {
+        if ((["weighted_bits", "analysis", "coverage"] as readonly unknown[]).includes(saved.chartMode)) {
           state.chartMode = saved.chartMode as ViewerState["chartMode"];
         }
         if ((["pie2d", "three3d"] as readonly unknown[]).includes(saved.chartRenderMode)) {

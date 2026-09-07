@@ -62,6 +62,10 @@ npm test
 
 The runtime tests cover a root with 200,000 children, a 30,000-node chain, shared definitions, mode changes, asynchronous analysis completion, filter updates, chart drill-down, and source-request cancellation. Rust tests include a 100,000-node chain, source-path collisions, filelist compiler options, and wizard input preservation.
 
+## Coverage data
+
+[Coverage import](coverage.md) defines report formats, path matching, session lifetime, source-line validation, and local service boundaries. Imported coverage does not change the core or structural-analysis binary formats. The built-in server streams known-size static assets with `Content-Length` by default, preserving preallocated browser binary loading. Source text remains cached by file URL; line coverage is scoped to the imported report and selected instance, with stale-response guards on source changes.
+
 ## Source reader verification
 
 Virtualized rows use a measured, fixed height and no intrinsic-size placeholders. Search navigation scrolls the active match into view without taking focus from the search input. Each source request owns its cancellation signal; closing or switching files invalidates pending rendering and progress updates.
@@ -80,8 +84,8 @@ This starts a temporary loopback server and loads the production TypeScript read
 
 `rust-hier-viewer/src/html/frontend/` contains the authored TypeScript. HTML, CSS, and the vendored Three.js r183 modules remain under `rust-hier-viewer/src/html/`.
 
-Vite builds two minified IIFE scripts into `rust-hier-viewer/src/html/generated/`: `viewer-app.js` and `viewer-chart.js`. These generated files are versioned and must be regenerated with `npm run build` whenever their sources change. Do not edit them by hand. Type checking is separate: `npm run typecheck` runs TypeScript in strict mode.
+Vite builds three minified IIFE scripts into `rust-hier-viewer/src/html/generated/`: `viewer-app.js`, `viewer-chart.js`, and `viewer-coverage.js`. Coverage import loads its script only after the user opens Import; parser dependency license notices are included in that script. These generated files are versioned and must be regenerated with `npm run build` whenever their sources change. Do not edit them by hand. Type checking is separate: `npm run typecheck` runs TypeScript in strict mode.
 
-Rust embeds the generated scripts at compile time. The app script remains inline in `index.html`; the chart script remains `viewer-chart.js`. Three.js is loaded from the existing local module files only when the 3D view needs it. Bundle binary formats, source URLs, and persisted UI state are unchanged by the frontend build.
+Rust embeds the generated scripts at compile time. The app script remains inline in `index.html`; chart and coverage scripts remain separate static assets. Three.js is loaded from the existing local module files only when the 3D view needs it. Bundle binary formats, source URLs, and persisted UI state are unchanged by the frontend build.
 
 `npm run check:generated` builds into a temporary directory, compares filenames and bytes with the versioned scripts, and fails on missing, extra, or stale files. CI and release builds run this check without first overwriting the versioned scripts. Cargo builds and release binaries do not invoke npm or require a Node runtime.

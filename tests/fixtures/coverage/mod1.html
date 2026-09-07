@@ -1,0 +1,17 @@
+<!doctype html><html><body>
+<span>Source File(s) : </span><a onclick="openSrcFile('/ignored')">rtl/single.sv</a>
+<span>Module self-instances :</span>
+<table><tr><th>NAME</th><th>LINE</th></tr><tr><td><a href="mod1.html#inst_tag_1">top.one</a></td><td><a href="mod1.html#Line">50</a></td></tr></table>
+<a name="inst_tag_1"></a><span>Module Instance : <a>top.one</a></span>
+<a name="Line"></a><b>Line Coverage for Module : <a>Single</a></b>
+<table><tr><th></th><th>Line No.</th><th>Total</th><th>Covered</th></tr><tr><td>TOTAL</td><td></td><td>2</td><td>1</td></tr></table>
+<pre class="code">
+9                           always_comb begin
+10         1/1              if (a &lt; b) begin
+11         0/1     ==>        y &lt;= a &amp; b;
+                        MISSING_ELSE
+</pre>
+<a name="Cond"></a><pre class="code">998        0/1              condition_detail_not_line();</pre>
+<a name="Branch"></a><pre class="code">999        1/1              must_not_parse();</pre>
+<script>globalThis.coverageParserExecuted = true;</script>
+</body></html>

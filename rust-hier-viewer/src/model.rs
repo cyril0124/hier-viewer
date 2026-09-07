@@ -118,6 +118,13 @@ pub(crate) struct Config {
 }
 
 #[derive(Debug)]
+pub(crate) struct ServeConfig {
+    pub(crate) output_path: String,
+    pub(crate) host: String,
+    pub(crate) port: u16,
+}
+
+#[derive(Debug)]
 pub(crate) struct UpdateConfig {
     pub(crate) target_tag: Option<String>,
 }
@@ -125,5 +132,6 @@ pub(crate) struct UpdateConfig {
 #[derive(Debug)]
 pub(crate) enum AppCommand {
     Generate(Config),
+    Serve(ServeConfig),
     Update(UpdateConfig),
 }

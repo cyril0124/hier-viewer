@@ -6,6 +6,7 @@ export interface ChartEntry {
   value: number;
   fraction: number;
   style: ChartEntryStyle;
+  coverageMissing?: boolean;
 }
 
 export interface ChartEntryStyle {
@@ -109,7 +110,7 @@ export type ChartState = Pick<ViewerState,
   "filterScope" | "filterMode" | "analysisMode" | "analysisPatternMode" |
   "analysisPattern" | "analysisError" | "analysisSubtreeCounts" |
   "analysisSubtreeRatios" | "analysisSubtreeLocs" | "matchIds" |
-  "matchSubtreeIds" | "theme" | "weightedVariableWeight" | "weightedNetWeight"
+  "matchSubtreeIds" | "theme" | "weightedVariableWeight" | "weightedNetWeight" | "coverage"
 >;
 
 export interface ThemeVisuals {

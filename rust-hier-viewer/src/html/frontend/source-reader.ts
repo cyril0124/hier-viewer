@@ -20,8 +20,11 @@ import type {
 
 import { escapeHtml, formatLoadingBytes, nextFrame } from "./ui.js";
 import { createSourceLoader } from "./source-loader.js";
+import { createSourceCoverage } from "./source-coverage.js";
+import type { CoverageSelection } from "./coverage-types.js";
 
 export interface SourceReaderDependencies {
+  getCoverage?: () => CoverageSelection | null;
   state: ViewerState;
   getNode: (id: number) => HierarchyNode;
   savePersistedState: () => void;
@@ -119,6 +122,27 @@ export function createSourceReader(deps: SourceReaderDependencies) {
     let sourceVirtualRenderQueued = false;
 
     let sourceVirtualRenderForce = false;
+
+    const sourceCoverage = createSourceCoverage({
+      state, getNode, sourceCode,
+      getSelection: () => deps.getCoverage?.() ?? null,
+      getView: () => currentSourceView,
+      repaint: () => {
+        if (!currentSourceView || currentSourceView.renderMode === "plain") return;
+        if (currentSourceView.virtualized) scheduleSourceVirtualRender(true);
+        else renderCurrentSourceView(false);
+      },
+      jumpToLine: (lineNo) => {
+        if (!currentSourceView) return;
+        if (currentSourceView.renderMode === "plain") {
+          const index = lineNo - currentSourceView.firstLineNumber;
+          const offsets = ensureSourceLineOffsets(currentSourceView);
+          if (index >= 0 && index < offsets.length) selectPlainSourceRange(offsets[index], offsets[index] + currentSourceView.lines![index].length, true, lineNo);
+        } else {
+          scrollSourceLineIntoView(lineNo);
+        }
+      },
+    });
 
     function applySourceSearchValue(value: string, options: { immediate?: boolean } = {}) {
       state.sourceSearch = value;
@@ -1220,6 +1244,8 @@ export function createSourceReader(deps: SourceReaderDependencies) {
 
     function buildSourceLineHtml(line: string, lineNo: number, focusStartLine: number, focusEndLine: number, bookmarkSet: Set<number>, matchRanges: SourceRange[], renderMode: SourceRenderMode = "full") {
       const classes = ["source-line"];
+      const coverageClass = sourceCoverage.lineClass(lineNo);
+      if (coverageClass) classes.push(coverageClass);
       if (renderMode === "compact") {
         classes.push("compact");
       }
@@ -1238,10 +1264,7 @@ export function createSourceReader(deps: SourceReaderDependencies) {
       const bookmarkTitle = bookmarkSet.has(lineNo)
         ? `Remove bookmark at line ${lineNo}`
         : `Bookmark line ${lineNo}`;
-      if (renderMode === "compact") {
-        return `<div class="${classes.join(" ")}" data-line="${lineNo}"><button class="source-lineno${bookmarkSet.has(lineNo) ? " bookmarked" : ""}" type="button" data-line="${lineNo}" aria-pressed="${bookmarkSet.has(lineNo) ? "true" : "false"}" title="${bookmarkTitle}"><span class="source-bookmark-dot" aria-hidden="true"></span><span class="source-lineno-value">${lineNo}</span></button><span class="source-code-text">${renderSourceLineContent(line, matchRanges)}</span></div>`;
-      }
-      return `<div class="${classes.join(" ")}" data-line="${lineNo}"><button class="source-lineno${bookmarkSet.has(lineNo) ? " bookmarked" : ""}" type="button" data-line="${lineNo}" aria-pressed="${bookmarkSet.has(lineNo) ? "true" : "false"}" title="${bookmarkTitle}"><span class="source-bookmark-dot" aria-hidden="true"></span><span class="source-lineno-value">${lineNo}</span></button><span class="source-code-text">${renderSourceLineContent(line, matchRanges)}</span></div>`;
+      return `<div class="${classes.join(" ")}" data-line="${lineNo}"><button class="source-lineno${bookmarkSet.has(lineNo) ? " bookmarked" : ""}" type="button" data-line="${lineNo}" aria-pressed="${bookmarkSet.has(lineNo) ? "true" : "false"}" title="${bookmarkTitle}"><span class="source-bookmark-dot" aria-hidden="true"></span><span class="source-lineno-value">${lineNo}</span></button>${sourceCoverage.cell(lineNo)}<span class="source-code-text">${renderSourceLineContent(line, matchRanges)}</span></div>`;
     }
 
     function measureSourceLineHeight(renderMode: SourceRenderMode | undefined) {
@@ -1490,6 +1513,7 @@ export function createSourceReader(deps: SourceReaderDependencies) {
 
     function renderCurrentSourceView(preferFocusLine: boolean = true) {
       if (!currentSourceView) {
+        sourceCoverage.sync();
         sourceCode.innerHTML = "";
         sourceSearchMatchElements = [];
         state.sourceSearchMatchIndex = -1;
@@ -1508,6 +1532,7 @@ export function createSourceReader(deps: SourceReaderDependencies) {
       const compactMode = renderMode === "compact";
       const plainMode = renderMode === "plain";
       currentSourceView.renderMode = renderMode;
+      sourceCoverage.sync();
       currentSourceView.virtualized = !plainMode && shouldVirtualizeSourceRender(currentSourceView);
       sourceCode.classList.toggle("compact-mode", compactMode);
       sourceCode.classList.toggle("plain-mode", plainMode);
@@ -1712,6 +1737,7 @@ export function createSourceReader(deps: SourceReaderDependencies) {
     }
 
     function closeSourcePanel() {
+      sourceCoverage.close();
       if (sourceSearchInputTimer !== null) {
         clearTimeout(sourceSearchInputTimer);
         sourceSearchInputTimer = null;
@@ -1830,6 +1856,12 @@ export function createSourceReader(deps: SourceReaderDependencies) {
     }
 
     return {
+      refreshCoverage: () => {
+        sourceCoverage.sync();
+        if (!currentSourceView || currentSourceView.renderMode === "plain") return;
+        if (currentSourceView.virtualized) scheduleSourceVirtualRender(true);
+        else renderCurrentSourceView(false);
+      },
       normalizeSourceBookmarks,
       sourceSearchModeSelect,
       sourceSearchInput,
