@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Updated the embedded slang dependency from v10.0 to v11.0.
 - Frontend development uses strict TypeScript modules and Vite builds. Generated scripts remain embedded in the Rust binary, so Cargo installation and viewer use do not require Node.js.
 - Frontend regression tests import production modules directly, and CI checks generated-asset consistency and the source reader and generated viewer in Chromium.
 - Updated both READMEs with first-install instructions, source-build requirements, input scanning and parameterized statistics behavior, source availability requirements, and the regression-test workflow.

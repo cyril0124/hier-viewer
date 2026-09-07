@@ -87,7 +87,7 @@ fn main() {
         repair_incomplete_slang_fetchcontent_state(&build_dir);
     }
     let slang_source_desc = slang_source_override.unwrap_or_else(|| {
-        "FetchContent(https://github.com/MikePopoloski/slang.git @ v10.0)".to_string()
+        "FetchContent(https://github.com/MikePopoloski/slang.git @ v11.0)".to_string()
     });
 
     emit_build_log(
