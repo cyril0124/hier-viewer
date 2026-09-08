@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `--coverage-vdb` accepts VDB directories directly in CLI generation and reuses URG reports under the output cache when inputs and tool metadata are unchanged. `--rebuild-coverage` forces conversion; `--coverage-timeout` controls the execution limit. Concurrent callers share completed reports, and failed or cancelled conversions preserve valid caches.
+
 - `--coverage-report` preloads a URG report during CLI generation. The browser selects a unique hierarchy match automatically; optional `--coverage-root` resolves ambiguous roots, and diagnostics list paths when no unique match exists.
 
 - Coverage rows can be selected across metric tabs and pages, then copied or downloaded as Markdown with instance identity, report metrics, original detail headers/cells, and referenced source context. Select uncovered adds all unhit or partial entries in the current metric across every page. Selections clear on instance, source-view, or report changes.

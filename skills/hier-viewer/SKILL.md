@@ -21,21 +21,20 @@ Choose one input mode:
 
 ### Coverage inputs, when requested
 
-Locate the requested URG report and its `session.xml`. Verify that the chosen executable supports `--coverage-report` and describes `--coverage-root` as optional. If those flags are unavailable, look for an existing compatible binary. If none is available, report the executable/update prerequisite before generating a script that uses them.
+Locate the requested URG report with its `session.xml`, or the requested VDB directory. Verify that the chosen executable supports the needed coverage flags and describes `--coverage-root` as optional. If flags are unavailable, look for an existing compatible binary. If none is available, report the executable/update prerequisite before generating a script that uses them.
 
-Set `coverage_args=(--coverage-report 'path/to/urgReport')` in the template. Leave `--coverage-root` unset by default. Automatic matching checks the complete descendant instance names and structure when the page loads; it is not a module-name lookup. If several report subtrees match, use report/design evidence to choose the intended instance and append `--coverage-root 'tb_top.u_dut'`. Ask only if that evidence cannot distinguish the candidates. If none match, resolve the report/design mismatch; specifying a root does not bypass hierarchy validation.
+Choose exactly one coverage input in the template:
 
-If only a VDB is available, verify `urg` and the applicable Synopsys license, then generate a report into a fresh directory outside the served bundle:
+- Report: `coverage_args=(--coverage-report 'path/to/urgReport')`.
+- VDB: `coverage_args=(--coverage-vdb 'path/to/simv.vdb')`. Verify Linux, `urg` on `PATH`, and the applicable Synopsys license for cache misses. The CLI handles report conversion; a separate URG preparation command is unnecessary.
 
-```bash
-urg -dir /path/to/simv.vdb -report /path/to/urgReport \
-  -format both -show fullhier -show ratios -xml_verbose \
-  -metric line+cond+branch+tgl+assert
-```
+Keep the output directory fixed to reuse VDB reports in `<output>/.hier-viewer-cache/coverage/`. Let unchanged inputs use the cache. Add `--rebuild-coverage` only for an intended forced conversion, and `--coverage-timeout <minutes>` when a non-default limit is needed. The default is 60 minutes; `0` is unlimited. Preserve the input VDB and keep output outside it. Cache changes are driven by file/tool metadata, not by `--coverage-root`; avoid forcing conversion merely to change the root.
 
-Preserve the VDB. A script pointing at the generated report views that captured coverage; include report regeneration in the delivered workflow when refreshing from the VDB is requested. Keep the report input outside the viewer output. The CLI copies XML/HTML into the bundle, so preloading works on `0.0.0.0` without a server import API or UI import step.
+Leave `--coverage-root` unset by default. Automatic matching checks the complete descendant instance names and structure when the page loads; it is not a module-name lookup. If several report subtrees match, use report/design evidence to choose the intended instance and append `--coverage-root 'tb_top.u_dut'`. Ask only if that evidence cannot distinguish the candidates. If none match, resolve the report/design mismatch; specifying a root does not bypass hierarchy validation.
 
-Completion: the executable and all inputs are concrete and verified, with no guessed top or unresolved generated-source prerequisite. Coverage requests have a readable report, or a verified VDB-to-report preparation step.
+Both inputs produce a self-contained report copy in the bundle. Preloading works on `0.0.0.0` without a server import API or UI import step.
+
+Completion: the executable and all inputs are concrete and verified, with no guessed top or unresolved generated-source prerequisite. Coverage requests have a readable report or VDB; VDB inputs also have verified conversion prerequisites.
 
 ## 2. Generate the script
 
@@ -95,7 +94,7 @@ Run the generated script from outside the project root. Under an agent harness, 
 
 1. Export succeeds and the bundle contains nonempty `index.html`, `viewer-meta.json`, and `viewer-core.bin`.
 2. The startup log reports binding to `0.0.0.0`. Use its actual port for HTTP checks, not the requested port. Fetch the index, metadata, core data, JS modules, and a bundled source over HTTP; compare responses with the generated files.
-3. Stop the test server and rerun the unchanged script. In RTL mode, confirm the log reports cache reuse. Confirm both launches write to the same bundle directory even from different working directories.
+3. Stop the test server and rerun the unchanged script. In RTL mode, confirm the log reports cache reuse. With VDB input, confirm the second launch reports a VDB cache hit and skips URG conversion. Confirm both launches write to the same bundle directory even from different working directories.
 4. When coverage is configured, follow `data-coverage-manifest` from the generated HTML and check the manifest/report files over HTTP. Open the page and reload it: coverage must load without opening Import. A successful CLI exit alone does not validate root matching. Resolve any zero-match or ambiguous-root diagnostics before claiming coverage works; if browser verification is unavailable, mark automatic matching unverified.
 
 If exporting evidence for AI analysis is part of the request, also verify **Module Source → Select uncovered → Export selected → Copy Markdown** for a mapped instance. Confirm that the export includes the intended instance and report data.

@@ -15,7 +15,7 @@ hier-viewer -f rtl/files.f --no-wizard \
 
 `--coverage-report` is a generation option, also supported with `--db`. Without `--coverage-root`, the browser searches the entire report for a subtree with exactly the same descendant instance names and structure as the generated design root. Sibling order and the root's own name do not affect matching. A unique match is selected automatically; zero matches or multiple matches produce an error with report paths to inspect. Diagnostics show at most 20 paths and state the total when more exist; the search itself is not truncated. Structural matching does not prove module identity or the simulation's RTL revision, and even a leaf-only design can be ambiguous.
 
-Use `--coverage-root tb_top.u_dut` to select an explicit report instance. An invalid explicit root never falls back to automatic selection. Root existence, complete hierarchy matching, XML metrics, and detail/source validation are checked by the browser on load. Remove `--preview` for non-serving CI generation. A VDB must first be converted with the URG command below.
+Use `--coverage-root tb_top.u_dut` to select an explicit report instance. An invalid explicit root never falls back to automatic selection. Root existence, complete hierarchy matching, XML metrics, and detail/source validation are checked by the browser on load. Remove `--preview` for non-serving CI generation. To supply a VDB directly, use `--coverage-vdb` as described below.
 
 The generator copies regular `.xml` and `.html` files into a fresh `coverage-*` directory inside the output bundle and adds the manifest attribute automatically. The input report is read-only, symlinks are not copied, and output cannot be inside the input report. Keep the entire output directory when deploying; runtime access to the original report and the local import API is unnecessary. Existing report copies are preserved when regenerating. Omitting the coverage options on a later generation removes automatic loading from the new page, but does not delete earlier copies from the output directory.
 
@@ -26,6 +26,25 @@ For a manually assembled deployment, set `data-coverage-manifest="./coverage/man
 ```
 
 Bundled report paths must be relative and served from the same origin. Treat this manifest and the report as part of the deployment; manually assembled bundles require restoring the attribute after regenerating the HTML. Source validation and instance-specific detail rules still apply.
+
+## CLI VDB cache
+
+```sh
+hier-viewer -f rtl/files.f --no-wizard \
+  --output out \
+  --coverage-vdb /path/to/simv.vdb \
+  --preview -- --top Top
+```
+
+`--coverage-vdb` and `--coverage-report` are mutually exclusive. Both support an optional `--coverage-root` and the same automatic matching. VDB mode requires Linux and an executable `urg` on `PATH`; a cache miss additionally needs an applicable Synopsys license. Conversion uses the same XML/HTML options as the local import service. The input VDB is never used as an output directory.
+
+Reports are cached under `<output>/.hier-viewer-cache/coverage/`, keyed by the canonical VDB path. Reuse the output directory across invocations. Cache validation covers all input paths, file sizes/modification times, Unix change times and file identities, linked targets, the URG executable path/metadata, conversion arguments, and cached report metadata. Adding, removing, or changing an input or cached report file invalidates reuse. Root selection and timeout changes do not affect report contents and do not invalidate the cache.
+
+This is metadata-based invalidation, not a content digest. Changes invisible to filesystem metadata or to the fingerprinted executable, such as replacing supporting URG libraries while retaining the same launcher, require `--rebuild-coverage`. That flag forces conversion; `--rebuild-sqlite` controls only the RTL export cache. Logs explicitly report VDB cache hits, misses, and forced conversion.
+
+Concurrent callers sharing a cache entry wait for an OS lock and recheck it after the preceding conversion finishes. Successful conversions publish an immutable report generation and atomically replace the current-cache record. Failed, timed-out, or cancelled conversions preserve the previous record. If the VDB or executable changes during conversion, the command fails without publishing that result. Older report generations remain in the cache so existing readers stay valid.
+
+`--coverage-timeout <minutes>` defaults to 60; `0` is unlimited. It measures URG execution, not time waiting for the cache lock. `Ctrl-C` cancels conversion or lock waiting. These options and `--rebuild-coverage` require `--coverage-vdb`. CLI report caches are persistent; UI VDB imports continue to use temporary reports scoped to the local service.
 
 ## Import a report
 
@@ -111,6 +130,8 @@ HTML is parsed as data with `parse5`; imported scripts are not executed. XML DTD
 Run the standard frontend and Rust checks described in the project README. Native XML, stale-response, shared-file instance, and large-source tests run with `npm run test:browser`.
 
 Run `node tests/run-coverage-cli.mjs` after building the CLI to check report packaging, static automatic loading/reload without import APIs, regeneration, and input-directory protection. This test creates and removes its own synthetic RTL and report files.
+
+Run `node tests/run-coverage-vdb-cli.mjs` on Linux to check CLI VDB cache reuse, invalidation, forced/failed rebuilds, and conversion/preview cancellation with a stub URG executable. Rust tests also cover concurrent callers and linked inputs.
 
 A real-report browser check accepts independently established expectations:
 

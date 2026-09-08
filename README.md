@@ -132,15 +132,18 @@ hier-viewer -f rtl/files.f --no-wizard \
 
 The page opens with coverage already loaded; no **Import coverage** action is needed. The viewer automatically selects a unique report subtree whose descendant instance names and structure match the design. If several roots match, add `--coverage-root tb_top.u_dut` to choose the intended report instance. If none match, check the report/design inputs against the listed paths. Matching and diagnostics run when the page loads. Supply the coverage options before `--`. They also work with `--db` input. Omit `--preview` to generate the static bundle for CI or a separate HTTP server.
 
-For a VDB, first create the report with Synopsys URG, then run the generation command above:
+To pass a VDB directly, use `--coverage-vdb` instead of `--coverage-report`:
 
 ```bash
-urg -dir /path/to/simv.vdb -report /path/to/urgReport \
-  -format both -show fullhier -show ratios -xml_verbose \
-  -metric line+cond+branch+tgl+assert
+hier-viewer -f rtl/files.f --no-wizard \
+  --output out \
+  --coverage-vdb /path/to/simv.vdb \
+  --preview -- --top Top
 ```
 
-Only this conversion step requires URG and a Synopsys license. The CLI copies the report's XML/HTML files into `out`; coverage remains available after moving the bundle and on every page reload. Root mapping and report validation run when the page loads. Preloaded bundles also work with `--preview-host 0.0.0.0` for remote static access. See [preloaded deployment details](docs/coverage.md#preloaded-static-deployment).
+VDB conversion requires Linux, `urg` on `PATH`, and the applicable Synopsys license. Keep the same output directory: unchanged VDBs reuse the report in `out/.hier-viewer-cache/coverage/` without starting URG. Input file metadata, the URG executable, and conversion options determine reuse. Add `--rebuild-coverage` to force conversion; `--coverage-timeout <minutes>` defaults to 60, with `0` for unlimited. See [VDB cache rules](docs/coverage.md#cli-vdb-cache).
+
+Both input modes copy report XML/HTML into `out`; coverage remains available after moving the bundle and on every page reload. Root mapping and report validation run when the page loads. Preloaded bundles also work with `--preview-host 0.0.0.0` for remote static access. See [preloaded deployment details](docs/coverage.md#preloaded-static-deployment).
 
 ### Import through the browser
 
@@ -283,7 +286,10 @@ Run `hier-viewer --help` for the full option list.
 | `--preview-host <h>` | Bind address; default `127.0.0.1` |
 | `--preview-port <n>` | Starting port; default `8000`, increments if occupied |
 | `--coverage-report <dir>` | Copy a URG report into the generated site for automatic loading |
-| `--coverage-root <path>` | Optional report instance path; defaults to a unique hierarchy match. Requires `--coverage-report` |
+| `--coverage-vdb <dir>` | Convert a VDB with URG and reuse cached reports when unchanged; mutually exclusive with `--coverage-report` |
+| `--rebuild-coverage` | Force VDB conversion; requires `--coverage-vdb` |
+| `--coverage-timeout <minutes>` | VDB conversion timeout, default 60 minutes; `0` is unlimited |
+| `--coverage-root <path>` | Optional report instance path; defaults to a unique hierarchy match. Requires a coverage input |
 | `--no-wizard` | Disable the wizard; require explicit inputs |
 | `-t, --title <text>` | Override the page title |
 | `--debug` | Enable viewer debug overlays, such as UI labels |

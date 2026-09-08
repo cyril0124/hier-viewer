@@ -3,8 +3,8 @@ use std::io::Read;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
 use std::thread;
 use std::time::Duration;
 
@@ -12,15 +12,13 @@ use serde::Serialize;
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
 use crate::coverage_import::{CoverageService, ImportRequest, ServiceError};
+use crate::interrupt::CancellationGuard;
 use crate::logging::{info, warn};
 
 pub(crate) const DEFAULT_PREVIEW_HOST: &str = "127.0.0.1";
 pub(crate) const DEFAULT_PREVIEW_PORT: u16 = 8000;
 const MAX_JSON_BODY: usize = 64 * 1024;
 const REPORT_CSP: &str = "sandbox allow-scripts";
-
-static CTRL_C: AtomicBool = AtomicBool::new(false);
-static CTRL_HANDLER: OnceLock<Result<(), String>> = OnceLock::new();
 
 pub(crate) fn serve_output_dir(
     output_dir: &str,
@@ -125,9 +123,8 @@ impl PreviewServer {
     }
 
     fn serve_forever(self) -> Result<(), String> {
-        install_ctrl_handler()?;
-        CTRL_C.store(false, Ordering::Release);
-        let result = self.serve_until(&CTRL_C);
+        let cancellation = CancellationGuard::install()?;
+        let result = self.serve_until(cancellation.signal());
         self.coverage.shutdown();
         result
     }
@@ -159,15 +156,6 @@ impl Drop for PreviewServer {
     fn drop(&mut self) {
         self.coverage.shutdown();
     }
-}
-
-fn install_ctrl_handler() -> Result<(), String> {
-    CTRL_HANDLER
-        .get_or_init(|| {
-            ctrlc::set_handler(|| CTRL_C.store(true, Ordering::Release))
-                .map_err(|err| format!("failed to install Ctrl-C handler: {err}"))
-        })
-        .clone()
 }
 
 fn handle_request(

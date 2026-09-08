@@ -102,9 +102,17 @@ pub(crate) struct ViewerData {
 }
 
 #[derive(Debug)]
+pub(crate) enum CoverageInput {
+    Report(String),
+    Vdb(String),
+}
+
+#[derive(Debug)]
 pub(crate) struct CoverageConfig {
-    pub(crate) report_path: String,
+    pub(crate) input: CoverageInput,
     pub(crate) root: Option<String>,
+    pub(crate) rebuild: bool,
+    pub(crate) timeout_minutes: u64,
 }
 
 #[derive(Debug)]

@@ -132,15 +132,18 @@ hier-viewer -f rtl/files.f --no-wizard \
 
 页面打开后直接显示覆盖率，不需要点击 **Import coverage**。查看器会按完整子层级的实例名和结构，自动选择唯一匹配的报告根节点。多个根节点匹配时，添加 `--coverage-root tb_top.u_dut` 指定目标报告实例；没有匹配时，根据列出的路径检查报告和设计输入。匹配和报错在页面加载时执行。覆盖率参数应放在 `--` 之前，也可与 `--db` 输入配合使用。去掉 `--preview` 即只生成静态站点，供 CI 或其他 HTTP 服务器部署。
 
-如果输入是 VDB，先用 Synopsys URG 生成报告，再执行上面的站点生成命令：
+VDB 可直接通过 `--coverage-vdb` 传入，与 `--coverage-report` 二选一：
 
 ```bash
-urg -dir /path/to/simv.vdb -report /path/to/urgReport \
-  -format both -show fullhier -show ratios -xml_verbose \
-  -metric line+cond+branch+tgl+assert
+hier-viewer -f rtl/files.f --no-wizard \
+  --output out \
+  --coverage-vdb /path/to/simv.vdb \
+  --preview -- --top Top
 ```
 
-只有转换这一步需要 URG 和 Synopsys 许可证。CLI 会把报告的 XML/HTML 文件复制进 `out`，移动站点或刷新页面后仍可自动加载。实例映射和报告校验在页面加载时执行。预加载站点也可通过 `--preview-host 0.0.0.0` 提供远程静态访问，细节见[预加载部署说明](docs/coverage.md#preloaded-static-deployment)。
+VDB 转换需要 Linux、`PATH` 中的 `urg` 和相应 Synopsys 许可证。保持输出目录不变：VDB 未变化时，复用 `out/.hier-viewer-cache/coverage/` 中的报告，不再启动 URG。输入文件元数据、URG 可执行文件和转换参数决定缓存是否有效。`--rebuild-coverage` 强制转换；`--coverage-timeout <分钟>` 默认 60 分钟，`0` 表示不限时。详细规则见 [VDB 缓存说明](docs/coverage.md#cli-vdb-cache)。
+
+两种输入方式都会将报告 XML/HTML 复制进 `out`，移动站点或刷新页面后仍可自动加载。实例映射和报告校验在页面加载时执行。预加载站点也可通过 `--preview-host 0.0.0.0` 提供远程静态访问，细节见[预加载部署说明](docs/coverage.md#preloaded-static-deployment)。
 
 ### 通过浏览器导入
 
@@ -283,7 +286,10 @@ hier-viewer serve <output-dir> [--host IP] [--port N]
 | `--preview-host <h>` | 绑定地址，默认 `127.0.0.1` |
 | `--preview-port <n>` | 起始端口，默认 `8000`，占用时自动顺延 |
 | `--coverage-report <dir>` | 将 URG 报告复制进生成站点，打开页面时自动加载 |
-| `--coverage-root <path>` | 可选报告实例路径，默认自动选择唯一匹配的层级；需与 `--coverage-report` 配合使用 |
+| `--coverage-vdb <dir>` | 用 URG 转换 VDB，未变化时复用缓存；与 `--coverage-report` 互斥 |
+| `--rebuild-coverage` | 强制重新转换，需配合 `--coverage-vdb` |
+| `--coverage-timeout <分钟>` | VDB 转换超时，默认 60 分钟；`0` 表示不限时 |
+| `--coverage-root <path>` | 可选报告实例路径，默认自动选择唯一匹配的层级；需配合覆盖率输入 |
 | `--no-wizard` | 禁用向导，要求显式输入 |
 | `-t, --title <text>` | 自定义页面标题 |
 | `--debug` | 启用查看器调试叠加层，例如 UI 标签 |

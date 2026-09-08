@@ -14,6 +14,17 @@ use tempfile::TempDir;
 use walkdir::WalkDir;
 
 const OUTPUT_LIMIT: usize = 64 * 1024;
+pub(crate) const URG_REPORT_ARGS: &[&str] = &[
+    "-format",
+    "both",
+    "-show",
+    "fullhier",
+    "-show",
+    "ratios",
+    "-xml_verbose",
+    "-metric",
+    "line+cond+branch+tgl+assert",
+];
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -346,7 +357,17 @@ impl CoverageService {
         cancel: Arc<AtomicBool>,
         process_group: Arc<AtomicI32>,
     ) {
-        let result = self.execute_urg(&id, &executable, &input, timeout, &cancel, &process_group);
+        let result =
+            generate_urg_report(&executable, &input, timeout, &cancel, &process_group, None)
+                .and_then(|(root, generated_dir)| {
+                    let report = inspect_report(
+                        &root,
+                        &id,
+                        input.file_name().and_then(|name| name.to_str()),
+                    )
+                    .map_err(|err| err.message)?;
+                    Ok((root, generated_dir, report))
+                });
         let mut state = self.state.lock().expect("coverage state poisoned");
         if state.running_urg.as_deref() == Some(&id) {
             state.running_urg = None;
@@ -387,95 +408,87 @@ impl CoverageService {
             Ok(_) => unreachable!(),
         }
     }
+}
 
-    fn execute_urg(
-        &self,
-        id: &str,
-        executable: &Path,
-        input: &Path,
-        timeout: Option<Duration>,
-        cancel: &AtomicBool,
-        process_group: &AtomicI32,
-    ) -> Result<(PathBuf, TempDir, ReportInfo), String> {
-        let generated_dir = tempfile::Builder::new()
-            .prefix("hier-viewer-urg-")
-            .tempdir()
-            .map_err(|err| format!("failed to create URG working directory: {err}"))?;
-        let report_path = generated_dir.path().join("report");
-        let mut command = Command::new(executable);
-        command
-            .args(["-dir"])
-            .arg(input)
-            .args(["-report"])
-            .arg(&report_path)
-            .args([
-                "-format",
-                "both",
-                "-show",
-                "fullhier",
-                "-show",
-                "ratios",
-                "-xml_verbose",
-                "-metric",
-                "line+cond+branch+tgl+assert",
-            ])
-            .current_dir(generated_dir.path())
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        configure_process_group(&mut command);
-
-        if cancel.load(Ordering::Acquire) {
-            return Err("URG import was cancelled before launch".to_string());
-        }
-        let started = Instant::now();
-        let mut child = command
-            .spawn()
-            .map_err(|err| format!("failed to start '{}': {err}", executable.display()))?;
-        let pid = child.id() as i32;
-        process_group.store(pid, Ordering::Release);
-        if cancel.load(Ordering::Acquire) {
-            terminate_process_group(pid);
-        }
-
-        let stdout = child.stdout.take().map(drain_output);
-        let stderr = child.stderr.take().map(drain_output);
-        let mut timed_out = false;
-        let status = wait_for_child(&mut child, started, timeout, cancel, &mut timed_out);
-        // A launcher can exit before descendants close their inherited output pipes.
-        terminate_process_group(pid);
-        if status.is_err() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-        process_group.store(0, Ordering::Release);
-        let stdout = join_output(stdout);
-        let stderr = join_output(stderr);
-        let status = status?;
-
-        if cancel.load(Ordering::Acquire) {
-            return Err("URG import was cancelled".to_string());
-        }
-        if timed_out {
-            return Err(format!(
-                "URG import timed out{}",
-                output_detail(&stdout, &stderr)
-            ));
-        }
-        if !status.success() {
-            return Err(format!(
-                "URG exited with status {}{}",
-                status,
-                output_detail(&stdout, &stderr)
-            ));
-        }
-
-        let root =
-            canonical_directory(&report_path, "generated URG report").map_err(|err| err.message)?;
-        let report = inspect_report(&root, id, input.file_name().and_then(|name| name.to_str()))
-            .map_err(|err| err.message)?;
-        Ok((root, generated_dir, report))
+// Both CLI caching and the local service use identical URG options and process
+// cleanup. A cache parent keeps the completed directory on the publication filesystem.
+pub(crate) fn generate_urg_report(
+    executable: &Path,
+    input: &Path,
+    timeout: Option<Duration>,
+    cancel: &AtomicBool,
+    process_group: &AtomicI32,
+    work_parent: Option<&Path>,
+) -> Result<(PathBuf, TempDir), String> {
+    let mut builder = tempfile::Builder::new();
+    builder.prefix("hier-viewer-urg-");
+    let generated_dir = match work_parent {
+        Some(parent) => builder.tempdir_in(parent),
+        None => builder.tempdir(),
     }
+    .map_err(|err| format!("failed to create URG working directory: {err}"))?;
+    let report_path = generated_dir.path().join("report");
+    let mut command = Command::new(executable);
+    command
+        .args(["-dir"])
+        .arg(input)
+        .args(["-report"])
+        .arg(&report_path)
+        .args(URG_REPORT_ARGS)
+        .current_dir(generated_dir.path())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    configure_process_group(&mut command);
+
+    if cancel.load(Ordering::Acquire) {
+        return Err("URG import was cancelled before launch".to_string());
+    }
+    let started = Instant::now();
+    let mut child = command
+        .spawn()
+        .map_err(|err| format!("failed to start '{}': {err}", executable.display()))?;
+    let pid = child.id() as i32;
+    process_group.store(pid, Ordering::Release);
+    if cancel.load(Ordering::Acquire) {
+        terminate_process_group(pid);
+    }
+
+    let stdout = child.stdout.take().map(drain_output);
+    let stderr = child.stderr.take().map(drain_output);
+    let mut timed_out = false;
+    let status = wait_for_child(&mut child, started, timeout, cancel, &mut timed_out);
+    // A launcher can exit before descendants close their inherited output pipes.
+    terminate_process_group(pid);
+    if status.is_err() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    process_group.store(0, Ordering::Release);
+    let stdout = join_output(stdout);
+    let stderr = join_output(stderr);
+    let status = status?;
+
+    if cancel.load(Ordering::Acquire) {
+        return Err("URG import was cancelled".to_string());
+    }
+    if timed_out {
+        return Err(format!(
+            "URG import timed out{}",
+            output_detail(&stdout, &stderr)
+        ));
+    }
+    if !status.success() {
+        return Err(format!(
+            "URG exited with status {}{}",
+            status,
+            output_detail(&stdout, &stderr)
+        ));
+    }
+
+    let root =
+        canonical_directory(&report_path, "generated URG report").map_err(|err| err.message)?;
+    Ok((root, generated_dir))
 }
 
 fn wait_for_child(
@@ -592,7 +605,7 @@ fn canonical_directory(path: &Path, label: &str) -> Result<PathBuf, ServiceError
     Ok(canonical)
 }
 
-fn timeout_duration(minutes: u64) -> Result<Option<Duration>, ServiceError> {
+pub(crate) fn timeout_duration(minutes: u64) -> Result<Option<Duration>, ServiceError> {
     if minutes == 0 {
         return Ok(None);
     }
@@ -627,7 +640,7 @@ fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn find_urg_executable() -> Option<PathBuf> {
+pub(crate) fn find_urg_executable() -> Option<PathBuf> {
     use std::os::unix::fs::PermissionsExt;
 
     let path = std::env::var_os("PATH")?;
@@ -641,7 +654,7 @@ fn find_urg_executable() -> Option<PathBuf> {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn find_urg_executable() -> Option<PathBuf> {
+pub(crate) fn find_urg_executable() -> Option<PathBuf> {
     None
 }
 
@@ -836,18 +849,16 @@ mod tests {
         let mut permissions = fs::metadata(&stub).expect("stub metadata").permissions();
         permissions.set_mode(0o700);
         fs::set_permissions(&stub, permissions).expect("make stub executable");
-        let service = CoverageService::with_executable(Some(stub.clone())).expect("create service");
         let started = Instant::now();
-        let error = service
-            .execute_urg(
-                "0123456789abcdef0123456789abcdef",
-                &stub,
-                input.path(),
-                Some(Duration::from_millis(50)),
-                &AtomicBool::new(false),
-                &AtomicI32::new(0),
-            )
-            .expect_err("stub must time out");
+        let error = super::generate_urg_report(
+            &stub,
+            input.path(),
+            Some(Duration::from_millis(50)),
+            &AtomicBool::new(false),
+            &AtomicI32::new(0),
+            None,
+        )
+        .expect_err("stub must time out");
         assert!(error.contains("timed out"));
         assert!(started.elapsed() < Duration::from_secs(2));
     }
@@ -859,15 +870,14 @@ mod tests {
         let stub = input.path().join("urg-stub");
         fs::write(&stub, "#!/bin/sh\n(sleep 30) &\nexit 0\n").expect("write stub");
         fs::set_permissions(&stub, fs::Permissions::from_mode(0o700)).expect("executable stub");
-        let service = CoverageService::with_executable(Some(stub.clone())).expect("service");
         let started = Instant::now();
-        let result = service.execute_urg(
-            "0123456789abcdef0123456789abcdef",
+        let result = super::generate_urg_report(
             &stub,
             input.path(),
             None,
             &AtomicBool::new(false),
             &AtomicI32::new(0),
+            None,
         );
         assert!(
             result.is_err(),

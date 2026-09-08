@@ -1,8 +1,10 @@
 mod cli;
 mod coverage_bundle;
+mod coverage_cache;
 mod coverage_import;
 mod html;
 mod input;
+mod interrupt;
 mod launcher;
 mod logging;
 mod model;

@@ -5,7 +5,7 @@ use serde::Serialize;
 use tempfile::TempDir;
 
 use crate::coverage_import::report_files;
-use crate::model::CoverageConfig;
+use crate::model::{CoverageConfig, CoverageInput};
 
 pub(crate) struct BundledCoverage {
     directory: TempDir,
@@ -24,10 +24,19 @@ impl BundledCoverage {
     // A fresh directory avoids overwriting user files and older deployed reports.
     // Until persist(), errors automatically remove only this run's copied report.
     pub(crate) fn prepare(config: &CoverageConfig, output: &Path) -> Result<Self, String> {
-        let report_root = fs::canonicalize(&config.report_path).map_err(|err| {
+        let report_path = match &config.input {
+            CoverageInput::Report(path) => PathBuf::from(path),
+            CoverageInput::Vdb(path) => crate::coverage_cache::prepare_vdb(
+                Path::new(path),
+                output,
+                config.rebuild,
+                config.timeout_minutes,
+            )?,
+        };
+        let report_root = fs::canonicalize(&report_path).map_err(|err| {
             format!(
                 "cannot open coverage report '{}': {err}",
-                config.report_path
+                report_path.display()
             )
         })?;
         let mut files = report_files(&report_root).map_err(|err| err.message)?;
@@ -76,7 +85,11 @@ impl BundledCoverage {
                 .map_err(|err| format!("cannot copy coverage file '{file}': {err}"))?;
         }
 
-        let name = report_root
+        let input_path = match &config.input {
+            CoverageInput::Report(_) => report_root.as_path(),
+            CoverageInput::Vdb(path) => Path::new(path),
+        };
+        let name = input_path
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("coverage report");
@@ -112,7 +125,7 @@ impl BundledCoverage {
 
 // Resolve existing symlink ancestors and lexical '..' before creating missing
 // output directories, so an alias cannot bypass the input/output overlap check.
-fn resolve_output_path(path: &Path) -> Result<PathBuf, String> {
+pub(crate) fn resolve_output_path(path: &Path) -> Result<PathBuf, String> {
     let absolute = std::path::absolute(path)
         .map_err(|err| format!("cannot resolve output directory: {err}"))?;
     let mut resolved = PathBuf::new();
@@ -145,8 +158,10 @@ mod tests {
         fs::write(report.path().join("pages/detail page.html"), "report text").unwrap();
         fs::write(report.path().join("ignored.bin"), "not needed").unwrap();
         let config = CoverageConfig {
-            report_path: report.path().to_str().unwrap().to_string(),
+            input: CoverageInput::Report(report.path().to_str().unwrap().to_string()),
             root: Some("tb.dut".to_string()),
+            rebuild: false,
+            timeout_minutes: 60,
         };
         (report, config)
     }

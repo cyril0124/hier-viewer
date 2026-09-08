@@ -1,6 +1,6 @@
 use std::process;
 
-use crate::model::{AppCommand, Config, CoverageConfig, ServeConfig, UpdateConfig};
+use crate::model::{AppCommand, Config, CoverageConfig, CoverageInput, ServeConfig, UpdateConfig};
 use crate::preview::{DEFAULT_PREVIEW_HOST, DEFAULT_PREVIEW_PORT};
 
 pub(crate) fn parse_args<I>(args: I) -> Result<AppCommand, String>
@@ -45,6 +45,9 @@ where
     let mut debug = false;
     let mut coverage_report = None;
     let mut coverage_root = None;
+    let mut coverage_vdb = None;
+    let mut rebuild_coverage = false;
+    let mut coverage_timeout = None;
 
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
@@ -99,6 +102,21 @@ where
                     iter.next()
                         .ok_or("--coverage-report requires a report directory")?,
                 );
+            }
+            "--coverage-vdb" => {
+                coverage_vdb = Some(
+                    iter.next()
+                        .ok_or("--coverage-vdb requires a VDB directory")?,
+                );
+            }
+            "--rebuild-coverage" => rebuild_coverage = true,
+            "--coverage-timeout" => {
+                let value = iter.next().ok_or("--coverage-timeout requires minutes")?;
+                let minutes = value
+                    .parse::<u64>()
+                    .map_err(|_| "--coverage-timeout requires nonnegative integer minutes")?;
+                crate::coverage_import::timeout_duration(minutes).map_err(|err| err.message)?;
+                coverage_timeout = Some(minutes);
             }
             "--coverage-root" => {
                 let root = iter
@@ -156,13 +174,24 @@ where
         return Err("--preview-host only applies when --preview is enabled".to_string());
     }
 
-    let coverage = match (coverage_report, coverage_root) {
-        (Some(report_path), root) => Some(CoverageConfig { report_path, root }),
+    if (rebuild_coverage || coverage_timeout.is_some()) && coverage_vdb.is_none() {
+        return Err("--rebuild-coverage and --coverage-timeout require --coverage-vdb".to_string());
+    }
+    let coverage_input = match (coverage_report, coverage_vdb) {
+        (Some(report), None) => Some(CoverageInput::Report(report)),
+        (None, Some(vdb)) => Some(CoverageInput::Vdb(vdb)),
         (None, None) => None,
-        _ => {
-            return Err("--coverage-root requires --coverage-report".to_string());
-        }
+        _ => return Err("--coverage-report and --coverage-vdb are mutually exclusive".to_string()),
     };
+    if coverage_root.is_some() && coverage_input.is_none() {
+        return Err("--coverage-root requires --coverage-report or --coverage-vdb".to_string());
+    }
+    let coverage = coverage_input.map(|input| CoverageConfig {
+        input,
+        root: coverage_root,
+        rebuild: rebuild_coverage,
+        timeout_minutes: coverage_timeout.unwrap_or(60),
+    });
 
     Ok(Config {
         db_path,
@@ -342,6 +371,9 @@ Options:
   -o, --output <dir>       Write bundle files into a directory (required)
   -t, --title <text>       Override page title
       --coverage-report <dir>  Bundle a URG report for automatic coverage loading
+      --coverage-vdb <dir>     Convert a VDB with URG, reusing cached reports when unchanged
+      --rebuild-coverage       Force VDB report conversion; requires --coverage-vdb
+      --coverage-timeout <min> URG conversion timeout in minutes (default: 60; 0 = unlimited)
       --coverage-root <path>   Optional report instance root; auto-select a unique hierarchy match by default
       --debug              Enable viewer debug overlays such as UI element labels
   -h, --help               Show this help
@@ -408,7 +440,7 @@ mod tests {
     }
 
     #[test]
-    fn coverage_root_is_optional_but_requires_a_report() {
+    fn coverage_root_is_optional_but_requires_coverage_input() {
         for args in [
             vec!["--coverage-root", "tb.dut"],
             vec!["--coverage-report", "report", "--coverage-root", " "],
@@ -436,7 +468,9 @@ mod tests {
             panic!("expected generation")
         };
         let coverage = config.coverage.expect("coverage configuration");
-        assert_eq!(coverage.report_path, "urg report");
+        assert!(
+            matches!(coverage.input, crate::model::CoverageInput::Report(ref path) if path == "urg report")
+        );
         assert_eq!(coverage.root.as_deref(), Some("tb.dut"));
 
         let command = parse_args(
@@ -449,6 +483,41 @@ mod tests {
             panic!("expected generation")
         };
         assert!(config.coverage.unwrap().root.is_none());
+    }
+
+    #[test]
+    fn parses_vdb_cache_options_and_rejects_incompatible_inputs() {
+        let command = parse_args(
+            [
+                "--coverage-vdb",
+                "merged.vdb",
+                "--rebuild-coverage",
+                "--coverage-timeout",
+                "0",
+            ]
+            .into_iter()
+            .map(str::to_string),
+        )
+        .unwrap();
+        let AppCommand::Generate(config) = command else {
+            panic!("expected generation")
+        };
+        let coverage = config.coverage.unwrap();
+        assert!(
+            matches!(coverage.input, crate::model::CoverageInput::Vdb(ref path) if path == "merged.vdb")
+        );
+        assert!(coverage.rebuild);
+        assert_eq!(coverage.timeout_minutes, 0);
+        assert!(coverage.root.is_none());
+        for args in [
+            vec!["--coverage-report", "report", "--coverage-vdb", "vdb"],
+            vec!["--rebuild-coverage"],
+            vec!["--coverage-timeout", "5"],
+            vec!["--coverage-vdb", "vdb", "--coverage-timeout", "-1"],
+            vec!["--coverage-vdb"],
+        ] {
+            assert!(parse_args(args.into_iter().map(str::to_string)).is_err());
+        }
     }
 
     #[test]
