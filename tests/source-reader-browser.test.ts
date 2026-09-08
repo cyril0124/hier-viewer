@@ -190,6 +190,57 @@ async function checkHorizontalSearch(page: Page) {
 }
 
 describe('production source reader', () => {
+  test('workspace keeps source visible and gates detail jumps on validated report text', async () => {
+    const page = await openPage(1600, 900);
+    await page.route('**/workspace-queue.sv', route => route.fulfill({ contentType: 'text/plain', body: 'module Queue;\nwire a;\nwire b;\nendmodule' }));
+    try {
+      await page.evaluate(() => {
+        window.readerNodes = [{ id: 0, name: 'q', path: 'dut.q', module: 'Queue', parent: null, children: [], definitionFilePath: '/current/queue.sv', definitionSourceHref: '/workspace-queue.sv', definitionLine: 1, definitionEndLine: 4 } as unknown as HierarchyNode];
+        const scope = { name: 'q', path: 'dut.q', parent: null, children: [], metrics: { line: { covered: 1, total: 2, excluded: 0 } } };
+        window.readerCoverage = {
+          display: { name: 'workspace fixture', metric: 'line', summary: { release: 'fixture', scopes: [scope], roots: [0], byPath: new Map([['dut.q', 0]]) }, mapping: { sourceRoot: 0, targetRoot: 0, scopeByNode: new Int32Array([0]), matched: 1, unmatchedScopes: [], unmatchedNodeIds: [] } },
+          source: { id: 'workspace', name: 'workspace', files: [], readText: async () => '' },
+          report: {
+            clear() {},
+            async getLineCoverage() { return { instancePath: 'dut.q', filePath: '/archived/queue.sv', reportPath: 'mod0.html#Line', totals: { covered: 1, total: 2, excluded: 0 }, lines: [{ line: 2, sourceText: 'wire a;', covered: 0, total: 1 }, { line: 3, sourceText: 'wire b;', covered: 1, total: 1 }] }; },
+            async getMetricDetail(_path, _module, metric) { return { instancePath: 'dut.q', filePath: '/archived/queue.sv', metric, blocks: [{ kind: 'code', text: 'LINE 2\nwire a;' }, { kind: 'table', rows: [{ header: true, cells: ['Total', 'Covered'], status: 'neutral' }, { header: false, cells: ['2', '1'], status: 'neutral' }] }] }; },
+          },
+        };
+        window.readerState.mainViewMode = 'coverage';
+        document.querySelector('.app')!.classList.add('coverage-workspace-active');
+        document.querySelector('#coverage-workspace')!.classList.add('active');
+        document.querySelector('#coverage-source-host')!.append(window.reader.sourcePanel);
+        const details = document.querySelector('#coverage-details-host')!;
+        details.append(document.querySelector('.coverage-detail-tabs')!, document.querySelector('#coverage-detail-view')!);
+        document.querySelectorAll<HTMLElement>('.coverage-workspace-empty').forEach(el => { el.hidden = true; });
+        window.reader.setSourceWorkspace(true);
+      });
+      await page.evaluate(() => window.reader.renderSource(0, 'definition'));
+      await page.locator('#coverage-workspace-lines [data-coverage-line="2"]').waitFor();
+      await page.locator('[data-coverage-metric="branch"]').click();
+      await page.locator('.coverage-line-jump:enabled').waitFor();
+      assert.ok(await page.locator('#source-code').isVisible());
+      await page.locator('.coverage-line-jump').click();
+      assert.equal(await page.locator('[data-coverage-metric="branch"]').getAttribute('aria-selected'), 'true');
+      await page.evaluate(() => {
+        window.reader.currentSourceView!.lines![1] = 'wire changed;';
+        window.readerCoverage = { ...window.readerCoverage! };
+        window.reader.refreshCoverage();
+      });
+      await page.waitForFunction(() => document.querySelector('#source-coverage-status')!.textContent!.includes('does not match'));
+      assert.equal(await page.locator('#source-code [data-coverage-line]').count(), 0);
+      assert.ok(await page.locator('.coverage-line-jump').isDisabled());
+      await page.locator('[data-coverage-metric="line"]').click();
+      assert.equal(await page.locator('#coverage-workspace-lines [data-coverage-line]').count(), 0);
+      assert.match(await page.locator('#coverage-workspace-lines').textContent() ?? '', /does not match/);
+      await page.evaluate(() => { window.readerCoverage = null; window.reader.refreshCoverage(); });
+      assert.ok(await page.locator('#coverage-workspace-lines').isHidden());
+      assert.ok(await page.locator('#coverage-detail-view').isHidden());
+      assert.equal(await page.locator('#coverage-export-count').textContent(), '0 selected');
+      assert.deepEqual(errors.get(page), []);
+    } finally { await page.close(); }
+  });
+
   test('coverage follows cached-file instances, rejects stale responses, and keeps plain mode bounded', async () => {
     const page = await openPage(1280, 900);
     let sourceRequests = 0;

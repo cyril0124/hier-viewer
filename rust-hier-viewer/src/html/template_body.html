@@ -60,7 +60,7 @@
               <button id="coverage-import-btn" type="button" class="icon-button" aria-label="Import coverage" title="Import coverage"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg></button>
               <label class="metric-inline-label" for="coverage-metric-select">Coverage:</label>
               <select id="coverage-metric-select" aria-label="Coverage metric" disabled><option value="off">Off</option><option value="line">Line</option><option value="condition">Condition</option><option value="branch">Branch</option><option value="toggle">Toggle</option><option value="assert" hidden disabled>Assert</option></select>
-              <button id="coverage-clear-btn" type="button" class="icon-button" aria-label="Remove coverage" title="Remove coverage" disabled><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+              <button id="coverage-clear-btn" type="button" class="icon-button" aria-label="Turn off coverage coloring" title="Turn off coverage coloring" disabled><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
             </div>
             <div class="metric-group" data-ui-name="level-group">
               <label class="metric-inline-label" for="depth-select">Level:</label>
@@ -253,6 +253,7 @@
             <button id="view-treemap-btn" class="view-switch-btn" type="button" data-ui-name="view-treemap-btn">Treemap</button>
             <button id="view-pie-btn" class="view-switch-btn" type="button" data-ui-name="view-pie-btn">2D Pie</button>
             <button id="view-three-btn" class="view-switch-btn" type="button" data-ui-name="view-three-btn">3D</button>
+            <button id="view-coverage-btn" class="view-switch-btn" type="button">Coverage</button>
             <button id="zen-toggle-btn" class="view-switch-btn zen-mode-btn" type="button" aria-pressed="false" data-ui-name="zen-toggle-btn">Zen</button>
           </div>
         </div>
@@ -266,6 +267,7 @@
           <div class="zen-overlay-group" data-ui-name="zen-overlay-group">
             <button id="zen-view-treemap-btn" class="view-switch-btn" type="button" data-ui-name="zen-view-treemap-btn">Treemap</button>
             <button id="zen-view-pie-btn" class="view-switch-btn" type="button" data-ui-name="zen-view-pie-btn">2D Pie</button>
+            <button id="zen-view-coverage-btn" class="view-switch-btn" type="button">Coverage</button>
             <button id="zen-view-three-btn" class="view-switch-btn" type="button" data-ui-name="zen-view-three-btn">3D</button>
           </div>
           <div class="zen-overlay-actions" data-ui-name="zen-overlay-actions">
@@ -285,6 +287,35 @@
             <div class="treemap-analysis-legend-list" id="treemap-analysis-legend-list"></div>
           </div>
         </div>
+        <section id="coverage-workspace" class="main-view-layer coverage-workspace" aria-label="Coverage workspace" data-pane="instances">
+          <header class="coverage-workspace-heading">
+            <div><span class="coverage-workspace-kicker">Coverage workspace</span><span id="coverage-workspace-report">No report loaded</span></div>
+            <div class="coverage-workspace-actions"><button id="coverage-workspace-clear" type="button" aria-label="Remove coverage report" disabled>Remove</button><button id="coverage-workspace-import" type="button">Import report</button></div>
+          </header>
+          <nav class="coverage-mobile-tabs" aria-label="Coverage panes">
+            <button type="button" data-coverage-pane="instances" aria-pressed="true">Instances</button>
+            <button type="button" data-coverage-pane="source" aria-pressed="false">Source</button>
+            <button type="button" data-coverage-pane="details" aria-pressed="false">Details</button>
+          </nav>
+          <div class="coverage-workspace-grid" id="coverage-workspace-grid">
+            <section class="coverage-instances" aria-label="Instance coverage">
+              <div class="coverage-pane-heading"><h2>Instances</h2><span id="coverage-tree-count"></span></div>
+              <div class="coverage-tree-search-shell"><input id="coverage-tree-search" type="search" aria-label="Search coverage instances" placeholder="Find an instance or module…"></div>
+              <div id="coverage-tree-scroll" tabindex="0" role="treegrid" aria-label="Instance coverage tree"><div id="coverage-tree-header" role="row"></div><div id="coverage-tree-rows"></div></div>
+              <div class="coverage-tree-footnote">Instance subtree coverage</div>
+            </section>
+            <div id="coverage-split-left" class="coverage-splitter" role="separator" aria-label="Resize instance pane" aria-orientation="vertical" tabindex="0"></div>
+            <section id="coverage-source-host" class="coverage-source-host" aria-label="Selected module source">
+              <div id="coverage-source-empty" class="coverage-workspace-empty"><span class="coverage-empty-symbol" aria-hidden="true">{ }</span><h2>Select an instance</h2><p>View its source and coverage details.</p></div>
+            </section>
+            <div id="coverage-split-right" class="coverage-splitter" role="separator" aria-label="Resize details pane" aria-orientation="vertical" tabindex="0"></div>
+            <section id="coverage-details-host" class="coverage-details-host" aria-label="Selected instance coverage details">
+              <div class="coverage-pane-heading"><h2>Coverage details</h2><span id="coverage-workspace-instance"></span></div>
+              <div id="coverage-workspace-lines" hidden></div>
+              <div id="coverage-details-empty" class="coverage-workspace-empty"><h2>No instance selected</h2><p>Choose an instance to inspect coverage points.</p></div>
+            </section>
+          </div>
+        </section>
         <section class="main-view-layer chart-panel" id="chart-panel" data-ui-name="chart-panel" data-ui-label="always">
           <div class="chart-shell" data-ui-name="chart-shell">
             <div class="chart-toolbar" data-ui-name="chart-toolbar">

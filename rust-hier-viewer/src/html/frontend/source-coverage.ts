@@ -24,7 +24,14 @@ export function coverageLineState(row: CoverageLine): string {
 
 export function createSourceCoverage(deps: SourceCoverageDependencies) {
   const exporter = createCoverageExport(deps);
-  const metricDetails = createCoverageDetails({ ...deps, exporter, onMetricChange: updateVisibility });
+  const metricDetails = createCoverageDetails({
+    ...deps, exporter, onMetricChange: updateVisibility,
+    canJumpToSource(path, line) {
+      const index = line - (view?.firstLineNumber ?? 0);
+      return path.replace(/\\/g, "/") === verifiedSourcePath
+        && index >= 0 && index < (view?.lines?.length ?? 0);
+    },
+  });
   const selectUncovered = document.getElementById("coverage-export-uncovered") as HTMLButtonElement | null;
   const bar = document.getElementById("source-coverage-bar");
   const status = document.getElementById("source-coverage-status");
@@ -39,6 +46,11 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
   const pageLabel = document.getElementById("source-coverage-page");
   const PAGE_SIZE = 200;
   const addLine = document.getElementById("coverage-export-add-line") as HTMLButtonElement | null;
+  const workspaceLines = document.getElementById("coverage-workspace-lines");
+  let workspaceMode = false;
+  let workspacePage = 0;
+  let workspaceMissingOnly = false;
+  let verifiedSourcePath: string | null = null;
   let reportPath = "";
   let selection: CoverageSelection | null = null;
   let view: SourceView | null = null;
@@ -63,6 +75,32 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
     if (selectUncovered && metricDetails.isLine()) {
       selectUncovered.disabled = !missing.length;
     }
+    renderWorkspaceLines();
+  }
+  function renderWorkspaceLines() {
+    if (!workspaceLines) return;
+    workspaceLines.hidden = !workspaceMode || !metricDetails.isLine() || !view || !selection;
+    if (workspaceLines.hidden) return;
+    if (!byLine) {
+      workspaceLines.textContent = status?.textContent ?? "Line coverage is unavailable.";
+      return;
+    }
+    const filtered = workspaceMissingOnly ? rows.filter(row => !row.excluded && row.covered < row.total) : rows;
+    workspacePage = Math.min(workspacePage, Math.max(0, Math.ceil(filtered.length / PAGE_SIZE) - 1));
+    const begin = workspacePage * PAGE_SIZE;
+    workspaceLines.innerHTML = `<div class="coverage-line-list-heading"><h3>Line coverage</h3><label><input type="checkbox" data-line-missing${workspaceMissingOnly ? " checked" : ""}> Uncovered only</label></div>`;
+    for (const row of filtered.slice(begin, begin + PAGE_SIZE)) {
+      const item = document.createElement("div");
+      item.className = `coverage-line-list-row coverage-${coverageLineState(row)}`;
+      const checked = exporter.has(`line:${row.line}`) ? " checked" : "";
+      item.innerHTML = `<input type="checkbox" data-coverage-export-key="line:${row.line}" data-coverage-export-line="${row.line}" aria-label="Select Line ${row.line}"${checked}><button type="button" data-coverage-line="${row.line}">Line ${row.line}</button><span>${row.covered}/${row.total} · ${coverageLineState(row)}</span>`;
+      workspaceLines.appendChild(item);
+    }
+    if (!filtered.length) workspaceLines.appendChild(document.createTextNode("No uncovered lines."));
+    const pagination = document.createElement("div");
+    pagination.className = "coverage-line-list-pagination";
+    pagination.innerHTML = `<button type="button" data-line-page="-1" aria-label="Previous line page"${workspacePage === 0 ? " disabled" : ""}>‹</button><span>${filtered.length ? begin + 1 : 0}–${Math.min(begin + PAGE_SIZE, filtered.length)} / ${filtered.length}</span><button type="button" data-line-page="1" aria-label="Next line page"${begin + PAGE_SIZE >= filtered.length ? " disabled" : ""}>›</button>`;
+    workspaceLines.appendChild(pagination);
   }
   function renderPage() {
     if (!lineSelect || !plain || plain.hidden) return;
@@ -109,6 +147,8 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
     generation++;
     rows = [];
     reportPath = "";
+    verifiedSourcePath = null;
+    workspacePage = 0;
     exporter.setVerifiedSource(null);
     byLine = null;
     missing = [];
@@ -130,13 +170,19 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
     view = currentView;
     nodeId = currentId;
     if (bar) bar.hidden = !selection || !view || currentId === null;
+    renderWorkspaceLines();
     if (!selection || !view || currentId === null) return;
     if (view.targetKind !== "definition") {
       if (status) status.textContent = "Line coverage is attached to the module definition.";
+      renderWorkspaceLines();
       return;
     }
     const scopeId = selection.display.mapping.scopeByNode[currentId];
-    if (scopeId < 0) { if (status) status.textContent = "Instance is not mapped to coverage."; return; }
+    if (scopeId < 0) {
+      if (status) status.textContent = "Instance is not mapped to coverage.";
+      renderWorkspaceLines();
+      return;
+    }
     const node = deps.getNode(currentId);
     const instancePath = selection.display.summary.scopes[scopeId].path;
     const expectedSelection = selection;
@@ -146,16 +192,20 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
     const abort = new AbortController();
     controller = abort;
     if (status) status.textContent = "Loading line coverage...";
+    renderWorkspaceLines();
     void expectedSelection.report.getLineCoverage(instancePath, node.module, abort.signal).then(data => {
       abort.signal.throwIfAborted();
       if (token !== generation || sourceToken !== deps.state.sourceRequestToken || deps.getSelection() !== expectedSelection || deps.getView() !== expectedView) return;
       if (!data) {
         if (status) status.textContent = "Line coverage details are unavailable.";
+        renderWorkspaceLines();
         return;
       }
       if (data.instancePath !== instancePath) throw new Error("Line coverage belongs to a different instance.");
       const relocated = validateCoverageSource(data, node.definitionFilePath, expectedView);
       exporter.setVerifiedSource(data.filePath);
+      verifiedSourcePath = data.filePath.replace(/\\/g, "/");
+      metricDetails.refreshSourceLinks();
       reportPath = data.reportPath;
       rows = [...data.lines].sort((left, right) => left.line - right.line);
       byLine = new Map(rows.map(row => [row.line, row]));
@@ -206,7 +256,7 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
       exporter.set(`line:${row.line}`, { kind: "line", row, reportPath });
     }
   });
-  deps.sourceCode.addEventListener("change", event => {
+  function changeSelection(event: Event) {
     const checkbox = event.target as HTMLInputElement;
     if (!checkbox.matches("[data-coverage-export-line]")) return;
     const line = Number(checkbox.dataset.coverageExportLine);
@@ -215,6 +265,26 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
 
     const entry: CoverageExportEntry = { kind: "line", row, reportPath };
     exporter.set(`line:${line}`, checkbox.checked ? entry : null);
+  }
+  deps.sourceCode.addEventListener("change", changeSelection);
+  workspaceLines?.addEventListener("change", event => {
+    const checkbox = event.target as HTMLInputElement;
+    if (checkbox.matches("[data-line-missing]")) {
+      workspaceMissingOnly = checkbox.checked;
+      workspacePage = 0;
+      renderWorkspaceLines();
+    } else changeSelection(event);
+  });
+  workspaceLines?.addEventListener("click", event => {
+    const target = event.target as Element;
+    const line = target.closest<HTMLButtonElement>("[data-coverage-line]");
+    if (line) showLine(Number(line.dataset.coverageLine));
+    const pageButton = target.closest<HTMLButtonElement>("[data-line-page]");
+    if (pageButton) {
+      workspacePage += Number(pageButton.dataset.linePage);
+      renderWorkspaceLines();
+      workspaceLines.scrollTop = 0;
+    }
   });
   toggle?.addEventListener("change", () => { updateVisibility(); renderPage(); deps.repaint(); });
   previous?.addEventListener("click", () => navigate(-1));
@@ -227,6 +297,12 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
     if (button) showLine(Number(button.dataset.coverageLine), false);
   });
   return {
+    setWorkspaceMode(enabled: boolean) {
+      workspaceMode = enabled;
+      metricDetails.setWorkspaceMode(enabled);
+      updateVisibility();
+    },
+    selectMetric: metricDetails.selectMetric,
     sync, cell,
     lineClass(line: number) { const row = enabled() ? byLine?.get(line) : null; return row ? `coverage-${coverageLineState(row)}` : ""; },
     close() {

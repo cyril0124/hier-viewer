@@ -11,6 +11,7 @@ import {
   hexToRgba,
   sanitizeWeight,
 } from "./ui.js";
+import { createCoverageWorkspace } from "./coverage-workspace.js";
 import { createPersistence } from "./persistence.js";
 import type { PersistenceDependencies } from "./persistence.js";
 import { createSourceReader } from "./source-reader.js";
@@ -407,6 +408,8 @@ declare global {
       moveSourceSearch,
       bindSourceEvents,
       refreshCoverage,
+      setSourceWorkspace,
+      selectCoverageMetric,
     } = createSourceReader({
       getCoverage: () => activeCoverage,
       state,
@@ -419,6 +422,8 @@ declare global {
       updateHover: (nodeId, areaKind, options): ReturnType<SourceReaderDependencies["updateHover"]> => updateHover(nodeId, areaKind, options),
       registerSearchHistoryInput,
     });
+
+    let coverageWorkspace: ReturnType<typeof createCoverageWorkspace> | null = null;
 
     const {
       currentThemeVisuals,
@@ -768,7 +773,7 @@ declare global {
 
     restorePersistedState();
     applyLegacyMetricAlias();
-    state.chartPanelOpen = state.mainViewMode !== "treemap";
+    state.chartPanelOpen = state.mainViewMode === "pie2d" || state.mainViewMode === "three3d";
     if (state.mainViewMode === "pie2d" || state.mainViewMode === "three3d") {
       state.chartRenderMode = state.mainViewMode;
     }
@@ -823,7 +828,22 @@ declare global {
 
     function applyMainViewMode() {
       coverageImport?.setViewVisible(state.mainViewMode === "treemap");
-      state.chartPanelOpen = state.mainViewMode !== "treemap";
+      if (state.mainViewMode === "coverage" && !coverageWorkspace) {
+        coverageWorkspace = createCoverageWorkspace({
+          state, nodes,
+          openSource: id => renderSource(id, "definition"),
+          closeSource: closeSourcePanel,
+          hasSource: id => nodeHasDefinitionSource(getNode(id)),
+          setSourceWorkspace,
+          selectMetric: selectCoverageMetric,
+          resizeSource: () => scheduleSourceVirtualRender(true),
+          importReport: () => document.getElementById("coverage-import-btn")?.click(),
+          removeReport: () => coverageImport?.remove(),
+        });
+      }
+      coverageWorkspace?.setActive(state.mainViewMode === "coverage");
+      coverageWorkspace?.refresh();
+      state.chartPanelOpen = state.mainViewMode === "pie2d" || state.mainViewMode === "three3d";
       treemapStage.classList.toggle("active", state.mainViewMode === "treemap");
       chartPanel.classList.toggle("active", state.chartPanelOpen);
       applySelectModeState();
@@ -839,6 +859,11 @@ declare global {
       zenViewTreemapBtn.setAttribute("aria-pressed", state.mainViewMode === "treemap" ? "true" : "false");
       zenViewPieBtn.setAttribute("aria-pressed", state.mainViewMode === "pie2d" ? "true" : "false");
       zenViewThreeBtn.setAttribute("aria-pressed", state.mainViewMode === "three3d" ? "true" : "false");
+      for (const id of ["view-coverage-btn", "zen-view-coverage-btn"]) {
+        const button = document.getElementById(id)!;
+        button.classList.toggle("active", state.mainViewMode === "coverage");
+        button.setAttribute("aria-pressed", String(state.mainViewMode === "coverage"));
+      }
     }
 
     function applyZenModeState() {
@@ -861,7 +886,7 @@ declare global {
       if (next && state.advancedPopoverOpen) {
         setAdvancedPopoverOpen(false);
       }
-      if (next && sourcePanel.classList.contains("visible")) {
+      if (next && state.mainViewMode !== "coverage" && sourcePanel.classList.contains("visible")) {
         closeSourcePanel();
       }
       state.zenMode = next;
@@ -870,7 +895,7 @@ declare global {
     }
 
     function setMainViewMode(mode: string) {
-      const nextMode = ["treemap", "pie2d", "three3d"].includes(mode) ? mode : "treemap";
+      const nextMode = ["treemap", "pie2d", "three3d", "coverage"].includes(mode) ? mode : "treemap";
       state.mainViewMode = nextMode as ViewerState["mainViewMode"];
       if (nextMode === "three3d" && state.coverage && state.coverage.metric !== "off") state.chartMode = "coverage";
       else if (state.chartMode === "coverage") state.chartMode = "weighted_bits";
@@ -1094,7 +1119,7 @@ declare global {
       const selectText = state.mainViewMode === "treemap" && state.selectMode
         ? " · select <strong>on</strong>"
         : "";
-      const mainViewStatus = state.mainViewMode !== "treemap" && chartController && typeof chartController.viewStatus === "function"
+      const mainViewStatus = state.chartPanelOpen && chartController && typeof chartController.viewStatus === "function"
         ? chartController.viewStatus()
         : null;
       const zoomLabel = mainViewStatus && mainViewStatus.zoomLabel
@@ -1563,6 +1588,8 @@ declare global {
         return coverageImport!;
       } finally { importCoverageButton.disabled = false; }
     }
+    document.getElementById("view-coverage-btn")!.addEventListener("click", () => setMainViewMode("coverage"));
+    document.getElementById("zen-view-coverage-btn")!.addEventListener("click", () => setMainViewMode("coverage"));
     importCoverageButton.addEventListener("click", () => {
       void loadCoverageImporter().then(importer => importer.open()).catch(error => {
         statusRight.textContent = error instanceof Error ? error.message : String(error);
@@ -1817,7 +1844,7 @@ declare global {
         setAdvancedPopoverOpen(false);
         return;
       }
-      if (sourcePanel.classList.contains("visible")) {
+      if (state.mainViewMode !== "coverage" && sourcePanel.classList.contains("visible")) {
         if (state.sourcePanelFullscreen) {
           state.sourcePanelFullscreen = false;
           applySourcePanelWindowState();

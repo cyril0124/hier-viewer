@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Coverage workspace displays a searchable instance tree, module source, and detail tables side by side. Panes resize and switch to tabs on narrow screens. Source jumps require report text validation; coverage selections can be exported.
+
 - `install.sh` one-click installer. Inside a repository checkout it builds and installs the current directory with `cargo install --path . --locked`; outside a checkout (e.g. piped from curl) it downloads the latest prebuilt release binary into `~/.local/bin` (or `--to DIR`), resolving the latest tag via the `releases/latest` redirect to avoid GitHub API rate limits. `--source` forces a cargo build (`--path` when a checkout is present, `--git` otherwise), `--prebuilt` forces the release download, `--tag` pins a release for downloads and `--git` builds, and prebuilt failures fall back to a cargo build.
 
 - Coverage legend ranges are clickable multiselect filters, including No data, shared by the treemap and 2D/3D charts. Range selection intersects with text search, updates Filter matches, and can be cleared with Show all.
@@ -30,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `hier-viewer serve <output-dir>` opens an existing bundle without regenerating RTL. Loopback coverage APIs support cancellable URG jobs with a configurable 60-minute default timeout and an unlimited option.
 
 ### Fixed
+
+- The X beside the Coverage selector keeps the report loaded when turning coloring off. Metrics remain selectable; the workspace's Remove button unloads the report.
 
 - Line coverage supports relocated source files after validating the instance, module, filename, and all numbered report excerpts. Mismatched text disables markers. Status and exports identify relocated sources.
 

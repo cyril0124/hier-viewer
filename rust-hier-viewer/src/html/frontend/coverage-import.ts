@@ -371,15 +371,26 @@ export function createCoverageImport(deps: ImportDependencies) {
     applySelection(selection);
     dialog.close();
   });
-  clearButton.addEventListener("click", () => {
-    deps.onClear();
+  function disableColor() {
     metricSelect.value = "off";
-    metricSelect.disabled = true;
     clearButton.disabled = true;
     legend.hidden = true;
+  }
+
+  function remove() {
+    cancelOperation();
+    deps.onClear();
+    disableColor();
+    metricSelect.disabled = true;
+  }
+
+  clearButton.addEventListener("click", () => {
+    disableColor();
+    deps.onMetricChange("off");
   });
   metricSelect.addEventListener("change", () => {
     const metric = metricSelect.value as "off" | CoverageMetric;
+    clearButton.disabled = metric === "off";
     legend.hidden = metric === "off";
     deps.onMetricChange(metric);
   });
@@ -388,7 +399,8 @@ export function createCoverageImport(deps: ImportDependencies) {
   return {
     open,
     loadBundled,
-    disableColor() { metricSelect.value = "off"; legend.hidden = true; },
+    remove,
+    disableColor,
     setViewVisible(treemap: boolean) { legend.hidden = !treemap || metricSelect.value === "off"; },
     dispose: cancelOperation,
   };

@@ -131,12 +131,12 @@ export function createPersistence(deps: PersistenceDependencies) {
         }
         state.treePanelOpen = !!saved.treePanelOpen;
         state.matchPanelOpen = !!saved.matchPanelOpen;
-        if ((["treemap", "pie2d", "three3d"] as readonly unknown[]).includes(saved.mainViewMode)) {
+        if ((["treemap", "pie2d", "three3d", "coverage"] as readonly unknown[]).includes(saved.mainViewMode)) {
           state.mainViewMode = saved.mainViewMode as ViewerState["mainViewMode"];
         } else if (saved.chartPanelOpen) {
           state.mainViewMode = saved.chartRenderMode === "three3d" ? "three3d" : "pie2d" as ViewerState["mainViewMode"];
         }
-        state.chartPanelOpen = state.mainViewMode !== "treemap";
+        state.chartPanelOpen = state.mainViewMode === "pie2d" || state.mainViewMode === "three3d";
         if ((["weighted_bits", "analysis", "coverage"] as readonly unknown[]).includes(saved.chartMode)) {
           state.chartMode = saved.chartMode as ViewerState["chartMode"];
         }

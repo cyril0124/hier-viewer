@@ -128,7 +128,11 @@ try {
       await page.locator('#coverage-metric-select').selectOption('toggle');
       await page.screenshot({ path: resolve(output, `${width}-heatmap.png`), fullPage: true });
       await page.locator('#coverage-clear-btn').click();
-      assert.equal(await page.locator('#coverage-metric-select').isDisabled(), true);
+      assert.equal(await page.locator('#coverage-metric-select').isEnabled(), true, 'Turning off coloring keeps the report available');
+      assert.equal(await page.locator('#coverage-metric-select').inputValue(), 'off');
+      await page.locator('#coverage-metric-select').selectOption('line');
+      await openInstance(page, expected.instances[0]);
+      await page.locator('#close-source-btn').click();
       await importReport(page, 'xml');
       await page.locator('.match-item').click();
       await page.waitForFunction(() => document.querySelector('#source-coverage-status').textContent.includes('unavailable'));

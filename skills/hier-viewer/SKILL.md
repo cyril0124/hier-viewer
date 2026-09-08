@@ -97,6 +97,8 @@ Run the generated script from outside the project root. Under an agent harness, 
 3. Stop the test server and rerun the unchanged script. In RTL mode, confirm the log reports cache reuse. With VDB input, confirm the second launch reports a VDB cache hit and skips URG conversion. Confirm both launches write to the same bundle directory even from different working directories.
 4. When coverage is configured, follow `data-coverage-manifest` from the generated HTML and check the manifest/report files over HTTP. Open the page and reload it: coverage must load without opening Import. A successful CLI exit alone does not validate root matching. Resolve any zero-match or ambiguous-root diagnostics before claiming coverage works; if browser verification is unavailable, mark automatic matching unverified.
 
+For the Coverage workspace, verify the view switcher opens the instance tree, source, and details together. Select a metric cell, check that the source remains visible in another detail tab, then return to the chart. On narrow screens, verify Instances / Source / Details navigation. See [coverage workspace](../../docs/coverage.md#coverage-workspace).
+
 For relocated sources, confirm the Line status shows a verified text match and that the markers agree with the report. If text validation fails, check the simulation's RTL revision against the bundled source.
 
 If exporting evidence for AI analysis is part of the request, also verify **Module Source → Select uncovered → Export selected → Copy Markdown** for a mapped instance. Confirm that the export includes the intended instance and report data.

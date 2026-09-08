@@ -83,6 +83,8 @@ Coverage APIs are enabled only on loopback bindings. A remote static binding suc
 
 **Coverage** selects Line, Condition, Branch, or Toggle coloring. Rectangle area continues to use the existing sizing metric. Colors use fixed percentage ranges, not the minimum and maximum of the visible view. Unknown metrics and zero-denominator metrics are neutral, while a measured zero-percent metric is red. Local-self areas remain neutral because the imported XML scores are subtree scores.
 
+The **X** beside the toolbar's Coverage selector turns coloring off while keeping the report loaded. Select a metric to turn coloring back on. Use **Remove** in the Coverage workspace to unload the report.
+
 Click a coverage legend range to filter instances; click it again to deselect it. Ranges can be combined, including **No data**, and **Show all** clears the range filter. Selection uses the same exact thresholds as coloring: below 50%, 50% to below 80%, 80% to below 95%, and 95% through 100%. Missing and zero-denominator metrics both belong to No data. Range selection intersects with the text search and populates **Filter matches**, whose button opens the result list. Treemap geometry stays fixed and unrelated nodes fade; ancestor nodes remain for navigation. At the selected chart level, 2D/3D include only matching instances, so a matching parent's score does not admit its children. Increase the chart level to inspect deeper matches. Empty charts retain the range buttons for recovery. Switching metrics reapplies selected ranges; turning coverage off, removing it, or importing another report clears the range selection. Range selections are not persisted across reloads.
 
 Instance details show covered/total points and exclusion counts as reported by URG. Subtree scores are not added together or averaged again. Toggle means the objects collected in the VDB; a port-only VDB does not describe all internal signals. Structural analysis coloring and coverage coloring are mutually exclusive. The 2D pie and 3D charts use the same selected coverage metric for colors and show per-instance percentages and counts in their legends and hover details. With coverage active, 3D defaults to **Coverage (%)** mode: bar height is the instance's subtree percentage on a fixed 0-100% axis. Heights are linear, never normalized to the largest visible score. Bars and legend entries are ordered by descending coverage, with missing data last; equal scores retain hierarchy order. Switching metrics recalculates this order. Zero coverage has no raised bar and a `0%` base marker; missing data has a gray `No data` marker. Instance labels appear when readable at the current zoom or on hover, with at most 80 labels shown alongside the fixed percentage axis. Every instance remains selectable through its bar or pedestal and the scrollable legend. Percentages are not summed. Weighted Bits remains selectable for structural height. Pie areas always retain structural sizing, with coverage represented by color. Switching coverage metrics preserves the 3D camera; turning coverage off restores weighted sizing.
@@ -90,6 +92,18 @@ Instance details show covered/total points and exclusion counts as reported by U
 Open **Module Source** for a mapped instance to inspect line coverage. The separate coverage column shows covered/total points, not execution counts. It distinguishes covered, uncovered, and partially covered rows. Rows without reported points remain neutral. Selecting a coverage cell shows its counts; the arrow buttons jump between uncovered or partial lines. Clicking the line number still controls bookmarks.
 
 Coverage follows the selected hierarchy instance even when several instances share a cached source file. It is not applied to the parent file shown by **Open Instance**. Normal and compact views retain fixed-height virtualized rows. Very large plain-text views keep the textarea and expose a paginated line-detail list with source jumps.
+
+## Coverage workspace
+
+Select **Coverage** in the view switcher for an instance tree, module source, and coverage details side by side. The tree shows Line, Toggle, Condition, Branch, and Assert when present. Percentages come from each instance's report summary. `No data` means no reported metric; `N/A` means a zero denominator. Hover a metric for its exact counts.
+
+Search by instance name, module name, or path. Matching rows keep their ancestors visible. Expand rows with the triangle buttons or arrow keys; press Enter to open the focused instance. Click a metric cell to open its detail tab. Workspace search is independent of chart filters.
+
+Source stays visible when switching metric tabs. The Line list shows up to 200 points per page and supports **Uncovered only**, individual selection, and **Select uncovered**. Detail line links locate source without switching the metric tab. These links require a successful Line source validation. Instances without bundled module source show summary metrics only.
+
+Drag a divider to resize the panes, or focus it and press Left/Right. The browser remembers pane widths and the active view. At widths of 1000 pixels or less, switch panes with **Instances**, **Source**, and **Details**. Line links open Source. Returning to a chart closes the source reader and clears its export selection.
+
+**Import report** and **Remove** manage coverage within the workspace. Source validation, report availability, and export rules below apply to both the workspace and the source window.
 
 ## Optional assertion coverage
 
@@ -140,6 +154,8 @@ Run `node tests/run-coverage-cli.mjs` after building the CLI to check report pac
 Run `node tests/run-coverage-vdb-cli.mjs` on Linux to check CLI VDB cache reuse, invalidation, forced/failed rebuilds, and conversion/preview cancellation with a stub URG executable. Rust tests also cover concurrent callers and linked inputs.
 
 Run `node tests/run-coverage-legend.mjs` after building the CLI to check range multiselect, search intersection, No data, treemap pixels, chart filtering, and resets at desktop and narrow viewport sizes.
+
+Run `node tests/run-coverage-workspace.mjs <viewer-url> <instance-path-query> <covered/total>` against a preloaded report with uncovered Line points. It checks pane navigation, source/detail coexistence, exports, report removal, layout persistence, narrow screens, and bounded tree rendering. Screenshots go under `target/coverage-workspace-evidence/`.
 
 A real-report browser check accepts independently established expectations:
 

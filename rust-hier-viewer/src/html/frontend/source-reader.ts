@@ -1622,11 +1622,13 @@ export function createSourceReader(deps: SourceReaderDependencies) {
 
     function applySourcePanelWindowState() {
       const sourceOpen = state.sourceNodeId !== null;
-      sourcePanel.classList.toggle("fullscreen", state.sourcePanelFullscreen);
-      document.body.classList.toggle("source-fullscreen-active", state.sourcePanelFullscreen);
-      document.body.classList.toggle("source-open", sourceOpen);
+      const docked = state.mainViewMode === "coverage";
+      const fullscreen = state.sourcePanelFullscreen && !docked;
+      sourcePanel.classList.toggle("fullscreen", fullscreen);
+      document.body.classList.toggle("source-fullscreen-active", fullscreen);
+      document.body.classList.toggle("source-open", sourceOpen && !docked);
       if (appRoot) {
-        appRoot.classList.toggle("source-open", sourceOpen);
+        appRoot.classList.toggle("source-open", sourceOpen && !docked);
       }
       toggleSourceFullscreenBtn.textContent = state.sourcePanelFullscreen ? "Windowed" : "Fullscreen";
       toggleSourceFullscreenBtn.setAttribute("aria-pressed", state.sourcePanelFullscreen ? "true" : "false");
@@ -1856,6 +1858,11 @@ export function createSourceReader(deps: SourceReaderDependencies) {
     }
 
     return {
+      setSourceWorkspace: (enabled: boolean) => {
+        sourceCoverage.setWorkspaceMode(enabled);
+        applySourcePanelWindowState();
+      },
+      selectCoverageMetric: sourceCoverage.selectMetric,
       refreshCoverage: () => {
         sourceCoverage.sync();
         if (!currentSourceView || currentSourceView.renderMode === "plain") return;

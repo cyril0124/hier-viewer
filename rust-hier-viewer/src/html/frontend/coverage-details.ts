@@ -11,6 +11,7 @@ interface Dependencies {
   jumpToLine(line: number): void;
   exporter: CoverageExporter;
   onMetricChange(): void;
+  canJumpToSource?(path: string, line: number): boolean;
 }
 
 const LABELS = { condition: "Condition", branch: "Branch", toggle: "Toggle", assert: "Assert" } as const;
@@ -28,6 +29,7 @@ export function createCoverageDetails(deps: Dependencies) {
   const retry = document.getElementById("coverage-detail-retry") as HTMLButtonElement | null;
   const tabs = [...document.querySelectorAll<HTMLButtonElement>("[data-coverage-metric]")];
   let metric: CoverageMetric = "line";
+  let workspaceMode = false;
   let selection: CoverageSelection | null = null;
   let nodeId: number | null = null;
   let view: SourceView | null = null;
@@ -44,7 +46,7 @@ export function createCoverageDetails(deps: Dependencies) {
     const missingLabel = document.getElementById("coverage-detail-filter-label");
     if (missingLabel) missingLabel.textContent = metric === "assert" ? "Failures / no success" : "Uncovered only";
     const active = metric !== "line" && !!selection && !!view;
-    panel?.classList.toggle("coverage-detail-mode", active);
+    panel?.classList.toggle("coverage-detail-mode", active && !workspaceMode);
     if (container) container.hidden = !active;
     for (const tab of tabs) {
       const selected = tab.dataset.coverageMetric === metric;
@@ -55,6 +57,10 @@ export function createCoverageDetails(deps: Dependencies) {
     deps.onMetricChange();
   }
   function jump(line: number) {
+    if (workspaceMode) {
+      if (data && deps.canJumpToSource?.(data.filePath, line)) deps.jumpToLine(line);
+      return;
+    }
     metric = "line";
     request?.abort();
     visible();
@@ -184,6 +190,10 @@ export function createCoverageDetails(deps: Dependencies) {
           button.className = "coverage-line-jump";
           button.textContent = `Line ${line[1]}`;
           button.title = "View source line";
+          if (workspaceMode && !deps.canJumpToSource?.(data.filePath, Number(line[1]))) {
+            button.disabled = true;
+            button.title = "Source text must match the report before navigating.";
+          }
           button.addEventListener("click", () => jump(Number(line[1])));
           heading.appendChild(button);
         }
@@ -269,12 +279,13 @@ export function createCoverageDetails(deps: Dependencies) {
       }
     }
   }
+  function selectMetric(next: CoverageMetric) {
+    metric = next;
+    visible();
+    load();
+  }
   for (const tab of tabs) {
-    tab.addEventListener("click", () => {
-      metric = tab.dataset.coverageMetric as CoverageMetric;
-      visible();
-      load();
-    });
+    tab.addEventListener("click", () => selectMetric(tab.dataset.coverageMetric as CoverageMetric));
     tab.addEventListener("keydown", event => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       event.preventDefault();
@@ -287,6 +298,9 @@ export function createCoverageDetails(deps: Dependencies) {
   missingOnly?.addEventListener("change", render);
   retry?.addEventListener("click", load);
   return {
+    selectMetric,
+    setWorkspaceMode(enabled: boolean) { workspaceMode = enabled; visible(); },
+    refreshSourceLinks() { if (workspaceMode && data) render(); },
     isLine() {
       return metric === "line";
     },
