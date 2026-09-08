@@ -21,7 +21,7 @@ import {
   coverageBarHeight,
 } from "./chart-model.js";
 
-import { coverageColor, coverageCounts, coverageDetailsHtml, formatCoverage, COVERAGE_COLORS } from "./coverage-display.js";
+import { coverageColor, coverageCounts, coverageDetailsHtml, formatCoverage, coverageFilterControls } from "./coverage-display.js";
 
 const THREE_MODULE_URL = new URL("./viewer-three.module.js", window.location.href).href;
 
@@ -687,6 +687,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
       state.weightedVariableWeight,
       state.weightedNetWeight,
       state.coverage?.metric ?? "off",
+      state.coverage?.filterMask ?? 0,
       chartVisual!.clientWidth,
       chartVisual!.clientHeight,
     ]);
@@ -886,33 +887,37 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
     empty.className = "chart-empty";
     empty.textContent = message;
     chartVisual!.appendChild(empty);
-    chartLegend!.innerHTML =
-      '<div class="side-empty">Nothing to show.</div>';
+    chartLegend!.replaceChildren();
+    const key = coverageLegend();
+    if (key) chartLegend!.appendChild(key);
+    const messageElement = document.createElement("div");
+    messageElement.className = "side-empty";
+    messageElement.textContent = "Nothing to show.";
+    chartLegend!.appendChild(messageElement);
+  }
+
+  function coverageLegend(): HTMLElement | null {
+    const metric = state.coverage?.metric;
+    if (!metric || metric === "off") return null;
+
+    const key = document.createElement("div");
+    key.className = "chart-coverage-key";
+    key.setAttribute("aria-label", "Coverage legend");
+    const heading = document.createElement("div");
+    heading.className = "chart-coverage-key-title";
+    heading.textContent = `Subtree ${coverageLabel()}: ${formatCoverage(coverageCounts(state.coverage, state.currentRoot, metric))}`;
+    key.innerHTML = coverageFilterControls(state.coverage);
+    key.prepend(heading);
+    return key;
   }
 
   function renderLegend(chart: Chart): Map<number, HTMLElement> {
     chartLegend!.innerHTML = "";
     const legendMap = new Map<number, HTMLElement>();
     const fragment = document.createDocumentFragment();
+    const key = coverageLegend();
+    if (key) fragment.appendChild(key);
     const metric = state.coverage?.metric;
-    if (metric && metric !== "off") {
-      const key = document.createElement("div");
-      key.className = "chart-coverage-key";
-      key.setAttribute("aria-label", "Coverage legend");
-      const heading = document.createElement("div");
-      heading.className = "chart-coverage-key-title";
-      heading.textContent = `Subtree ${coverageLabel()}: ${formatCoverage(coverageCounts(state.coverage, state.currentRoot, metric))}`;
-      key.appendChild(heading);
-      const colors = [...COVERAGE_COLORS, "#899198"];
-      for (const [index, range] of ["0–49%", "50–79%", "80–94%", "95–100%", "No data"].entries()) {
-        const item = document.createElement("span");
-        const swatch = document.createElement("i");
-        swatch.style.backgroundColor = colors[index];
-        item.append(swatch, range);
-        key.appendChild(item);
-      }
-      fragment.appendChild(key);
-    }
     for (const entry of chart.entries) {
       const button = document.createElement("button");
       button.type = "button";

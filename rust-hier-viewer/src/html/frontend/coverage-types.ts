@@ -54,6 +54,7 @@ export interface CoverageDisplay {
   summary: CoverageSummary;
   mapping: CoverageMapping;
   metric: CoverageMetric | "off";
+  filterMask?: number;
   name: string;
   reportUrl?: string;
 }

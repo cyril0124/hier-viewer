@@ -2291,7 +2291,13 @@
 
     .chart-coverage-key { flex: 0 0 auto; padding: 8px 4px 10px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 10px; display: flex; gap: 5px 10px; flex-wrap: wrap; }
     .chart-coverage-key-title { flex-basis: 100%; color: var(--text); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
-    .chart-coverage-key > span { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+    .coverage-range-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+    .coverage-range-button { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 4px 7px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text); font: inherit; white-space: nowrap; cursor: pointer; }
+    .coverage-range-button:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
+    .coverage-range-button[aria-pressed="true"] { border-color: var(--text); background: color-mix(in srgb, var(--text) 12%, transparent); font-weight: 600; }
+    .coverage-range-button:focus-visible { outline: 2px solid #23866a; outline-offset: 1px; }
+    .coverage-range-button:disabled { opacity: .45; cursor: default; }
+    .chart-coverage-key > .coverage-range-button { font-size: 11px; }
     .chart-coverage-key i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
     .chart-legend-coverage { margin-top: 4px; font-size: 11px; color: var(--text); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
     .chart-detail-meta .coverage-detail-row { font-size: 11px; }

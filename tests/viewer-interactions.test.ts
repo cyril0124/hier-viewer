@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import type { CoverageDisplay } from '../rust-hier-viewer/src/html/frontend/coverage-types';
+import { coverageBucket } from '../rust-hier-viewer/src/html/frontend/coverage-display';
+import { collectLevelNodes } from '../rust-hier-viewer/src/html/frontend/chart-model';
 import { test } from 'vitest';
 import { createHierarchyRuntime } from '../rust-hier-viewer/src/html/frontend/hierarchy-core';
 import type { HierarchyModelNode, HierarchyState } from '../rust-hier-viewer/src/html/frontend/hierarchy-core';
@@ -60,6 +63,35 @@ for (const search of ['', '[']) {
     assert.equal(Boolean(context.state.searchError), Boolean(search));
   });
 }
+
+test('coverage buckets use exact boundaries, No data and intersection with text filters', () => {
+  for (const [covered, total, expected] of [[0, 100, 0], [499, 1000, 0], [50, 100, 1], [799, 1000, 1], [80, 100, 2], [949, 1000, 2], [95, 100, 3], [100, 100, 3], [0, 0, 4]]) {
+    assert.equal(coverageBucket({ covered, total, excluded: 0 }), expected);
+  }
+  assert.equal(coverageBucket(undefined), 4);
+  const context = hierarchy([{ id: 0, children: [1, 2, 3] }, { id: 1, children: [] }, { id: 2, children: [] }, { id: 3, children: [] }]);
+  const counts = [10, 90, 20];
+  context.state.coverage = {
+    metric: 'line', filterMask: 1,
+    mapping: { scopeByNode: new Int32Array([0, 1, 2, -1]) },
+    summary: { scopes: counts.map(covered => ({ metrics: { line: { covered, total: 100, excluded: 0 } } })) },
+  } as CoverageDisplay;
+  context.state.search = '';
+  context.buildMatches();
+  assert.deepEqual(context.state.matches, [0, 2]);
+  assert.deepEqual(collectLevelNodes(0, 1, { state: context.state, getNode: id => context.nodes[id] }), [2], 'Matching parent does not admit a child in another bucket');
+  context.state.search = 'hit-1';
+  context.buildMatches();
+  assert.deepEqual(context.state.matches, []);
+  context.state.search = '';
+  context.state.coverage.filterMask = (1 << 2) | (1 << 4);
+  context.buildMatches();
+  assert.deepEqual(context.state.matches, [1, 3]);
+  context.state.coverage.metric = 'off';
+  context.buildMatches();
+  assert.deepEqual(context.state.matches, []);
+  assert.deepEqual(collectLevelNodes(0, 1, { state: context.state, getNode: id => context.nodes[id] }), [1, 2, 3]);
+});
 
 test('broad filters traverse ancestors linearly and retain the hidden forest root', () => {
   const context = hierarchy(chain(30000));

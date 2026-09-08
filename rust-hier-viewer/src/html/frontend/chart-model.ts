@@ -1,7 +1,8 @@
+import { coverageFilterActive } from "./coverage-display.js";
 import type { ChartFilterState, ChartTraversal } from "./chart-types.js";
 
 export function filterActive(state: ChartFilterState): boolean {
-  return (state.search || "").trim().length > 0;
+  return (state.search || "").trim().length > 0 || coverageFilterActive(state.coverage);
 }
 
 export function isBranchIncluded(
@@ -11,6 +12,11 @@ export function isBranchIncluded(
 ): boolean {
   if (!filterActive(state)) {
     return true;
+  }
+  // Coverage belongs to each individual instance. A matching parent's score
+  // must not qualify its children, whose scores may fall in different buckets.
+  if (coverageFilterActive(state.coverage)) {
+    return state.matchIds.has(nodeId) || state.matchSubtreeIds.has(nodeId);
   }
   return matchedAncestor || state.matchIds.has(nodeId) || state.matchSubtreeIds.has(nodeId);
 }
@@ -47,7 +53,9 @@ export function collectLevelNodes(
     // Once a branch reaches the requested depth, or it terminates early,
     // that node becomes the frontier entry shown by chart views.
     if (depth >= relativeLevel || !node.children.length) {
-      result.push(nodeId);
+      if (!coverageFilterActive(state.coverage) || state.matchIds.has(nodeId)) {
+        result.push(nodeId);
+      }
       continue;
     }
     // Push in reverse so the frontier retains left-to-right DFS order.

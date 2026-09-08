@@ -17,7 +17,7 @@ import type {
   AnalysisBucketStyle,
 } from "./main-types.js";
 import type { ChartController } from "./chart-types.js";
-import { coverageColor, coverageDetailsHtml } from "./coverage-display.js";
+import { coverageColor, coverageDetailsHtml, coverageFilterActive } from "./coverage-display.js";
 import {
   mixHexColors,
   hexToRgba,
@@ -1132,14 +1132,14 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
     }
 
     function isMatch(nodeId: number) {
-      return !!state.search && state.matchIds.has(nodeId);
+      return (!!state.search || coverageFilterActive(state.coverage)) && state.matchIds.has(nodeId);
     }
 
     function shouldDim(nodeId: number) {
       const filterDimmed = (
-        state.search &&
+        (state.search || coverageFilterActive(state.coverage)) &&
         !state.searchError &&
-        state.matches.length > 0 &&
+        (state.matches.length > 0 || coverageFilterActive(state.coverage)) &&
         !state.matchSubtreeIds.has(nodeId)
       );
       const analysisDimmed = analysisActive() && analysisNodeHighlightState(nodeId) === "none";
@@ -1148,7 +1148,7 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
 
     function hasMatchedDescendant(nodeId: number) {
       return (
-        state.search &&
+        (state.search || coverageFilterActive(state.coverage)) &&
         !state.searchError &&
         state.matches.length > 0 &&
         state.matchSubtreeIds.has(nodeId) &&

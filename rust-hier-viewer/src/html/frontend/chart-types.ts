@@ -31,7 +31,7 @@ export interface Chart {
 export type ChartNode = HierarchyNode;
 export type ChartMode = ViewerState["chartMode"];
 export type AnalysisMode = Exclude<ViewerState["analysisMode"], "none">;
-export type ChartFilterState = Pick<ViewerState, "search" | "matchIds" | "matchSubtreeIds">;
+export type ChartFilterState = Pick<ViewerState, "search" | "matchIds" | "matchSubtreeIds" | "coverage">;
 
 export interface ChartTraversal {
   state: ChartFilterState;

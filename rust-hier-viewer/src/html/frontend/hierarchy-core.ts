@@ -1,3 +1,4 @@
+import { coverageFilterActive, coverageMatchesFilter } from "./coverage-display.js";
 import type { AnalysisDefinition, HierarchyNode, ViewerState } from "./types";
 
 export type HierarchyModelNode = Pick<HierarchyNode,
@@ -29,6 +30,7 @@ export type HierarchyState = Pick<ViewerState,
   | "filterScope"
   | "filterMode"
   | "search"
+  | "coverage"
   | "searchError"
   | "matches"
   | "matchIds"
@@ -453,7 +455,8 @@ export function createHierarchyRuntime<N extends HierarchyModelNode>(
       state.matchLines = [];
       state.treePanelDirty = true;
       state.matchPanelDirty = true;
-      if (!raw) {
+      const coverageActive = coverageFilterActive(state.coverage);
+      if (!raw && !coverageActive) {
         return;
       }
 
@@ -467,12 +470,14 @@ export function createHierarchyRuntime<N extends HierarchyModelNode>(
       }
 
       state.matches = nodes
-        .filter((node) => matchers.some((matcher) => matcher(node)))
+        .filter(node => (!coverageActive || node.id !== 0 || state.homeRoot === 0)
+          && (!raw || matchers.some(matcher => matcher(node)))
+          && coverageMatchesFilter(state.coverage, node.id))
         .map((node) => node.id);
       state.matchIds = new Set(state.matches);
       state.matchLines = state.matches.map((id) => {
         const node = getNode(id);
-        return `${node.path} <${node.module}>`;
+        return `${node.path || node.name} <${node.module}>`;
       });
       const visible = new Set<number>();
       const subtree = new Set<number>();

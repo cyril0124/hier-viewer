@@ -17,7 +17,7 @@ import { createSourceReader } from "./source-reader.js";
 import type { SourceReaderDependencies } from "./source-reader.js";
 import { createTreemapRuntime } from "./treemap.js";
 import type { createCoverageImport } from "./coverage-import.js";
-import { disposeCoverage } from "./coverage-display.js";
+import { disposeCoverage, coverageFilterActive, coverageFilterControls } from "./coverage-display.js";
 import type { CoverageSelection } from "./coverage-types.js";
 
 import { decodeCoreBundle, decodeAnalysisBundle } from "./binary.js";
@@ -330,6 +330,23 @@ declare global {
     let activeCoverage: CoverageSelection | null = null;
     let coverageImport: ReturnType<typeof createCoverageImport> | null = null;
     let coverageLoadError = "";
+    const coverageRangeControls = document.getElementById("coverage-range-controls");
+    let coverageRangeMask = -1;
+
+    document.addEventListener("click", event => {
+      const button = (event.target as Element).closest<HTMLButtonElement>("[data-coverage-bucket], [data-coverage-filter-clear]");
+      if (!button?.closest(".coverage-legend, .chart-coverage-key") || !state.coverage || state.coverage.metric === "off") return;
+      if (button.hasAttribute("data-coverage-filter-clear")) {
+        state.coverage.filterMask = 0;
+      } else {
+        const bucket = Number(button.dataset.coverageBucket);
+        if (!Number.isInteger(bucket) || bucket < 0 || bucket > 4) return;
+        state.coverage.filterMask = (state.coverage.filterMask ?? 0) ^ (1 << bucket);
+      }
+      buildMatches();
+      state.chartPanelDirty = true;
+      draw();
+    });
     const {
       getNode,
       getAnalysisDefinitionMap,
@@ -621,6 +638,8 @@ declare global {
     function syncAnalysisControls() {
       if (state.analysisMode !== "none" && state.coverage) {
         state.coverage.metric = "off";
+        state.coverage.filterMask = 0;
+        buildMatches();
         coverageImport?.disableColor();
       }
       const usesSignalPattern = state.analysisMode === "count" || state.analysisMode === "ratio";
@@ -1066,8 +1085,8 @@ declare global {
     function updateStatus() {
       const root = getNode(state.currentRoot);
       const metricValue = formatMetricValue(weightForNode(state.currentRoot));
-      const matchText = state.search
-        ? `, <strong>${state.matches.length}</strong> search matches`
+      const matchText = state.search || coverageFilterActive(state.coverage)
+        ? `, <strong>${state.matches.length}</strong> ${coverageFilterActive(state.coverage) ? "coverage/filter" : "search"} matches`
         : "";
       const analysisText = analysisActive()
         ? ` · ${analysisLabel()}: <strong>${formatMetricValue(analysisValueForNode(state.currentRoot))}</strong>`
@@ -1085,6 +1104,11 @@ declare global {
         `<strong>${escapeHtml(root.path || root.name || "(root)")}</strong> · ${root.children.length} children · ` +
         `${metricLabel()}: <strong>${metricValue}</strong> · <strong>${layoutModeLabel()}</strong> · depth <strong>${visibleDepthLabel()}</strong> · ` +
         `zoom <strong>${zoomLabel}</strong>${analysisText}${selectText}${matchText}`;
+      const mask = state.coverage?.filterMask ?? 0;
+      if (coverageRangeControls && mask !== coverageRangeMask) {
+        coverageRangeControls.innerHTML = coverageFilterControls(state.coverage);
+        coverageRangeMask = mask;
+      }
       const statusError = state.searchError || state.analysisError || coverageLoadError;
       statusRight.textContent = statusError;
       statusRight.classList.toggle("error", Boolean(statusError));
@@ -1403,7 +1427,7 @@ declare global {
 
       if (state.searchError) {
         matchPanelSubtitle.textContent = state.searchError;
-      } else if (!state.search.trim()) {
+      } else if (!state.search.trim() && !coverageFilterActive(state.coverage)) {
         matchPanelSubtitle.textContent = `Scope: ${filterScopeSelect.options[filterScopeSelect.selectedIndex].text}`;
       } else {
         matchPanelSubtitle.textContent = `${state.matches.length} matches · ${filterScopeSelect.options[filterScopeSelect.selectedIndex].text}`;
@@ -1414,7 +1438,7 @@ declare global {
         matchPanelBody.innerHTML = `<div class="side-empty">${escapeHtml(state.searchError)}</div>`;
         return;
       }
-      if (!state.search.trim()) {
+      if (!state.search.trim() && !coverageFilterActive(state.coverage)) {
         matchPanelBody.innerHTML = '<div class="side-empty">No active filter. Example: `foo ; wc:Top.u_* ; re:^Top\\\\.dbg`</div>';
         return;
       }
@@ -1431,7 +1455,7 @@ declare global {
         button.className = "match-item";
         const path = document.createElement("div");
         path.className = "match-path";
-        path.textContent = node.path;
+        path.textContent = node.path || node.name;
         const module = document.createElement("div");
         module.className = "match-module";
         module.textContent = `<${node.module}>`;
@@ -1479,6 +1503,7 @@ declare global {
         disposeCoverage(activeCoverage);
         activeCoverage = selection;
         state.coverage = selection.display;
+        buildMatches();
         state.chartMode = state.mainViewMode === "three3d" ? "coverage" : "weighted_bits";
         state.chartPanelDirty = true;
         state.analysisMode = "none";
@@ -1493,6 +1518,7 @@ declare global {
         disposeCoverage(activeCoverage);
         activeCoverage = null;
         delete state.coverage;
+        buildMatches();
         state.chartPanelDirty = true;
         refreshCoverage();
         updateHover(state.hoverId, state.hoverAreaKind, { force: true });
@@ -1501,6 +1527,8 @@ declare global {
       onMetricChange: metric => {
         if (!state.coverage) return;
         state.coverage.metric = metric;
+        if (metric === "off") state.coverage.filterMask = 0;
+        buildMatches();
         state.chartPanelDirty = true;
         if (metric !== "off") {
           state.chartMode = state.mainViewMode === "three3d" ? "coverage" : "weighted_bits";

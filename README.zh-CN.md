@@ -150,7 +150,7 @@ VDB 转换需要 Linux、`PATH` 中的 `urg` 和相应 Synopsys 许可证。保�
 1. 按[快速开始](#快速开始)生成并打开层级站点。已有 `out` 站点时，运行 `hier-viewer serve out`，访问终端输出的 HTTP URL。
 2. 点击 **Import coverage**，选择 **URG report files**，通过 **Choose folder** 选中 `urgReport` 目录。
 3. 将 **Coverage root** 设为报告中的完整实例路径，例如 `tb_top.u_dut`，并选择对应的 **Target hierarchy**。点击 **Check mapping**，检查未匹配实例后点击 **Apply**。
-4. 选择 **Coverage** 指标查看层级着色。打开实例的 **Module Source**，查看 Line 逐行覆盖率，或切换 Condition、Branch、Toggle 和可选的 Assert 明细页签。
+4. 选择 **Coverage** 指标查看层级着色。点击图例区间可过滤实例，支持多选；**Show all** 清除区间过滤。打开实例的 **Module Source**，查看 Line 逐行覆盖率，或切换 Condition、Branch、Toggle 和可选的 Assert 明细页签。
 
 仅选择 `session.xml` 时只能查看层级汇总；源码和表格明细需要报告中的 HTML 文件。矩形图和 2D 饼图保留结构面积，3D 默认使用固定 0–100% 覆盖率柱高，并按覆盖率从高到低排序。浏览器选择的文件在本地读取，不会上传。
 

@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `install.sh` one-click installer. Inside a repository checkout it builds and installs the current directory with `cargo install --path . --locked`; outside a checkout (e.g. piped from curl) it downloads the latest prebuilt release binary into `~/.local/bin` (or `--to DIR`), resolving the latest tag via the `releases/latest` redirect to avoid GitHub API rate limits. `--source` forces a cargo build (`--path` when a checkout is present, `--git` otherwise), `--prebuilt` forces the release download, `--tag` pins a release for downloads and `--git` builds, and prebuilt failures fall back to a cargo build.
 
+- Coverage legend ranges are clickable multiselect filters, including No data, shared by the treemap and 2D/3D charts. Range selection intersects with text search, updates Filter matches, and can be cleared with Show all.
+
 - `--coverage-vdb` accepts VDB directories directly in CLI generation and reuses URG reports under the output cache when inputs and tool metadata are unchanged. `--rebuild-coverage` forces conversion; `--coverage-timeout` controls the execution limit. Concurrent callers share completed reports, and failed or cancelled conversions preserve valid caches.
 
 - `--coverage-report` preloads a URG report during CLI generation. The browser selects a unique hierarchy match automatically; optional `--coverage-root` resolves ambiguous roots, and diagnostics list paths when no unique match exists.
