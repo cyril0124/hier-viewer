@@ -153,6 +153,14 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
     } = deps;
 
     const analysisHatchPatternCache = new Map<string, CanvasPattern | null>();
+    let interactionFrame: number | null = null;
+    let zoomStatusDirty = false;
+    let worldAreas: TreemapArea[] | null = null;
+    let layoutWidth = 0;
+    let layoutHeight = 0;
+    let layoutZoom = 0;
+    let projectedViewX = NaN;
+    let projectedViewY = NaN;
 
     function weightedBits(variableBits: number, netBits: number) {
       return (
@@ -642,21 +650,6 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     }
 
-    function viewportSize() {
-      return {
-        width: canvas.clientWidth,
-        height: canvas.clientHeight
-      };
-    }
-
-    function virtualSize() {
-      const { width, height } = viewportSize();
-      return {
-        width: width * state.zoom,
-        height: height * state.zoom
-      };
-    }
-
     function clampView() {
       return;
     }
@@ -683,7 +676,8 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
       state.viewY = (state.viewY + anchorY) * (nextZoom / oldZoom) - anchorY;
       state.zoom = nextZoom;
       savePersistedState();
-      draw();
+      zoomStatusDirty = true;
+      requestInteractionPaint();
     }
 
     function setRootAndReset(rootId: number) {
@@ -714,9 +708,7 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
         clearUiAnnotationHoverTargetWithin(hoverCard);
       }
       savePersistedState();
-      if (!preserveSelection) {
-        draw();
-      }
+      draw();
     }
 
     function syncDepthControl() {
@@ -1555,32 +1547,100 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
       ctx.stroke();
     }
 
+    // External callers may mutate any content state before drawing, including sets
+    // and analysis arrays in place. A full draw always invalidates cached geometry.
     function draw() {
+      if (interactionFrame !== null) {
+        window.cancelAnimationFrame(interactionFrame);
+        interactionFrame = null;
+      }
+      zoomStatusDirty = false;
+      worldAreas = null;
       applyMainViewMode();
       applyZenModeState();
-      resizeCanvas();
-      const width = canvas.clientWidth;
-      const height = canvas.clientHeight;
       syncDepthControl();
       updateAnalysisVisibleExtents();
       updateAnalysisLegendVisibleSubtree();
       renderTreemapAnalysisLegend();
-      const virtual = virtualSize();
-      const worldAreas = createAreas(state.currentRoot, virtual.width, virtual.height);
-      const selectedHiddenMarkerIds = hiddenSelectedMarkerIds(worldAreas);
-      state.areas = worldAreas
-        .map((area) => ({
-          nodeId: area.nodeId,
-          kind: area.kind,
-          level: area.level,
-          rect: {
-            x: area.rect.x - state.viewX,
-            y: area.rect.y - state.viewY,
-            w: area.rect.w,
-            h: area.rect.h
-          }
-        }))
-        .filter((area) => area.level === 0 || rectIntersectsViewport(area.rect, width, height));
+      if (state.mainViewMode === "treemap") {
+        paintTreemap();
+      } else {
+        state.areas = [];
+      }
+
+      buildBreadcrumbs(state.currentRoot);
+      updateStatus();
+      renderTreePanel();
+      renderMatchPanel();
+      if (deps.chartController) {
+        deps.chartController.render();
+      }
+      applyHoverCardPosition();
+      homeBtn.disabled = state.currentRoot === state.homeRoot;
+      upBtn.disabled = visibleParent(state.currentRoot) === null;
+      scheduleUiAnnotations();
+    }
+
+    // Pan and hover do not change content. Wheel zoom changes pixel-sized layout
+    // margins and depth cutoffs, so geometry is rebuilt once at the latest zoom.
+    function requestInteractionPaint() {
+      if (interactionFrame !== null || state.mainViewMode !== "treemap") {
+        return;
+      }
+      interactionFrame = window.requestAnimationFrame(() => {
+        interactionFrame = null;
+        if (state.mainViewMode !== "treemap") {
+          return;
+        }
+        paintTreemap();
+        if (zoomStatusDirty) {
+          zoomStatusDirty = false;
+          updateStatus();
+        }
+        applyHoverCardPosition();
+      });
+    }
+
+    // Hit testing also calls this before the next animation frame. Keep projected
+    // areas current without forcing a canvas paint or rebuilding unchanged layout.
+    function updateAreaGeometry(width = canvas.clientWidth, height = canvas.clientHeight) {
+      if (state.mainViewMode !== "treemap") {
+        return;
+      }
+      if (!worldAreas || layoutWidth !== width || layoutHeight !== height || layoutZoom !== state.zoom) {
+        worldAreas = createAreas(state.currentRoot, width * state.zoom, height * state.zoom);
+        layoutWidth = width;
+        layoutHeight = height;
+        layoutZoom = state.zoom;
+        projectedViewX = NaN;
+        projectedViewY = NaN;
+      }
+      if (projectedViewX === state.viewX && projectedViewY === state.viewY) {
+        return;
+      }
+      projectedViewX = state.viewX;
+      projectedViewY = state.viewY;
+      const visibleAreas: TreemapArea[] = [];
+      for (const area of worldAreas) {
+        const rect = {
+          x: area.rect.x - state.viewX,
+          y: area.rect.y - state.viewY,
+          w: area.rect.w,
+          h: area.rect.h
+        };
+        if (area.level === 0 || rectIntersectsViewport(rect, width, height)) {
+          visibleAreas.push({ nodeId: area.nodeId, kind: area.kind, level: area.level, rect });
+        }
+      }
+      state.areas = visibleAreas;
+    }
+
+    function paintTreemap() {
+      resizeCanvas();
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      updateAreaGeometry(width, height);
+      const selectedHiddenMarkerIds = hiddenSelectedMarkerIds(worldAreas!);
 
       ctx.clearRect(0, 0, width, height);
       const rootCoverageColor = coverageColor(state.coverage, state.currentRoot);
@@ -1756,21 +1816,11 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
         if (area.level === 0) continue;
         drawLeafBadge(area);
       }
-
-      buildBreadcrumbs(state.currentRoot);
-      updateStatus();
-      renderTreePanel();
-      renderMatchPanel();
-      if (deps.chartController) {
-        deps.chartController.render();
-      }
-      applyHoverCardPosition();
-      homeBtn.disabled = state.currentRoot === state.homeRoot;
-      upBtn.disabled = visibleParent(state.currentRoot) === null;
-      scheduleUiAnnotations();
     }
 
     function hitTestArea(clientX: number, clientY: number) {
+      if (state.mainViewMode !== "treemap") return null;
+      updateAreaGeometry();
       const rect = canvas.getBoundingClientRect();
       const x = clientX - rect.left;
       const y = clientY - rect.top;
@@ -1786,6 +1836,8 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
     }
 
     function hitTestTreemapCollapseToggle(clientX: number, clientY: number) {
+      if (state.mainViewMode !== "treemap") return null;
+      updateAreaGeometry();
       const rect = canvas.getBoundingClientRect();
       const x = clientX - rect.left;
       const y = clientY - rect.top;
@@ -1944,6 +1996,7 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
       }
       state.hoverId = nodeId;
       state.hoverAreaKind = areaKind;
+      requestInteractionPaint();
       if (nodeId === null || nodeId === undefined) {
         state.hoverCardActive = false;
         hoverActions.classList.add("hidden");
@@ -2037,7 +2090,6 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
         hoverCard.classList.remove("hidden");
         applyHoverCardPosition();
       }
-      draw();
     }
 
     function cancelScheduledHoverUpdate() {
@@ -2047,12 +2099,12 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
       }
     }
 
-    function scheduleHoverUpdate(area: TreemapArea | null, immediate = false) {
+    function scheduleHoverUpdate(area: TreemapArea | null) {
       cancelScheduledHoverUpdate();
-      if (area) {
-        updateHover(area.nodeId, area.kind);
-      } else {
-        updateHover(null);
+      const nodeId = area ? area.nodeId : null;
+      const areaKind = area ? area.kind : "node";
+      if (state.hoverId !== nodeId || state.hoverAreaKind !== areaKind) {
+        updateHover(nodeId, areaKind);
       }
     }
 
@@ -2158,7 +2210,7 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
           state.viewX -= dx;
           state.viewY -= dy;
           clampView();
-          draw();
+          requestInteractionPaint();
           return;
         }
         const toggleArea = hitTestTreemapCollapseToggle(event.clientX, event.clientY);
@@ -2169,22 +2221,16 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
           hideTreemapToggleTooltip();
         }
         canvas.style.cursor = toggleArea ? "pointer" : "default";
+        if (toggleChanged) {
+          requestInteractionPaint();
+        }
         if (hasLockedSelection()) {
-          if (toggleChanged) {
-            draw();
-          }
           return;
         }
         if (state.hoverCardActive || isPointInsideElement(hoverCard, event.clientX, event.clientY)) {
-          if (toggleChanged) {
-            draw();
-          }
           return;
         }
         if (isPointInsideHoverBridge(event.clientX, event.clientY)) {
-          if (toggleChanged) {
-            draw();
-          }
           return;
         }
         scheduleHoverUpdate(hitTestArea(event.clientX, event.clientY));
@@ -2194,32 +2240,24 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
         const toggleChanged = setHoveredTreemapToggle(null);
         hideTreemapToggleTooltip();
         canvas.style.cursor = "default";
+        if (toggleChanged) {
+          requestInteractionPaint();
+        }
         if (
           isHoverCardVisible() &&
           event.relatedTarget &&
           hoverCard.contains(event.relatedTarget as Node | null)
         ) {
-          if (toggleChanged) {
-            draw();
-          }
           return;
         }
         if (hasLockedSelection()) {
-          if (toggleChanged) {
-            draw();
-          }
           return;
         }
         if (!state.isDragging) {
           if (isPointInsideHoverBridge(event.clientX, event.clientY)) {
-            if (toggleChanged) {
-              draw();
-            }
             return;
           }
           scheduleHoverUpdate(null);
-        } else if (toggleChanged) {
-          draw();
         }
       });
 

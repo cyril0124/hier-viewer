@@ -40,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Large 2D pie charts use a Canvas cache above 2,000 sectors and retain per-instance picking, labels, and zoom refinement. Smaller charts reuse SVG slices while panning and zooming; chart legends render visible rows and support Arrow keys, Home, and End to reach every instance.
+- 3D charts batch bars and pedestals into shared GPU draws, coalesce pointer redraws, and create at most 80 readable instance labels plus the coverage axis. Hover details remain available for every instance, including zero-coverage and missing-data pedestals.
+- Treemap pan and hover reuse layout geometry and skip unrelated control rebuilding; chart views skip hidden treemap layout and painting.
+
 - The hier-viewer launch-script skill includes CLI coverage preloading, optional automatic root matching, VDB report preparation, and browser verification of preloaded coverage.
 - English and Chinese READMEs include a Coverage navigation link and command-line preload, browser import, VDB conversion, and selected-coverage export instructions.
 - Coverage import code loads on demand in `viewer-coverage.js`; original report pages are sandboxed, and coverage data stays separate from cached source text and structural statistics.

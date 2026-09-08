@@ -8,9 +8,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "vite build --mode app && vite build --mode chart && vite build --mode coverage",
-    "test": "vitest run --exclude tests/source-reader-browser.test.ts",
+    "test": "vitest run --exclude tests/source-reader-browser.test.ts --exclude tests/chart-rendering-browser.test.ts",
     "check:generated": "node scripts/check-generated.mjs",
-    "test:browser": "vitest run tests/source-reader-browser.test.ts --testTimeout 60000 --hookTimeout 60000",
+    "test:browser": "vitest run tests/source-reader-browser.test.ts tests/chart-rendering-browser.test.ts --testTimeout 60000 --hookTimeout 60000",
     "test:ui": "node tests/run-viewer-ui.mjs"
   },
   "devDependencies": {

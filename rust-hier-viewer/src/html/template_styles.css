@@ -2300,6 +2300,12 @@
     .chart-coverage-key > .coverage-range-button { font-size: 11px; }
     .chart-coverage-key i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
     .chart-legend-coverage { margin-top: 4px; font-size: 11px; color: var(--text); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+    .chart-legend-virtual .chart-legend-coverage {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .chart-detail-meta .coverage-detail-row { font-size: 11px; }
 
     .chart-legend-item {

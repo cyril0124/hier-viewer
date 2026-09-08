@@ -21,6 +21,8 @@ import {
   coverageBarHeight,
 } from "./chart-model.js";
 
+import { createCanvasPie } from "./chart-pie.js";
+import { pickBarGrid } from "./chart-picking.js";
 import { coverageColor, coverageCounts, coverageDetailsHtml, formatCoverage, coverageFilterControls } from "./coverage-display.js";
 
 const THREE_MODULE_URL = new URL("./viewer-three.module.js", window.location.href).href;
@@ -116,7 +118,6 @@ function truncateLabel(text: string, maxChars: number): string {
 }
 
 type THREE = typeof import("three");
-type THREEMesh = InstanceType<THREE["Mesh"]>;
 type THREESprite = InstanceType<THREE["Sprite"]>;
 
 function makeLabelTexture(
@@ -294,7 +295,14 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
   let threeLoadPromise: Promise<THREE> | null = null;
   let threeContext: ThreeContext | null = null;
   let hoveredSliceId: number | null = null;
-  let pieHoverBindings: PieHoverBinding[] | null = null;
+  let pieHoverBindings: Map<number, PieHoverBinding> | null = null;
+  let activePieBinding: PieHoverBinding | null = null;
+  let activeLegendElement: HTMLElement | null = null;
+  let legendElements = new Map<number, HTMLElement>();
+  let disposeLegend: (() => void) | null = null;
+  let refreshPieView: (() => void) | null = null;
+  let pieFrame = 0;
+  let canvasPie: ReturnType<typeof createCanvasPie> | null = null;
   let pieViewState: PieViewState | null = null;
   let lastPieDataKey = "";
   let threeViewState: ThreeViewState | null = null;
@@ -347,6 +355,9 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
 
   function clearPieHoverBindings(): void {
     pieHoverBindings = null;
+    activePieBinding = null;
+    activeLegendElement = null;
+    refreshPieView = null;
   }
 
   function pieDataKey(): string {
@@ -379,8 +390,9 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
       lastClientY: 0,
       suppressClick: false,
     };
-    pieViewState = view;
-    return view;
+    if (pieViewState) Object.assign(pieViewState, view);
+    else pieViewState = view;
+    return pieViewState;
   }
 
   function ensurePieView(width: number, height: number): PieViewState {
@@ -473,6 +485,11 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
   }
 
   function clearVisual(): void {
+    canvasPie?.dispose();
+    canvasPie = null;
+    cancelAnimationFrame(pieFrame);
+    pieFrame = 0;
+    clearPieHoverBindings();
     chartVisual!.replaceChildren();
   }
 
@@ -655,18 +672,27 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
   }
 
   function applyPieHoverState(): void {
+    canvasPie?.hover(hoveredSliceId);
+    const nextLegend = hoveredSliceId === null ? null : legendElements.get(hoveredSliceId) ?? null;
+    if (activeLegendElement !== nextLegend) {
+      activeLegendElement?.classList.remove("active");
+      nextLegend?.classList.add("active");
+      activeLegendElement = nextLegend;
+    }
     if (!pieHoverBindings) {
       return;
     }
-    for (const binding of pieHoverBindings) {
-      const active = hoveredSliceId === binding.id;
+    const next = hoveredSliceId === null ? null : pieHoverBindings.get(hoveredSliceId) ?? null;
+    if (next === activePieBinding) return;
+    for (const binding of [activePieBinding, next]) {
+      if (!binding) continue;
+      const active = binding === next;
       binding.slice.classList.toggle("active", active);
       binding.slice.setAttribute("stroke-width", active ? "2.5" : "1.25");
       binding.slice.style.transform = binding.transform(active);
-      if (binding.legend) {
-        binding.legend.classList.toggle("active", active);
-      }
+      legendElements.get(binding.id)?.classList.toggle("active", active);
     }
+    activePieBinding = next;
   }
 
   function currentSignature(): string {
@@ -880,6 +906,9 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
   }
 
   function renderEmpty(message: string): void {
+    disposeLegend?.();
+    disposeLegend = null;
+    legendElements.clear();
     disposeThreeContext();
     clearVisual();
     clearNodeDetails();
@@ -912,13 +941,16 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
   }
 
   function renderLegend(chart: Chart): Map<number, HTMLElement> {
+    disposeLegend?.();
+    disposeLegend = null;
     chartLegend!.innerHTML = "";
     const legendMap = new Map<number, HTMLElement>();
+    legendElements = legendMap;
     const fragment = document.createDocumentFragment();
     const key = coverageLegend();
     if (key) fragment.appendChild(key);
     const metric = state.coverage?.metric;
-    for (const entry of chart.entries) {
+    const createRow = (entry: ChartEntry) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "chart-legend-item";
@@ -974,9 +1006,70 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
       });
       button.classList.toggle("active", hoveredSliceId === entry.id);
       legendMap.set(entry.id, button);
-      fragment.appendChild(button);
+      return button;
+    };
+    if (chart.entries.length <= 200) {
+      for (const entry of chart.entries) fragment.appendChild(createRow(entry));
+      chartLegend!.appendChild(fragment);
+      return legendMap;
     }
+
+    // Keep the complete scroll range without laying out thousands of DOM rows.
+    const rowHeight = metric && metric !== "off" ? 82 : 60;
+    const rows = document.createElement("div");
+    rows.className = "chart-legend-virtual";
+    rows.style.cssText = `position:relative;flex:0 0 auto;height:${chart.entries.length * rowHeight}px`;
+    fragment.appendChild(rows);
     chartLegend!.appendChild(fragment);
+    const rowsTop = rows.getBoundingClientRect().top - chartLegend!.getBoundingClientRect().top + chartLegend!.scrollTop - chartLegend!.clientTop;
+    let firstRow = -1;
+    let lastRow = -1;
+    let frame = 0;
+    const paintRows = () => {
+      frame = 0;
+      const top = Math.max(0, chartLegend!.scrollTop - rowsTop);
+      const first = Math.max(0, Math.floor(top / rowHeight) - 4);
+      const last = Math.min(chart.entries.length, Math.ceil((top + chartLegend!.clientHeight) / rowHeight) + 4);
+      if (first === firstRow && last === lastRow) return;
+      firstRow = first;
+      lastRow = last;
+      const focusedIndex = (document.activeElement as HTMLElement | null)?.dataset.chartIndex;
+      legendMap.clear();
+      const visible = document.createDocumentFragment();
+      for (let index = first; index < last; index++) {
+        const row = createRow(chart.entries[index]);
+        row.dataset.chartIndex = String(index);
+        row.style.cssText += `;position:absolute;top:${index * rowHeight}px;height:${rowHeight - 2}px;box-sizing:border-box`;
+        visible.appendChild(row);
+      }
+      rows.replaceChildren(visible);
+      if (focusedIndex !== undefined) {
+        rows.querySelector<HTMLElement>(`[data-chart-index="${focusedIndex}"]`)?.focus({ preventScroll: true });
+      }
+    };
+    const scroll = () => { frame ||= requestAnimationFrame(paintRows); };
+    const keydown = (event: KeyboardEvent) => {
+      const index = Number((event.target as HTMLElement).closest<HTMLElement>("[data-chart-index]")?.dataset.chartIndex);
+      if (!Number.isInteger(index)) return;
+      let next: number;
+      if (event.key === "ArrowDown") next = Math.min(chart.entries.length - 1, index + 1);
+      else if (event.key === "ArrowUp") next = Math.max(0, index - 1);
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = chart.entries.length - 1;
+      else return;
+      event.preventDefault();
+      chartLegend!.scrollTop = rowsTop + next * rowHeight;
+      paintRows();
+      legendMap.get(chart.entries[next].id)?.focus({ preventScroll: true });
+    };
+    chartLegend!.addEventListener("scroll", scroll, { passive: true });
+    rows.addEventListener("keydown", keydown);
+    disposeLegend = () => {
+      cancelAnimationFrame(frame);
+      chartLegend!.removeEventListener("scroll", scroll);
+      rows.removeEventListener("keydown", keydown);
+    };
+    paintRows();
     return legendMap;
   }
 
@@ -997,7 +1090,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
   }
 
   function appendSliceLabel(
-    svg: SVGSVGElement,
+    svg: SVGElement,
     entry: ChartEntry,
     startAngle: number,
     endAngle: number,
@@ -1048,9 +1141,35 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
     disposeThreeContext();
     clearVisual();
     clearPieHoverBindings();
-    const width = Math.max(560, chartVisual!.clientWidth || 560);
-    const height = Math.max(360, chartVisual!.clientHeight || 360);
+    const largeChart = chart.entries.length > 2000;
+    const width = Math.max(largeChart ? 1 : 560, chartVisual!.clientWidth);
+    const height = Math.max(largeChart ? 1 : 360, chartVisual!.clientHeight);
     const pieView = ensurePieView(width, height);
+    if (largeChart) {
+      renderLegend(chart);
+      const theme = api.currentThemeVisuals();
+      canvasPie = createCanvasPie({
+        host: chartVisual!, entries: chart.entries, view: pieView,
+        title: chart.root.name || "(root)",
+        subtitle: `${valueDisplay({ value: chart.total }, chart)} ${totalCaption(chart)}`,
+        textColor: theme.text, mutedColor: theme.textSoft,
+        clampView: clampPieView,
+        onHover(entry) {
+          if (hoveredSliceId === (entry?.id ?? null)) return;
+          if (hoveredSliceId !== null) legendElements.get(hoveredSliceId)?.classList.remove("active");
+          hoveredSliceId = entry?.id ?? null;
+          if (entry) {
+            legendElements.get(entry.id)?.classList.add("active");
+            showNodeDetails(entry, chart);
+          } else clearNodeDetails();
+          applyPieHoverState();
+        },
+        onSelect: entry => api.focusNodeInMainView(entry.id),
+        onViewChange: () => api.requestDraw(),
+      });
+      refreshPieView = canvasPie.refresh;
+      return;
+    }
     const zoomFactor = currentPieZoom();
     const svg = svgNode("svg");
     svg.classList.add("chart-svg");
@@ -1084,8 +1203,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
         pieView.w = nextW;
         pieView.h = nextH;
         clampPieView();
-        invalidate();
-        renderChart(true);
+        refreshPieView?.();
       },
       { passive: false }
     );
@@ -1118,11 +1236,11 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
       pieView.lastClientX = event.clientX;
       pieView.lastClientY = event.clientY;
       clampPieView();
-      invalidate();
-      renderChart(true);
+      refreshPieView?.();
     });
     const legendMap = renderLegend(chart);
-    const bindings: PieHoverBinding[] = [];
+    const bindings = new Map<number, PieHoverBinding>();
+    const labels = svgNode("g");
 
     const cx = width * 0.44;
     const cy = height * 0.52;
@@ -1146,6 +1264,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
       slice.setAttribute("fill", entry.style.fill);
       slice.setAttribute("fill-rule", "evenodd");
       slice.setAttribute("stroke", entry.style.stroke);
+      slice.setAttribute("stroke-width", "1.25");
       slice.classList.add("chart-slice");
       slice.style.cursor = "pointer";
       slice.addEventListener("mouseenter", () => {
@@ -1170,7 +1289,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
         api.focusNodeInMainView(entry.id);
       });
       svg.appendChild(slice);
-      bindings.push({
+      bindings.set(entry.id, {
         id: entry.id,
         slice,
         legend: legendMap.get(entry.id) || null,
@@ -1178,7 +1297,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
           sliceOffsetTransform(cx, cy, startAngle, nextAngle, active),
       });
       appendSliceLabel(
-        svg,
+        labels,
         entry,
         startAngle,
         nextAngle,
@@ -1207,6 +1326,28 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
     )}`;
     svg.appendChild(centerValue);
 
+    svg.appendChild(labels);
+    let labelZoom = zoomFactor;
+    refreshPieView = () => {
+      pieFrame ||= requestAnimationFrame(() => {
+        pieFrame = 0;
+        svg.setAttribute("viewBox", `${pieView.x} ${pieView.y} ${pieView.w} ${pieView.h}`);
+        const zoom = currentPieZoom();
+        svg.style.cursor = pieView.dragging ? "grabbing" : zoom > 1 ? "grab" : "default";
+        // Panning only changes the camera. Rebuild labels only when their space changes.
+        if (zoom !== labelZoom) {
+          labelZoom = zoom;
+          labels.replaceChildren();
+          let start = -Math.PI / 2;
+          for (const entry of chart.entries) {
+            const end = start + Math.PI * 2 * entry.fraction;
+            appendSliceLabel(labels, entry, start, end, cx, cy, innerRadius, outerRadius, zoom);
+            start = end;
+          }
+        }
+        api.requestDraw();
+      });
+    };
     chartVisual!.appendChild(svg);
     pieHoverBindings = bindings;
     applyPieHoverState();
@@ -1216,7 +1357,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
     if (threeLoadPromise) {
       return threeLoadPromise;
     }
-    threeLoadPromise = import(THREE_MODULE_URL)
+    threeLoadPromise = import(/* @vite-ignore */ THREE_MODULE_URL)
       .then((module) => {
         if (
           module &&
@@ -1329,15 +1470,12 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
         rimLight.position.set(6, 11, 12);
         scene.add(rimLight);
 
-        const group = new THREE.Group();
-        scene.add(group);
-
         const raycaster = new THREE.Raycaster();
         const pointer = new THREE.Vector2();
-        const interactiveMeshes: THREEMesh[] = [];
-        const pedestals: THREEMesh[] = [];
         const labelSprites: THREESprite[] = [];
-        let hoveredMesh: THREEMesh | null = null;
+        const barLabels = new Map<number, THREESprite>();
+        const barHeights = new Float32Array(chart.entries.length);
+        let hoveredIndex = -1;
         let coverageAxis: InstanceType<THREE["LineSegments"]> | null = null;
         function fixedLabel(text: string, x: number, y: number, z: number, width: number, screenSpace = false) {
           const texture = makeLabelTexture(THREE, text, theme);
@@ -1409,98 +1547,33 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
         }
 
         const unitBarGeometry = new THREE.BoxGeometry(1, 1, 1);
-
+        const barMaterial = new THREE.MeshStandardMaterial({ roughness: 0.54, metalness: 0.12 });
+        const pedestalMaterial = new THREE.MeshStandardMaterial({ roughness: 0.94, metalness: 0.02 });
+        // All bars share geometry and material; transforms and colors live in GPU buffers.
+        const bars = new THREE.InstancedMesh(unitBarGeometry, barMaterial, chart.entries.length);
+        const pedestals = new THREE.InstancedMesh(unitBarGeometry, pedestalMaterial, chart.entries.length);
+        const matrix = new THREE.Matrix4();
+        const color = new THREE.Color();
         chart.entries.forEach((entry, index) => {
-          const row = Math.floor(index / columnCount);
-          const column = index % columnCount;
-          const x = column * cellSize - halfWidth;
-          const z = row * cellSize - halfDepth;
-          const normalized = chart.mode === "coverage" ? 0 : threeBarVisualRatio(
-            entry.value,
-            chart.maxValue,
-            chart.minValue
-          );
+          const x = (index % columnCount) * cellSize - halfWidth;
+          const z = Math.floor(index / columnCount) * cellSize - halfDepth;
+          const normalized = chart.mode === "coverage" ? 0 : threeBarVisualRatio(entry.value, chart.maxValue, chart.minValue);
           const barHeight = chart.mode === "coverage" ? coverageBarHeight(entry.value, maxHeight) : minHeight + normalized * (maxHeight - minHeight);
-          const material = new THREE.MeshStandardMaterial({
-            color: entry.style.fill,
-            roughness: 0.54,
-            metalness: 0.12,
-          });
-          const mesh = new THREE.Mesh(unitBarGeometry, material);
-          mesh.scale.set(barSize, barHeight, barSize);
-          mesh.position.set(x, barHeight * 0.5, z);
-          mesh.userData = {
-            nodeId: entry.id,
-            entry,
-            baseColor: entry.style.fill,
-            hoverColor: api.mixHexColors(
-              entry.style.fill,
-              "#ffffff",
-              theme.dark ? 0.24 : 0.18
-            ),
-          };
-
-          const pedestal = new THREE.Mesh(
-            new THREE.BoxGeometry(barSize * 1.06, baseThickness, barSize * 1.06),
-            new THREE.MeshStandardMaterial({
-              color: api.mixHexColors(
-                theme.panel,
-                entry.style.fill,
-                theme.dark ? 0.14 : 0.1
-              ),
-              roughness: 0.94,
-              metalness: 0.02,
-            })
+          barHeights[index] = barHeight;
+          matrix.makeScale(barSize, barHeight, barSize).setPosition(x, barHeight * 0.5, z);
+          bars.setMatrixAt(index, matrix);
+          bars.setColorAt(index, color.set(entry.style.fill));
+          matrix.makeScale(barSize * 1.06, baseThickness, barSize * 1.06).setPosition(
+            x, chart.mode === "coverage" ? -baseThickness * 0.5 + 0.003 : baseThickness * 0.5, z
           );
-          pedestal.position.set(x, chart.mode === "coverage" ? -baseThickness * 0.5 + 0.003 : baseThickness * 0.5, z);
-          scene.add(pedestal);
-          mesh.userData.pedestal = pedestal;
-          pedestals.push(pedestal);
-
-          group.add(mesh);
-          interactiveMeshes.push(mesh);
-
-          const maxLabelChars = Math.max(3, Math.floor(cellSize * 5.8));
-          const labelText = truncateLabel(
-            entry.node.name || entry.node.module || "",
-            maxLabelChars
-          );
-          const emptyCoverageBar = chart.mode === "coverage" && (entry.coverageMissing || entry.value === 0);
-          if (emptyCoverageBar) fixedLabel(entry.coverageMissing ? "No data" : "0%", x, 0.16, z, Math.min(barSize, 1));
-          const shouldShowLabel =
-            !emptyCoverageBar && labelText && (chart.entries.length <= 80 || cellSize >= 1.2);
-          if (shouldShowLabel) {
-            const labelTexture = makeLabelTexture(THREE, labelText, theme);
-            if (labelTexture) {
-              const spriteMaterial = new THREE.SpriteMaterial({
-                map: labelTexture,
-                transparent: true,
-                depthTest: false,
-                depthWrite: false,
-                sizeAttenuation: true,
-                opacity: 0,
-              });
-              const sprite = new THREE.Sprite(spriteMaterial);
-              const labelWidth = Math.min(
-                barSize * 0.72,
-                Math.max(barSize * 0.34, 0.08 + labelText.length * 0.0085)
-              );
-              const labelHeight = Math.min(
-                barSize * 0.18,
-                Math.max(0.042, labelWidth * 0.2)
-              );
-              sprite.center.set(0.5, 0);
-              sprite.scale.set(labelWidth, labelHeight, 1);
-              sprite.position.set(x, barHeight + 0.08, z);
-              sprite.renderOrder = 3;
-              scene.add(sprite);
-              labelSprites.push(sprite);
-              mesh.userData.labelSprite = sprite;
-              mesh.userData.labelBaseScaleX = labelWidth;
-              mesh.userData.labelBaseScaleY = labelHeight;
-            }
-          }
+          pedestals.setMatrixAt(index, matrix);
+          pedestals.setColorAt(index, color.set(api.mixHexColors(theme.panel, entry.style.fill, theme.dark ? 0.14 : 0.1)));
         });
+        bars.instanceMatrix.needsUpdate = true;
+        pedestals.instanceMatrix.needsUpdate = true;
+        bars.computeBoundingSphere();
+        pedestals.computeBoundingSphere();
+        scene.add(bars, pedestals);
 
         const orbitState = {
           get yaw() {
@@ -1534,7 +1607,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
           mode: "pan" as "pan" | "orbit",
           moved: false,
           pointerId: null as number | null,
-          pointerDownMesh: null as THREEMesh | null,
+          pointerDownIndex: -1,
           lastX: 0,
           lastY: 0,
           suppressContextMenu: false,
@@ -1554,114 +1627,129 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
               orbitState.distance * sinPitch * Math.cos(orbitState.yaw)
           );
           camera.lookAt(orbitState.target);
-          updateLabelSprites();
+          camera.updateMatrixWorld();
+        }
+
+        const labelPosition = new THREE.Vector3();
+        const visibleLabelIndices = new Set<number>();
+        function disposeLabel(sprite: THREESprite): void {
+          sprite.material.map?.dispose();
+          sprite.material.dispose();
+          scene.remove(sprite);
         }
 
         function updateLabelSprites(): void {
           const zoomFactor = extent / Math.max(orbitState.distance, 0.001);
-          const revealBase = Math.max(
-            0,
-            Math.min(1, (zoomFactor - 0.9 * labelDensityBias) / 0.48)
-          );
-          for (const mesh of interactiveMeshes) {
-            const sprite = mesh.userData.labelSprite as THREESprite | undefined;
+          const revealBase = Math.max(0, Math.min(1, (zoomFactor - 0.9 * labelDensityBias) / 0.48));
+          visibleLabelIndices.clear();
+          if (hoveredIndex >= 0) visibleLabelIndices.add(hoveredIndex);
+          // Labels are created only when readable, with a fixed budget even at Max depth.
+          for (let index = 0; index < chart.entries.length && visibleLabelIndices.size < 80; index++) {
+            const entry = chart.entries[index];
+            const empty = chart.mode === "coverage" && (entry.coverageMissing || entry.value === 0);
+            const reveal = revealBase * (0.24 + barHeights[index] / maxHeight * 0.74);
+            if (!empty && reveal <= 0.22) continue;
+            labelPosition.set((index % columnCount) * cellSize - halfWidth, barHeights[index] + 0.08, Math.floor(index / columnCount) * cellSize - halfDepth);
+            const distance = labelPosition.distanceTo(camera.position);
+            const projectedWidth = barSize * height / (2 * Math.tan(19 * Math.PI / 180) * distance);
+            if (projectedWidth < 14) continue;
+            labelPosition.project(camera);
+            if (Math.abs(labelPosition.x) > 1 || Math.abs(labelPosition.y) > 1 || Math.abs(labelPosition.z) > 1) continue;
+            visibleLabelIndices.add(index);
+          }
+          for (const [index, sprite] of barLabels) {
+            if (visibleLabelIndices.has(index)) continue;
+            disposeLabel(sprite);
+            barLabels.delete(index);
+          }
+          for (const index of visibleLabelIndices) {
+            let sprite = barLabels.get(index);
+            const entry = chart.entries[index];
+            const empty = chart.mode === "coverage" && (entry.coverageMissing || entry.value === 0);
             if (!sprite) {
-              continue;
+              const text = empty ? entry.coverageMissing ? "No data" : "0%" : truncateLabel(entry.node.name || entry.node.module || "", Math.max(3, Math.floor(cellSize * 5.8)));
+              if (!text) continue;
+              const texture = makeLabelTexture(THREE, text, theme);
+              if (!texture) continue;
+              sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false }));
+              const labelWidth = empty ? Math.min(barSize, 1) : Math.min(barSize * 0.72, Math.max(barSize * 0.34, 0.08 + text.length * 0.0085));
+              const image = texture.image as HTMLCanvasElement;
+              sprite.scale.set(labelWidth, labelWidth * image.height / image.width, 1);
+              sprite.center.set(0.5, 0);
+              sprite.position.set((index % columnCount) * cellSize - halfWidth, Math.max(0.16, barHeights[index] + 0.08), Math.floor(index / columnCount) * cellSize - halfDepth);
+              sprite.renderOrder = 3;
+              scene.add(sprite);
+              barLabels.set(index, sprite);
             }
-            const baseScaleX = (mesh.userData.labelBaseScaleX as number) || 0.16;
-            const baseScaleY = (mesh.userData.labelBaseScaleY as number) || 0.06;
-            const heightRatio = Math.max(
-              0,
-              Math.min(1, mesh.scale.y / Math.max(maxHeight, 0.001))
-            );
-            const sizeBoost = 0.24 + heightRatio * 0.74;
-            const reveal = Math.max(0, Math.min(1, revealBase * sizeBoost));
-            const hoverScale = hoveredMesh === mesh ? 1.06 : 1;
-            const forceVisible = hoveredMesh === mesh;
-            sprite.visible = forceVisible || reveal > 0.22;
-            sprite.material.opacity = forceVisible
-              ? 0.96
-              : reveal > 0.22
-              ? Math.min(0.86, 0.12 + reveal * 0.72)
-              : 0;
-            sprite.scale.set(baseScaleX * hoverScale, baseScaleY * hoverScale, 1);
-            sprite.position.y = mesh.scale.y + 0.06 + reveal * 0.04;
+            sprite.material.opacity = hoveredIndex === index || empty ? 0.96 : Math.min(0.86, 0.12 + revealBase * 0.72);
           }
         }
 
         syncCamera();
-
+        let renderFrameId = 0;
         function renderFrame(): void {
-          renderer.render(scene, camera);
+          renderFrameId ||= requestAnimationFrame(() => {
+            renderFrameId = 0;
+            updateLabelSprites();
+            renderer.render(scene, camera);
+          });
         }
 
-        function setHoveredMesh(mesh: THREEMesh | null): void {
-          if (hoveredMesh === mesh) {
-            return;
-          }
-          if (hoveredMesh) {
-            const material = hoveredMesh.material as InstanceType<THREE["MeshStandardMaterial"]>;
-            material.color.set(hoveredMesh.userData.baseColor as string);
-            material.emissive.set(0x000000);
-            material.emissiveIntensity = 0;
-          }
-          hoveredMesh = mesh;
-          if (hoveredMesh) {
-            const material = hoveredMesh.material as InstanceType<THREE["MeshStandardMaterial"]>;
-            material.color.set(hoveredMesh.userData.hoverColor as string);
-            material.emissive.set(hoveredMesh.userData.hoverColor as string);
-            material.emissiveIntensity = theme.dark ? 0.22 : 0.12;
-            if (!dragState.active) {
-              renderer.domElement.style.cursor = "pointer";
-            }
-            showNodeDetails(hoveredMesh.userData.entry as ChartEntry, chart);
+        function setHoveredIndex(index: number): void {
+          if (hoveredIndex === index) return;
+          if (hoveredIndex >= 0) bars.setColorAt(hoveredIndex, color.set(chart.entries[hoveredIndex].style.fill));
+          hoveredIndex = index;
+          if (index >= 0) {
+            const entry = chart.entries[index];
+            bars.setColorAt(index, color.set(api.mixHexColors(entry.style.fill, "#ffffff", theme.dark ? 0.24 : 0.18)));
+            if (!dragState.active) renderer.domElement.style.cursor = "pointer";
+            showNodeDetails(entry, chart);
           } else {
-            renderer.domElement.style.cursor = dragState.active
-              ? "grabbing"
-              : "grab";
+            renderer.domElement.style.cursor = dragState.active ? "grabbing" : "grab";
             clearNodeDetails();
           }
-          updateLabelSprites();
+          bars.instanceColor!.needsUpdate = true;
           renderFrame();
         }
 
-        function pickMesh(event: PointerEvent): THREEMesh | null {
+        const pickingGrid = { heights: barHeights, columns: columnCount, cellSize, barSize, baseThickness, coverage: chart.mode === "coverage" };
+        function pickIndex(event: PointerEvent): number {
           const rect = renderer.domElement.getBoundingClientRect();
           pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
           pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
           raycaster.setFromCamera(pointer, camera);
-          const hits = raycaster.intersectObjects(interactiveMeshes, false);
-          return hits.length ? (hits[0].object as THREEMesh) : null;
+          return pickBarGrid(raycaster.ray.origin, raycaster.ray.direction, pickingGrid);
         }
 
         function panCamera(dx: number, dy: number): void {
           const panScale = orbitState.distance * 0.00135;
-          const right = new THREE.Vector3(
-            Math.cos(orbitState.yaw),
-            0,
-            -Math.sin(orbitState.yaw)
-          ).normalize();
-          const forward = new THREE.Vector3(
-            Math.sin(orbitState.yaw),
-            0,
-            Math.cos(orbitState.yaw)
-          ).normalize();
-          orbitState.target.addScaledVector(right, -dx * panScale);
-          orbitState.target.addScaledVector(forward, -dy * panScale);
+          const sinYaw = Math.sin(orbitState.yaw);
+          const cosYaw = Math.cos(orbitState.yaw);
+          orbitState.target.x -= (dx * cosYaw + dy * sinYaw) * panScale;
+          orbitState.target.z += (dx * sinYaw - dy * cosYaw) * panScale;
+        }
+
+        let hoverFrame = 0;
+        let hoverEvent: PointerEvent | null = null;
+        function cancelHoverPick(): void {
+          cancelAnimationFrame(hoverFrame);
+          hoverFrame = 0;
+          hoverEvent = null;
         }
 
         const handlePointerDown = (event: PointerEvent): void => {
           if (event.button !== 0 && event.button !== 1 && event.button !== 2) {
             return;
           }
-          const downMesh = event.button === 0 ? pickMesh(event) : null;
+          cancelHoverPick();
+          const downIndex = event.button === 0 ? pickIndex(event) : -1;
           dragState.active = true;
           dragState.mode =
             event.button === 2 || event.altKey || event.ctrlKey ? "orbit" : "pan";
           dragState.moved = false;
           dragState.suppressContextMenu = false;
           dragState.pointerId = event.pointerId;
-          dragState.pointerDownMesh = downMesh;
+          dragState.pointerDownIndex = downIndex;
           dragState.lastX = event.clientX;
           dragState.lastY = event.clientY;
           renderer.domElement.style.cursor =
@@ -1696,7 +1784,12 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
             renderFrame();
             return;
           }
-          setHoveredMesh(pickMesh(event));
+          hoverEvent = event;
+          hoverFrame ||= requestAnimationFrame(() => {
+            hoverFrame = 0;
+            if (hoverEvent) setHoveredIndex(pickIndex(hoverEvent));
+            hoverEvent = null;
+          });
         };
 
         const handlePointerUp = (event: PointerEvent): void => {
@@ -1704,28 +1797,29 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
             return;
           }
           const moved = dragState.moved;
-          const downMesh = dragState.pointerDownMesh;
+          const downIndex = dragState.pointerDownIndex;
           dragState.active = false;
           dragState.moved = false;
           dragState.pointerId = null;
-          dragState.pointerDownMesh = null;
+          dragState.pointerDownIndex = -1;
           renderer.domElement.style.cursor = "grab";
           if (renderer.domElement.hasPointerCapture(event.pointerId)) {
             renderer.domElement.releasePointerCapture(event.pointerId);
           }
-          if (!moved && event.button === 0) {
-            const mesh = downMesh || pickMesh(event);
-            if (mesh) {
-              api.focusNodeInMainView(mesh.userData.nodeId as number);
+          if (!moved && event.button === 0 && event.type !== "pointercancel") {
+            const index = downIndex >= 0 ? downIndex : pickIndex(event);
+            if (index >= 0) {
+              api.focusNodeInMainView(chart.entries[index].id);
               return;
             }
           }
-          setHoveredMesh(pickMesh(event));
+          setHoveredIndex(pickIndex(event));
         };
 
         const handlePointerLeave = (): void => {
+          cancelHoverPick();
           if (!dragState.active) {
-            setHoveredMesh(null);
+            setHoveredIndex(-1);
           }
         };
 
@@ -1799,24 +1893,15 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
             renderer.domElement.removeEventListener("wheel", handleWheel);
             renderer.domElement.removeEventListener("pointercancel", handlePointerUp);
             renderer.domElement.removeEventListener("contextmenu", handleContextMenu);
-            interactiveMeshes.forEach((mesh) => {
-              if (mesh.userData.edgeLines) {
-                mesh.remove(mesh.userData.edgeLines as InstanceType<THREE["Object3D"]>);
-              }
-              (mesh.material as InstanceType<THREE["Material"]>).dispose();
-            });
-            pedestals.forEach((pedestal) => {
-              pedestal.geometry.dispose();
-              (pedestal.material as InstanceType<THREE["Material"]>).dispose();
-              scene.remove(pedestal);
-            });
-            labelSprites.forEach((sprite) => {
-              if (sprite.material.map) {
-                sprite.material.map.dispose();
-              }
-              sprite.material.dispose();
-              scene.remove(sprite);
-            });
+            cancelAnimationFrame(renderFrameId);
+            cancelHoverPick();
+            bars.dispose();
+            pedestals.dispose();
+            barMaterial.dispose();
+            pedestalMaterial.dispose();
+            labelSprites.forEach(disposeLabel);
+            barLabels.forEach(disposeLabel);
+            barLabels.clear();
             if (coverageAxis) {
               coverageAxis.geometry.dispose();
               if (Array.isArray(coverageAxis.material)) coverageAxis.material.forEach(material => material.dispose());
@@ -1834,7 +1919,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
               gridHelper.material.dispose();
             }
             scene.remove(gridHelper);
-            group.clear();
+            scene.clear();
             clearNodeDetails();
             renderer.dispose();
             chartVisual!.replaceChildren();
@@ -1856,8 +1941,12 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
     if (!state.chartPanelOpen) {
       renderGeneration++;
       disposeThreeContext();
+      clearVisual();
+      disposeLegend?.();
+      disposeLegend = null;
+      legendElements.clear();
+      chartLegend!.replaceChildren();
       clearHoverState();
-      clearPieHoverBindings();
       clearNodeDetails();
       return;
     }
@@ -2006,7 +2095,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
       pieViewState.dragging = false;
       pieViewState.dragMoved = false;
       if (hadMoved) {
-        renderChart(true);
+        refreshPieView?.();
         window.setTimeout(() => {
           if (pieViewState) {
             pieViewState.suppressClick = false;
@@ -2037,8 +2126,8 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
       return true;
     }
     if (state.mainViewMode === "pie2d" && pieViewState) {
-      const width = Math.max(560, chartVisual!.clientWidth || 560);
-      const height = Math.max(360, chartVisual!.clientHeight || 360);
+      const width = pieViewState.baseW;
+      const height = pieViewState.baseH;
       const targetW = Math.max(
         width / 18,
         Math.min(width, pieViewState.w / Math.max(factor, 0.0001))
@@ -2054,7 +2143,7 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
       pieViewState.x = centerX - targetW * 0.5;
       pieViewState.y = centerY - targetH * 0.5;
       clampPieView();
-      invalidate();
+      refreshPieView?.();
       api.savePersistedState();
       api.requestDraw();
       return true;
@@ -2075,10 +2164,10 @@ export function initHierarchyCharts(api: ChartApi): ChartController | null {
     }
     if (state.mainViewMode === "pie2d") {
       resetPieView(
-        Math.max(560, chartVisual!.clientWidth || 560),
-        Math.max(360, chartVisual!.clientHeight || 360)
+        pieViewState?.baseW ?? Math.max(560, chartVisual!.clientWidth || 560),
+        pieViewState?.baseH ?? Math.max(360, chartVisual!.clientHeight || 360)
       );
-      invalidate();
+      refreshPieView?.();
       api.savePersistedState();
       api.requestDraw();
       return true;
