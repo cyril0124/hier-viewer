@@ -456,6 +456,13 @@
             <button type="button" role="tab" data-coverage-metric="toggle" aria-selected="false" tabindex="-1">Toggle</button>
             <button type="button" role="tab" data-coverage-metric="assert" aria-selected="false" tabindex="-1" hidden>Assert</button>
           </div>
+          <div class="coverage-export-toolbar">
+            <span id="coverage-export-count" role="status">0 selected</span>
+            <button id="coverage-export-uncovered" type="button" title="Add all uncovered entries in this metric, including other pages" disabled>Select uncovered</button>
+            <button id="coverage-export-open" type="button" disabled>Export selected</button>
+            <button id="coverage-export-clear" type="button" disabled>Clear selection</button>
+            <span class="coverage-export-hint">Select rows to copy coverage with context for AI.</span>
+          </div>
           <label><input id="source-coverage-toggle" type="checkbox" checked> Line coverage</label>
           <span id="source-coverage-status" role="status"></span>
           <div class="source-coverage-actions">
@@ -518,7 +525,7 @@
         <div class="coverage-detail-status-row"><span id="coverage-detail-status" role="status"></span><button id="coverage-detail-retry" type="button" hidden>Retry</button></div>
         <div id="coverage-detail-content"></div>
       </div>
-      <div id="source-coverage-plain" class="source-coverage-plain" hidden><div class="source-coverage-page-controls"><label for="source-coverage-line-select">Line coverage</label><button id="source-coverage-page-prev" type="button" class="icon-button" aria-label="Previous coverage page" title="Previous coverage page">&lt;</button><span id="source-coverage-page"></span><button id="source-coverage-page-next" type="button" class="icon-button" aria-label="Next coverage page" title="Next coverage page">&gt;</button></div><select id="source-coverage-line-select" size="5" aria-label="Line coverage details"></select></div>
+      <div id="source-coverage-plain" class="source-coverage-plain" hidden><div class="source-coverage-page-controls"><label for="source-coverage-line-select">Line coverage</label><button id="source-coverage-page-prev" type="button" class="icon-button" aria-label="Previous coverage page" title="Previous coverage page">&lt;</button><span id="source-coverage-page"></span><button id="source-coverage-page-next" type="button" class="icon-button" aria-label="Next coverage page" title="Next coverage page">&gt;</button></div><select id="source-coverage-line-select" size="5" aria-label="Line coverage details"></select><button id="coverage-export-add-line" type="button" disabled>Add line to export</button></div>
       <div class="source-code" id="source-code" data-ui-name="source-code"></div>
     </aside>
 
@@ -528,6 +535,11 @@
     </section>
   </div>
   <div class="ui-annotation-layer" id="ui-annotation-layer" aria-hidden="true"></div>
+  <dialog id="coverage-export-dialog" class="coverage-export-dialog" aria-labelledby="coverage-export-title">
+    <div class="coverage-export-heading"><div><h2 id="coverage-export-title">Selected coverage</h2><p>Instance, report data and source context. Ready to paste into an AI conversation.</p></div><button id="coverage-export-close" type="button" aria-label="Close coverage export">Close</button></div>
+    <textarea id="coverage-export-text" aria-label="Coverage Markdown" readonly spellcheck="false"></textarea>
+    <div class="coverage-export-footer"><span id="coverage-export-status" role="status"></span><button id="coverage-export-download" type="button">Download .md</button><button id="coverage-export-copy" type="button">Copy Markdown</button></div>
+  </dialog>
   <dialog id="coverage-import-dialog" class="coverage-import-dialog" aria-labelledby="coverage-import-title">
     <h2 id="coverage-import-title">Import Coverage</h2>
     <label class="coverage-field">Input<select id="coverage-import-mode"><option value="files">URG report files</option><option value="report">URG report server directory</option><option value="vdb">VDB server directory</option></select></label>

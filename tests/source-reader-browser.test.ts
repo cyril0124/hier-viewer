@@ -199,19 +199,45 @@ describe('production source reader', () => {
     try {
       await page.evaluate(lines => {
         window.readerNodes = [0, 1].map(id => ({ id, name: `q${id}`, path: `dut.q${id}`, module: 'Queue', parent: null, children: [], definitionFilePath: '/fixtures/queue.sv', definitionSourceHref: '/coverage-fixture.sv', definitionLine: 1, definitionEndLine: 400 } as unknown as HierarchyNode));
-        const scopes = [0, 1].map(id => ({ name: `q${id}`, path: `dut.q${id}`, parent: null, children: [], metrics: {} }));
+        const scopes = [0, 1].map(id => ({ name: `q${id}`, path: `dut.q${id}`, parent: null, children: [], metrics: { assert: { covered: 1, total: 3, excluded: 0 } } }));
         window.readerCoverage = {
           display: { name: 'fixture', metric: 'line', summary: { release: 'test', roots: [0, 1], byPath: new Map(scopes.map((scope, id) => [scope.path, id])), scopes }, mapping: { sourceRoot: 0, targetRoot: 0, scopeByNode: new Int32Array([0, 1]), matched: 2, unmatchedScopes: [], unmatchedNodeIds: [] } },
           source: { id: 'fixture', name: 'fixture', files: [], readText: async () => '' },
           report: {
             async getMetricDetail(instancePath, _moduleName, metric) {
+              if (metric === 'assert') return { instancePath, metric, filePath: '/fixtures/queue.sv', blocks: [
+                { kind: 'table', rows: [{ header: true, status: 'neutral', cells: ['Total', 'Covered'] }, { header: false, status: 'neutral', cells: ['3', '1'] }] },
+                { kind: 'table', title: 'Assertions', rows: [
+                  { header: true, status: 'neutral', cells: ['Name', 'Failures', 'Successes', 'Status'] },
+                  { header: false, status: 'covered', cells: ['passed', '0', '4', 'Succeeded'] },
+                  { header: false, status: 'failed', cells: ['mixed', '1', '2', 'Failed'] },
+                  { header: false, status: 'uncovered', cells: ['never', '0', '0', 'No success'] },
+                  { header: false, status: 'neutral', cells: ['unknown', '-', '-', 'Unknown'] },
+                ] },
+              ] };
               return { instancePath, metric, filePath: '/fixtures/queue.sv', blocks: [{ kind: 'table', rows: [{ cells: ['Total', 'Covered'], header: true, status: 'neutral' }, { cells: ['205', '204'], header: false, status: 'neutral' }] }, { kind: 'table', rows: [{ cells: ['Signal', 'Status'], header: true, status: 'neutral' }, ...Array.from({ length: 205 }, (_, index) => ({ cells: [`signal_${index}<img src=x onerror=alert(1)>`, index === 204 ? 'No' : 'Yes'], header: false, status: index === 204 ? 'uncovered' as const : 'covered' as const }))] }] };
             },
             clear() {},
             async getLineCoverage(path) {
               const second = path === 'dut.q1';
               const numbers = window.largeCoverage ? Array.from({ length: 400 }, (_, index) => index + 1) : [25, 26, 27, 28, 31, 32, 33, 34];
-              const rows = numbers.map(line => ({ line, covered: window.largeCoverage ? Number(line !== 400) : Number(second || ![28, 32, 33, 34].includes(line)), total: 1, sourceText: lines[line - 1] }));
+              const rows = numbers.map(line => {
+                const excluded = !window.largeCoverage && !second && line === 31;
+                const total = !window.largeCoverage && line === 34 ? 2 : 1;
+                let covered: number;
+                if (window.largeCoverage) {
+                  covered = Number(line !== 400);
+                } else if (second) {
+                  covered = total;
+                } else if (excluded) {
+                  covered = 0;
+                } else if (line === 34) {
+                  covered = 1;
+                } else {
+                  covered = Number(![28, 32, 33].includes(line));
+                }
+                return { line, covered, total, sourceText: lines[line - 1], excluded };
+              });
               const result = { instancePath: path, filePath: '/fixtures/queue.sv', lines: rows, totals: { covered: rows.reduce((sum, row) => sum + row.covered, 0), total: rows.length, excluded: 0 }, reportPath: 'mod0.html#Line' };
               if (window.deferCoverage && !second) return new Promise(resolve => { window.releaseCoverage = () => resolve(result); });
               return result;
@@ -221,6 +247,23 @@ describe('production source reader', () => {
       }, sourceLines);
       await page.evaluate(() => window.reader.renderSource(0, 'definition'));
       await page.waitForFunction(() => document.querySelector('[data-coverage-line="28"]')?.textContent === '0/1');
+      await page.locator('[data-coverage-export-line="28"]').check();
+      assert.equal(await page.locator('#coverage-export-count').textContent(), '1 selected');
+      await page.locator('#coverage-export-open').click();
+      const firstExport = await page.locator('#coverage-export-text').inputValue();
+      assert.match(firstExport, /"coverageInstance": "dut.q0"/);
+      assert.match(firstExport, /"covered": 0/);
+      assert.match(firstExport, /28: wire signal_27;/);
+      await page.locator('#coverage-export-close').click();
+      await page.locator('#coverage-export-uncovered').click();
+      assert.equal(await page.locator('#coverage-export-count').textContent(), '4 selected');
+      assert.equal(await page.locator('[data-coverage-export-line="31"]').isChecked(), false, 'Excluded Line rows are not selected');
+      assert.equal(await page.locator('[data-coverage-export-line="34"]').isChecked(), true, 'Partially covered Line rows are selected');
+      await page.locator('#coverage-export-uncovered').click();
+      assert.equal(await page.locator('#coverage-export-count').textContent(), '4 selected', 'Bulk selection is idempotent');
+      await page.locator('[data-coverage-export-line="25"]').check();
+      await page.locator('#coverage-export-uncovered').click();
+      assert.equal(await page.locator('#coverage-export-count').textContent(), '5 selected', 'Bulk selection keeps explicitly selected covered rows');
       await page.locator('.source-lineno[data-line="28"]').click();
       assert.equal(await page.locator('.source-lineno[data-line="28"]').getAttribute('aria-pressed'), 'true');
       const heights = await page.locator('.source-virtual-content .source-line').evaluateAll(rows => rows.map(row => row.getBoundingClientRect().height));
@@ -233,15 +276,69 @@ describe('production source reader', () => {
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       assert.equal(await page.locator('[data-coverage-line="28"]').textContent(), '1/1');
       assert.equal(sourceRequests, 1, 'Source text cache remains shared by file');
+      assert.equal(await page.locator('#coverage-export-count').textContent(), '0 selected', 'Changing instances clears selection');
+      await page.locator('[data-coverage-export-line="28"]').check();
       await page.locator('[data-coverage-metric="toggle"]').click();
       await page.waitForFunction(() => document.querySelectorAll('#coverage-detail-content .coverage-result-table tbody tr').length === 100);
       assert.equal(await page.locator('#coverage-detail-content img').count(), 0, 'Report cells remain inert text');
+      await page.locator('#coverage-export-uncovered').click();
+      assert.equal(await page.locator('#coverage-export-count').textContent(), '2 selected', 'Select uncovered includes hidden pages');
+      assert.equal(await page.locator('[data-coverage-export-key]:checked').count(), 1, 'Covered detail rows are not selected');
+      await page.locator('[data-coverage-export-page]').check();
+      assert.equal(await page.locator('#coverage-export-count').textContent(), '102 selected');
       await page.getByRole('button', { name: 'Next rows', exact: true }).click();
       assert.equal(await page.locator('.coverage-table-pagination span').textContent(), '101–200 / 205');
+      assert.equal(await page.locator('[data-coverage-export-page]').isChecked(), false);
       await page.getByRole('button', { name: 'Next rows', exact: true }).click();
       assert.equal(await page.locator('#coverage-detail-content .coverage-result-table tbody tr').count(), 5);
       await page.locator('#coverage-detail-missing').check();
       assert.equal(await page.locator('#coverage-detail-content .coverage-result-table tbody tr').count(), 1);
+      await page.locator('[data-coverage-export-page]').check();
+      assert.equal(await page.locator('#coverage-export-count').textContent(), '102 selected', 'Filtering keeps earlier selections');
+      await page.locator('#coverage-export-open').click();
+      const exported = await page.locator('#coverage-export-text').inputValue();
+      assert.match(exported, /"coverageInstance": "dut.q1"/);
+      assert.match(exported, /## Line/);
+      assert.match(exported, /## Toggle/);
+      assert.match(exported, /signal_204<img/);
+      assert.ok(!exported.includes('signal_100<img'), 'Other pages are not implicitly selected');
+      await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+      await page.locator('#coverage-export-copy').click();
+      await page.waitForFunction(() => document.querySelector('#coverage-export-status')!.textContent!.startsWith('Copied.'));
+      assert.equal(await page.evaluate(() => navigator.clipboard.readText()), exported);
+      const downloaded = page.waitForEvent('download');
+      await page.locator('#coverage-export-download').click();
+      const download = await downloaded;
+      assert.equal(download.suggestedFilename(), 'coverage-selection.md');
+      assert.equal(await readFile((await download.path())!, 'utf8'), exported);
+      await page.setViewportSize({ width: 390, height: 844 });
+      const bounds = await page.locator('#coverage-export-dialog').boundingBox();
+      assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 390 && bounds.height <= 844);
+      await page.evaluate(() => {
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+        document.execCommand = () => false;
+      });
+      await page.locator('#coverage-export-copy').click();
+      assert.match(await page.locator('#coverage-export-status').textContent() ?? '', /Text selected/);
+      assert.equal(await page.locator('#coverage-export-text').evaluate((textarea: HTMLTextAreaElement) => textarea.value.slice(textarea.selectionStart, textarea.selectionEnd)), exported);
+      await page.locator('#coverage-export-close').click();
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.locator('[data-coverage-metric="line"]').click();
+      assert.equal(await page.locator('[data-coverage-export-line="28"]').isChecked(), true, 'Tab changes keep line selections');
+      await page.locator('#coverage-export-clear').click();
+      assert.equal(await page.locator('[data-coverage-export-line="28"]').isChecked(), false);
+      await page.locator('[data-coverage-export-line="28"]').check();
+      await page.evaluate(() => { window.readerCoverage = { ...window.readerCoverage! }; window.reader.refreshCoverage(); });
+      assert.equal(await page.locator('#coverage-export-count').textContent(), '0 selected', 'Replacing a report clears selection');
+      await page.locator('[data-coverage-metric="assert"]').click();
+      await page.locator('#coverage-export-uncovered').click();
+      assert.equal(await page.locator('#coverage-export-count').textContent(), '2 selected', 'Assert includes failures and no success, excluding covered and unknown rows');
+      await page.locator('#coverage-export-open').click();
+      const assertionExport = await page.locator('#coverage-export-text').inputValue();
+      assert.match(assertionExport, /"mixed"/);
+      assert.match(assertionExport, /"never"/);
+      assert.ok(!assertionExport.includes('"passed"') && !assertionExport.includes('"unknown"'));
+      await page.locator('#coverage-export-close').click();
       await page.locator('[data-coverage-metric="line"]').click();
       await page.evaluate(lines => {
         window.largeCoverage = true;
@@ -256,7 +353,12 @@ describe('production source reader', () => {
       await page.locator('#source-coverage-next').click();
       const selected = await page.locator('.source-plain-text').evaluate((textarea: HTMLTextAreaElement) => textarea.value.slice(textarea.selectionStart, textarea.selectionEnd));
       assert.equal(selected, sourceLines[399]);
+      await page.locator('#coverage-export-add-line').click();
+      await page.locator('#coverage-export-open').click();
+      assert.match(await page.locator('#coverage-export-text').inputValue(), /"line": 400/);
       await page.evaluate(() => { window.readerCoverage = null; window.reader.refreshCoverage(); });
+      assert.equal(await page.locator('#coverage-export-dialog').evaluate((dialog: HTMLDialogElement) => dialog.open), false);
+      assert.equal(await page.locator('#coverage-export-text').inputValue(), '');
       assert.equal(await page.locator('#source-coverage-bar').isVisible(), false);
       assert.deepEqual(errors.get(page), []);
     } finally { await page.context().close(); }

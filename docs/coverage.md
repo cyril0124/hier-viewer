@@ -69,6 +69,16 @@ Details are parsed into text and table cells, not embedded as original URG HTML.
 
 Server imports provide an **Open URG Report** link. Browser-only file imports do not invent a URL for files that are not hosted. Original server report pages are sandboxed and cannot access the coverage execution API.
 
+## Export selected coverage for analysis
+
+1. Open **Module Source** for a mapped instance. Check the boxes beside Line coverage counts or detail table rows. **Select uncovered** adds all uncovered entries in the current metric across every page, preserving existing selections. It includes partial Line coverage and Assert failures/no-success results, but excludes excluded Line points and unknown detail rows. A table's header checkbox selects only its current filtered page. In large-source plain mode, choose a line and click **Add line to export**.
+2. Switch metric tabs or pages to collect more entries. The selected count includes entries hidden by pagination or **Uncovered only**. **Clear selection** removes all entries. Switching the instance, source view, or imported report clears the selection automatically.
+3. Click **Export selected** to inspect the Markdown, then **Copy Markdown** or **Download .md**. If automatic copying is unavailable, the viewer selects the preview text for manual copying.
+
+The export includes the hierarchy and coverage instance paths, module, source file, report name/release, original subtree metrics, and selected observations. Detail rows retain their headers, expression/reference text, and raw cells, including Assert counters. Line ratios remain covered/total points. Referenced source ranges include up to three surrounding lines and merge overlaps; detail source context is attached only when the report source path matches the bundled file. Toggle or Assert rows without line references do not invent source locations. Source context comes from the bundle and does not establish the simulation's RTL revision.
+
+Selection, formatting, clipboard copying, and download run in the browser. The viewer does not send the selection to an AI service. Only selected rows are exported; choosing one page never selects hidden pages.
+
 ## Data limits and validation
 
 The importer reads `session.xml` format 1.1 and the URG module-list, self-instance, and Line HTML sections. It has been checked against URG U-2023.03. Instance pages split across `modN_*.html` are followed on demand. A module-level Line section is used only when the report proves that the module has exactly one instance.

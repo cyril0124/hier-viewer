@@ -3683,7 +3683,7 @@
     .coverage-detail-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); flex: 1 0 100%; margin-bottom: 4px; }
     .coverage-detail-tabs button { padding: 8px 14px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); font-size: 12px; }
     .coverage-detail-tabs button.active { border-bottom-color: #23866a; color: var(--text); font-weight: 600; background: color-mix(in srgb, #23866a 7%, transparent); }
-    .coverage-detail-mode #source-coverage-bar > :not(.coverage-detail-tabs),
+    .coverage-detail-mode #source-coverage-bar > :not(.coverage-detail-tabs):not(.coverage-export-toolbar),
     .coverage-detail-mode .source-searchbar-shell,
     .coverage-detail-mode #source-code, .coverage-detail-mode #source-coverage-plain { display: none !important; }
     .coverage-detail-view[hidden] { display: none !important; }
@@ -3756,9 +3756,28 @@
     .source-coverage-actions { display: inline-flex; gap: 3px; }
     #source-coverage-status { min-width: 0; overflow-wrap: anywhere; }
     #source-coverage-line-detail { font-variant-numeric: tabular-nums; }
-    .source-code.coverage-active .source-line { grid-template-columns: 92px 68px minmax(0, 1fr); }
-    .source-code.compact-mode.coverage-active .source-line { grid-template-columns: 72px 68px minmax(0, 1fr); }
-    .coverage-line-cell { position: sticky; left: 92px; z-index: 1; display: block; width: 68px; min-width: 0; min-height: 0; height: 100%; margin: 0; padding: 0 4px; border: 0; border-right: 1px solid var(--line-number-border); border-radius: 0; overflow: hidden; text-overflow: ellipsis; text-align: center; font: inherit; font-size: 11px; line-height: inherit; font-variant-numeric: tabular-nums; color: var(--text); background: var(--source-code-bg); }
+    .coverage-export-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; flex: 1 0 100%; padding: 2px 0 8px; }
+    .coverage-export-toolbar button, .coverage-export-dialog button, #coverage-export-add-line { font-size: 12px; padding: 6px 10px; }
+    #coverage-export-count { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .coverage-export-hint { color: var(--muted); }
+    #coverage-export-open, #coverage-export-copy { background: #21765f; border-color: #21765f; color: white; }
+    #coverage-export-open:disabled { opacity: .45; }
+    .coverage-select-cell { position: sticky; left: 0; z-index: 1; background: var(--side-body-bg); }
+    .coverage-select-cell input, .coverage-line-cell input { accent-color: #23866a; width: 14px; height: 14px; margin: 0; cursor: pointer; vertical-align: middle; }
+    .coverage-detail-view tr:has(input:checked) { box-shadow: inset 3px 0 #23866a; background: color-mix(in srgb, #23866a 9%, transparent); }
+    .coverage-export-dialog { box-sizing: border-box; width: min(860px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); padding: 20px; border: 1px solid var(--border); border-radius: 14px; color: var(--text); background: var(--side-body-bg); box-shadow: 0 20px 70px #0005; }
+    .coverage-export-dialog::backdrop { background: #0007; }
+    .coverage-export-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+    .coverage-export-heading h2 { margin: 0; font-size: 18px; }
+    .coverage-export-heading p { margin: 6px 0 14px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    #coverage-export-text { box-sizing: border-box; display: block; width: 100%; height: min(52dvh, 520px); resize: vertical; border: 1px solid var(--border); border-radius: 8px; padding: 12px; color: var(--text); background: var(--source-code-bg); font: 12px/1.6 monospace; white-space: pre; }
+    .coverage-export-footer { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+    #coverage-export-status { flex: 1 1 220px; font-size: 12px; color: var(--muted); }
+    .source-code.coverage-active .source-line { grid-template-columns: 92px 88px minmax(0, 1fr); }
+    .source-code.compact-mode.coverage-active .source-line { grid-template-columns: 72px 88px minmax(0, 1fr); }
+    .coverage-line-cell { position: sticky; left: 92px; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 4px; width: 88px; min-width: 0; min-height: 0; height: 100%; margin: 0; padding: 0 4px; border: 0; border-right: 1px solid var(--line-number-border); border-radius: 0; overflow: hidden; text-overflow: ellipsis; text-align: center; font: inherit; font-size: 11px; line-height: inherit; font-variant-numeric: tabular-nums; color: var(--text); background: var(--source-code-bg); }
+    .coverage-line-cell button { flex: 1; min-width: 0; min-height: 0; padding: 0; border: 0; height: 100%; font: inherit; color: inherit; background: transparent; }
+    .coverage-line-cell:has(input:checked) { box-shadow: inset 3px 0 #23866a; }
     .compact-mode .coverage-line-cell { left: 72px; }
     .coverage-line-cell.coverage-covered { color: #168167; background: color-mix(in srgb, #23866a 12%, var(--source-code-bg)); }
     .coverage-line-cell.coverage-uncovered { color: #df4848; background: color-mix(in srgb, #c44949 16%, var(--source-code-bg)); }

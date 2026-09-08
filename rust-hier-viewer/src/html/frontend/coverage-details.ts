@@ -1,5 +1,6 @@
 import type { CoverageMetric, CoverageMetricDetail, CoverageSelection, CoverageDetailBlock } from "./coverage-types.js";
 import type { HierarchyNode, ViewerState } from "./types.js";
+import type { CoverageExporter, CoverageExportEntry } from "./coverage-export.js";
 import type { SourceView } from "./main-types.js";
 
 interface Dependencies {
@@ -8,6 +9,8 @@ interface Dependencies {
   getNode(id: number): HierarchyNode;
   getView(): SourceView | null;
   jumpToLine(line: number): void;
+  exporter: CoverageExporter;
+  onMetricChange(): void;
 }
 
 const LABELS = { condition: "Condition", branch: "Branch", toggle: "Toggle", assert: "Assert" } as const;
@@ -21,6 +24,7 @@ export function createCoverageDetails(deps: Dependencies) {
   const subtitle = document.getElementById("coverage-detail-subtitle");
   const status = document.getElementById("coverage-detail-status");
   const missingOnly = document.getElementById("coverage-detail-missing") as HTMLInputElement | null;
+  const selectUncovered = document.getElementById("coverage-export-uncovered") as HTMLButtonElement | null;
   const retry = document.getElementById("coverage-detail-retry") as HTMLButtonElement | null;
   const tabs = [...document.querySelectorAll<HTMLButtonElement>("[data-coverage-metric]")];
   let metric: CoverageMetric = "line";
@@ -48,6 +52,7 @@ export function createCoverageDetails(deps: Dependencies) {
       tab.classList.toggle("active", selected);
       tab.tabIndex = selected ? 0 : -1;
     }
+    deps.onMetricChange();
   }
   function jump(line: number) {
     metric = "line";
@@ -55,7 +60,7 @@ export function createCoverageDetails(deps: Dependencies) {
     visible();
     requestAnimationFrame(() => deps.jumpToLine(line));
   }
-  function table(block: Extract<CoverageDetailBlock, { kind: "table" }>, summary: boolean): HTMLElement {
+  function table(block: Extract<CoverageDetailBlock, { kind: "table" }>, summary: boolean, blockIndex: number): HTMLElement {
     const section = document.createElement("div");
     section.className = summary ? "coverage-summary-table" : "coverage-result-table";
     if (block.title) {
@@ -72,9 +77,43 @@ export function createCoverageDetails(deps: Dependencies) {
     const grid = document.createElement("table");
     const head = document.createElement("thead");
     const body = document.createElement("tbody");
+    // Selection identity uses original row positions, never filtered/page offsets.
+    // Capture this report so paging callbacks keep referring to the rendered data.
+    const rowIndices = new Map(block.rows.map((row, index) => [row, index]));
+    const report = data!;
+    const selectionKey = (row: typeof block.rows[number]) => `${report.metric}:${blockIndex}:${rowIndices.get(row)!}`;
+    const exportEntry = (row: typeof block.rows[number]): CoverageExportEntry => ({
+      kind: "detail",
+      data: report,
+      block: blockIndex,
+      row: rowIndices.get(row)!,
+    });
+    const selectPage = document.createElement("input");
+    selectPage.type = "checkbox";
+    selectPage.dataset.coverageExportPage = "";
+    selectPage.setAttribute("aria-label", "Select visible coverage rows");
     const makeRow = (row: typeof block.rows[number]) => {
       const tr = document.createElement("tr");
       tr.className = `coverage-result-${row.status}`;
+      if (!summary) {
+        const cell = document.createElement(row.header ? "th" : "td");
+        cell.className = "coverage-select-cell";
+        if (row.header) {
+          if (row === headers[0]) cell.appendChild(selectPage);
+        } else {
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          const key = selectionKey(row);
+          checkbox.dataset.coverageExportKey = key;
+          checkbox.checked = deps.exporter.has(key);
+          checkbox.setAttribute("aria-label", `Select ${LABELS[report.metric]} row ${rowIndices.get(row)! + 1}`);
+          checkbox.addEventListener("change", () => {
+            deps.exporter.set(key, checkbox.checked ? exportEntry(row) : null);
+          });
+          cell.appendChild(checkbox);
+        }
+        tr.appendChild(cell);
+      }
       for (const text of row.cells) {
         const cell = document.createElement(row.header ? "th" : "td");
         cell.textContent = text;
@@ -98,11 +137,25 @@ export function createCoverageDetails(deps: Dependencies) {
     }
     const render = () => {
       const begin = page * PAGE_SIZE;
-      body.replaceChildren(...filtered.slice(begin, begin + PAGE_SIZE).map(makeRow));
+      const visibleRows = filtered.slice(begin, begin + PAGE_SIZE);
+      body.replaceChildren(...visibleRows.map(makeRow));
       count.textContent = `${filtered.length ? begin + 1 : 0}–${Math.min(begin + PAGE_SIZE, filtered.length)} / ${filtered.length}`;
+
+      const selectedCount = visibleRows.filter(row => deps.exporter.has(selectionKey(row))).length;
+      selectPage.checked = selectedCount > 0 && selectedCount === visibleRows.length;
+      selectPage.indeterminate = selectedCount > 0 && selectedCount < visibleRows.length;
+      selectPage.disabled = visibleRows.length === 0;
       previous.disabled = page === 0;
       next.disabled = begin + PAGE_SIZE >= filtered.length;
     };
+    selectPage.addEventListener("change", () => {
+      const begin = page * PAGE_SIZE;
+      const changes = filtered.slice(begin, begin + PAGE_SIZE).map(row => [
+        selectionKey(row),
+        selectPage.checked ? exportEntry(row) : null,
+      ] as const);
+      deps.exporter.setMany(changes);
+    });
     previous.addEventListener("click", () => { page--; render(); });
     next.addEventListener("click", () => { page++; render(); });
     controls.append(count, previous, next);
@@ -118,7 +171,7 @@ export function createCoverageDetails(deps: Dependencies) {
     group.className = "coverage-detail-section coverage-detail-summary";
     fragment.appendChild(group);
     let firstTable = true;
-    for (const block of data.blocks) {
+    for (const [blockIndex, block] of data.blocks.entries()) {
       if (block.kind === "code") {
         group = document.createElement("section");
         group.className = "coverage-detail-section";
@@ -144,7 +197,7 @@ export function createCoverageDetails(deps: Dependencies) {
         firstTable = false;
         const hasMissing = block.rows.some(row => !row.header && row.status !== "covered");
         if (!summary && missingOnly?.checked && !hasMissing) continue;
-        group.appendChild(table(block, summary));
+        group.appendChild(table(block, summary, blockIndex));
       }
     }
     for (const section of fragment.querySelectorAll<HTMLElement>(".coverage-detail-section:not(.coverage-detail-summary)")) {
@@ -156,6 +209,7 @@ export function createCoverageDetails(deps: Dependencies) {
     request?.abort();
     const token = ++generation;
     data = null;
+    if (metric !== "line" && selectUncovered) selectUncovered.disabled = true;
     content?.replaceChildren();
     if (retry) retry.hidden = true;
     if (metric === "line" || !selection || !view || nodeId === null) return;
@@ -181,6 +235,10 @@ export function createCoverageDetails(deps: Dependencies) {
       if (!result) { if (status) status.textContent = "This report has no detail data for the selected metric and instance."; return; }
       if (result.instancePath !== instance || result.metric !== selectedMetric) throw new Error("Coverage detail instance does not match.");
       data = result;
+      if (selectUncovered) {
+        const firstUncovered = uncoveredEntries().next();
+        selectUncovered.disabled = firstUncovered.done === true;
+      }
       if (status) status.textContent = `Report source: ${result.filePath}`;
       render();
     }).catch(error => {
@@ -188,6 +246,28 @@ export function createCoverageDetails(deps: Dependencies) {
       if (status) status.textContent = error instanceof Error ? error.message : String(error);
       if (retry) retry.hidden = false;
     });
+  }
+  // Bulk selection scans report rows, not the current DOM page. Skip the summary
+  // table and neutral rows because neither identifies an uncovered observation.
+  function* uncoveredEntries(): Generator<readonly [string, CoverageExportEntry]> {
+    if (!data || metric === "line") return;
+
+    let firstTable = true;
+    for (const [blockIndex, block] of data.blocks.entries()) {
+      if (block.kind !== "table") continue;
+      if (firstTable) {
+        firstTable = false;
+        continue;
+      }
+      for (const [rowIndex, row] of block.rows.entries()) {
+        const isUncovered = row.status === "uncovered" || row.status === "failed";
+        if (row.header || !isUncovered) continue;
+
+        const key = `${data.metric}:${blockIndex}:${rowIndex}`;
+        const entry: CoverageExportEntry = { kind: "detail", data, block: blockIndex, row: rowIndex };
+        yield [key, entry];
+      }
+    }
   }
   for (const tab of tabs) {
     tab.addEventListener("click", () => {
@@ -207,6 +287,12 @@ export function createCoverageDetails(deps: Dependencies) {
   missingOnly?.addEventListener("change", render);
   retry?.addEventListener("click", load);
   return {
+    isLine() {
+      return metric === "line";
+    },
+    selectUncovered() {
+      deps.exporter.setMany(uncoveredEntries());
+    },
     sync() {
       const selected = deps.getSelection();
       const currentView = deps.getView();

@@ -1,4 +1,5 @@
 import { createCoverageDetails } from "./coverage-details.js";
+import { createCoverageExport, type CoverageExportEntry } from "./coverage-export.js";
 import type { CoverageLine, CoverageSelection } from "./coverage-types.js";
 import type { HierarchyNode, ViewerState } from "./types.js";
 import type { SourceView } from "./main-types.js";
@@ -14,11 +15,16 @@ interface SourceCoverageDependencies {
 }
 
 export function coverageLineState(row: CoverageLine): string {
-  return row.excluded ? "excluded" : row.covered === 0 ? "uncovered" : row.covered === row.total ? "covered" : "partial";
+  if (row.excluded) return "excluded";
+  if (row.covered === 0) return "uncovered";
+  if (row.covered === row.total) return "covered";
+  return "partial";
 }
 
 export function createSourceCoverage(deps: SourceCoverageDependencies) {
-  const metricDetails = createCoverageDetails(deps);
+  const exporter = createCoverageExport(deps);
+  const metricDetails = createCoverageDetails({ ...deps, exporter, onMetricChange: updateVisibility });
+  const selectUncovered = document.getElementById("coverage-export-uncovered") as HTMLButtonElement | null;
   const bar = document.getElementById("source-coverage-bar");
   const status = document.getElementById("source-coverage-status");
   const detail = document.getElementById("source-coverage-line-detail");
@@ -31,6 +37,8 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
   const pageNext = document.getElementById("source-coverage-page-next") as HTMLButtonElement | null;
   const pageLabel = document.getElementById("source-coverage-page");
   const PAGE_SIZE = 200;
+  const addLine = document.getElementById("coverage-export-add-line") as HTMLButtonElement | null;
+  let reportPath = "";
   let selection: CoverageSelection | null = null;
   let view: SourceView | null = null;
   let nodeId: number | null = null;
@@ -48,6 +56,12 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
     if (plain) plain.hidden = !enabled() || view?.renderMode !== "plain";
     if (previous) previous.disabled = !enabled() || !missing.length;
     if (next) next.disabled = !enabled() || !missing.length;
+    if (addLine) addLine.disabled = !byLine?.has(selectedLine);
+    // The detail tab owns this shared button outside Line mode. Bulk export uses
+    // validated coverage even when the user has hidden the colored line column.
+    if (selectUncovered && metricDetails.isLine()) {
+      selectUncovered.disabled = !missing.length;
+    }
   }
   function renderPage() {
     if (!lineSelect || !plain || plain.hidden) return;
@@ -55,6 +69,7 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
     lineSelect.replaceChildren(...rows.slice(begin, begin + PAGE_SIZE).map(row => new Option(
       `${row.line}: ${row.covered}/${row.total} ${coverageLineState(row)}`, String(row.line), false, row.line === selectedLine,
     )));
+    if (addLine) addLine.disabled = !byLine?.has(Number(lineSelect.value));
     if (pageLabel) pageLabel.textContent = `${rows.length ? begin + 1 : 0}–${Math.min(begin + PAGE_SIZE, rows.length)} / ${rows.length}`;
     if (pagePrevious) pagePrevious.disabled = page === 0;
     if (pageNext) pageNext.disabled = begin + PAGE_SIZE >= rows.length;
@@ -63,6 +78,7 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
     const row = byLine?.get(line);
     if (!row) return;
     selectedLine = line;
+    if (addLine) addLine.disabled = false;
     if (detail) detail.textContent = `Line ${line}: ${row.covered}/${row.total} points, ${coverageLineState(row)}`;
     if (view?.renderMode === "plain") {
       const index = rows.findIndex(item => item.line === line);
@@ -91,6 +107,7 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
     controller = null;
     generation++;
     rows = [];
+    reportPath = "";
     byLine = null;
     missing = [];
     selectedLine = 0;
@@ -100,6 +117,7 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
     updateVisibility();
   }
   function sync() {
+    exporter.sync();
     metricDetails.sync();
     const currentSelection = deps.getSelection();
     const currentView = deps.getView();
@@ -141,6 +159,7 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
           throw new Error(`Source text does not match the report at line ${row.line}; coverage overlay disabled.`);
         }
       }
+      reportPath = data.reportPath;
       rows = [...data.lines].sort((left, right) => left.line - right.line);
       byLine = new Map(rows.map(row => [row.line, row]));
       missing = rows.filter(row => !row.excluded && row.covered < row.total).map(row => row.line);
@@ -161,8 +180,44 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
     const row = byLine?.get(line);
     if (!row) return '<span class="coverage-line-cell coverage-unmeasured" title="No reported coverage point">--</span>';
     const state = coverageLineState(row);
-    return `<button type="button" class="coverage-line-cell coverage-${state}" data-coverage-line="${line}" title="Line ${line}: ${row.covered}/${row.total} coverage points, ${state}">${row.covered}/${row.total}</button>`;
+    const checked = exporter.has(`line:${line}`) ? " checked" : "";
+    return `<span class="coverage-line-cell coverage-${state}">`
+      + `<input type="checkbox" data-coverage-export-key="line:${line}" data-coverage-export-line="${line}" aria-label="Select Line ${line}"${checked}>`
+      + `<button type="button" data-coverage-line="${line}" title="Line ${line}: ${row.covered}/${row.total} coverage points, ${state}">`
+      + `${row.covered}/${row.total}</button></span>`;
   }
+  function* uncoveredLineEntries(): Generator<readonly [string, CoverageExportEntry]> {
+    // Validation builds both collections together; every missing line is in byLine.
+    for (const line of missing) {
+      const row = byLine!.get(line)!;
+      yield [`line:${line}`, { kind: "line", row, reportPath }];
+    }
+  }
+
+  selectUncovered?.addEventListener("click", () => {
+    if (metricDetails.isLine()) {
+      exporter.setMany(uncoveredLineEntries());
+    } else {
+      metricDetails.selectUncovered();
+    }
+  });
+  addLine?.addEventListener("click", () => {
+    const line = view?.renderMode === "plain" ? Number(lineSelect?.value) : selectedLine;
+    const row = byLine?.get(line);
+    if (row) {
+      exporter.set(`line:${row.line}`, { kind: "line", row, reportPath });
+    }
+  });
+  deps.sourceCode.addEventListener("change", event => {
+    const checkbox = event.target as HTMLInputElement;
+    if (!checkbox.matches("[data-coverage-export-line]")) return;
+    const line = Number(checkbox.dataset.coverageExportLine);
+    const row = byLine?.get(line);
+    if (!row) return;
+
+    const entry: CoverageExportEntry = { kind: "line", row, reportPath };
+    exporter.set(`line:${line}`, checkbox.checked ? entry : null);
+  });
   toggle?.addEventListener("change", () => { updateVisibility(); renderPage(); deps.repaint(); });
   previous?.addEventListener("click", () => navigate(-1));
   next?.addEventListener("click", () => navigate(1));
@@ -176,6 +231,14 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
   return {
     sync, cell,
     lineClass(line: number) { const row = enabled() ? byLine?.get(line) : null; return row ? `coverage-${coverageLineState(row)}` : ""; },
-    close() { metricDetails.close(); reset(); selection = null; view = null; nodeId = null; if (bar) bar.hidden = true; },
+    close() {
+      exporter.close();
+      metricDetails.close();
+      reset();
+      selection = null;
+      view = null;
+      nodeId = null;
+      if (bar) bar.hidden = true;
+    },
   };
 }

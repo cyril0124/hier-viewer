@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Coverage rows can be selected across metric tabs and pages, then copied or downloaded as Markdown with instance identity, report metrics, original detail headers/cells, and referenced source context. Select uncovered adds all unhit or partial entries in the current metric across every page. Selections clear on instance, source-view, or report changes.
+
 - With imported coverage active, the 3D view defaults to Coverage (%) mode: linear bar heights on a fixed 0-100% axis, preserving zero-coverage entries and distinguishing missing data. 2D pie areas continue to represent structural size.
 - Coverage coloring, fixed percentage legends, and instance coverage counts are available in 2D pie and 3D charts as well as the treemap. Metric changes, report replacement, and removal refresh charts; 2D pie areas keep structural sizing.
 - Optional Assert coverage is imported and shown only when present, with per-instance assertion attempts, real successes, failures, incomplete attempts, and cover-directive matches.
