@@ -10,6 +10,7 @@ interface ExportContext {
   selection: CoverageSelection;
   node: HierarchyNode;
   view: SourceView;
+  verifiedReportSource?: string | null;
 }
 
 const METRIC_LABELS = { condition: "Condition", branch: "Branch", toggle: "Toggle", assert: "Assert" };
@@ -47,7 +48,8 @@ function appendLineEntries(parts: string[], entries: readonly CoverageExportEntr
   }
 }
 
-function appendReportReferences(parts: string[], entry: DetailExportEntry, node: HierarchyNode, sourceLines: Set<number>) {
+function appendReportReferences(parts: string[], entry: DetailExportEntry, context: ExportContext, sourceLines: Set<number>) {
+  const { node, verifiedReportSource } = context;
   const blocks = entry.data.blocks;
 
   // Several tables can share one expression. URG can also put LINE and EXPRESSION
@@ -65,7 +67,8 @@ function appendReportReferences(parts: string[], entry: DetailExportEntry, node:
 
   const reportSourcePath = entry.data.filePath.replace(/\\/g, "/");
   const bundledSourcePath = node.definitionFilePath?.replace(/\\/g, "/");
-  const sourcePathMatches = reportSourcePath === bundledSourcePath;
+  const sourcePathMatches = reportSourcePath === bundledSourcePath
+    || reportSourcePath === verifiedReportSource?.replace(/\\/g, "/");
   for (let index = groupStart; index <= groupEnd; index++) {
     const reference = blocks[index];
     if (reference.kind !== "code") continue;
@@ -78,7 +81,7 @@ function appendReportReferences(parts: string[], entry: DetailExportEntry, node:
   }
 }
 
-function appendMetricEntries(parts: string[], entries: readonly CoverageExportEntry[], node: HierarchyNode, sourceLines: Set<number>) {
+function appendMetricEntries(parts: string[], entries: readonly CoverageExportEntry[], context: ExportContext, sourceLines: Set<number>) {
   for (const metric of DETAIL_METRICS) {
     const selected = entries
       .filter((entry): entry is DetailExportEntry => entry.kind === "detail" && entry.data.metric === metric)
@@ -95,7 +98,7 @@ function appendMetricEntries(parts: string[], entries: readonly CoverageExportEn
       if (previousBlock !== entry.block) {
         previousBlock = entry.block;
         parts.push(formatCodeBlock(`Detail source file: ${entry.data.filePath}\nTable: ${block.title ?? "Untitled"}`));
-        appendReportReferences(parts, entry, node, sourceLines);
+        appendReportReferences(parts, entry, context, sourceLines);
         const headers = block.rows
           .filter(row => row.header)
           .map(row => row.cells.join("\t"))
@@ -160,6 +163,7 @@ export function formatCoverageExport(context: ExportContext, entries: readonly C
     coverageInstance: scope?.path ?? null,
     module: node.module,
     sourceFile: node.definitionFilePath ?? null,
+    reportSourceFile: context.verifiedReportSource ?? null,
     selectedEntries: entries.length,
     subtreeMetrics: scope?.metrics ?? {},
   };
@@ -171,7 +175,7 @@ export function formatCoverageExport(context: ExportContext, entries: readonly C
 
   const sourceLines = new Set<number>();
   appendLineEntries(parts, entries, sourceLines);
-  appendMetricEntries(parts, entries, node, sourceLines);
+  appendMetricEntries(parts, entries, context, sourceLines);
   appendSourceContext(parts, sourceLines, view);
   return parts.join("\n\n") + "\n";
 }
@@ -194,6 +198,7 @@ export function createCoverageExport(deps: Dependencies) {
   let selection: CoverageSelection | null = null;
   let nodeId: number | null = null;
   let view: SourceView | null = null;
+  let verifiedReportSource: string | null = null;
   let generation = 0;
 
   function updateSelectionControls() {
@@ -236,7 +241,7 @@ export function createCoverageExport(deps: Dependencies) {
   function openPreview() {
     if (!selection || nodeId === null || !view || !entries.size || !dialog || !previewText) return;
 
-    const context = { selection, node: deps.getNode(nodeId), view };
+    const context = { selection, node: deps.getNode(nodeId), view, verifiedReportSource };
     previewText.value = formatCoverageExport(context, [...entries.values()]);
     if (statusLabel) {
       statusLabel.textContent = `${entries.size} entries · ${previewText.value.length.toLocaleString()} characters`;
@@ -297,6 +302,9 @@ export function createCoverageExport(deps: Dependencies) {
   document.getElementById("coverage-export-download")?.addEventListener("click", downloadPreview);
 
   return {
+    setVerifiedSource(path: string | null) {
+      verifiedReportSource = path;
+    },
     has(key: string) {
       return entries.has(key);
     },
@@ -321,12 +329,14 @@ export function createCoverageExport(deps: Dependencies) {
 
       // Shared source-file caches do not make selections transferable across instances.
       reset();
+      verifiedReportSource = null;
       selection = selected;
       nodeId = id;
       view = currentView;
     },
     close() {
       reset();
+      verifiedReportSource = null;
       selection = null;
       nodeId = null;
       view = null;

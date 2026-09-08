@@ -152,7 +152,9 @@ Both input modes copy report XML/HTML into `out`; coverage remains available aft
 3. Set **Coverage root** to the full report instance path, such as `tb_top.u_dut`, and choose the corresponding **Target hierarchy**. Click **Check mapping**, inspect unmatched instances, then **Apply**.
 4. Select a **Coverage** metric to color the hierarchy. Click legend ranges to filter instances, combine ranges, or use **Show all** to reset. Open **Module Source** for an instance to inspect Line coverage or the Condition, Branch, Toggle, and optional Assert detail tabs.
 
-Selecting only `session.xml` supplies hierarchy summaries; source and table details require the report's HTML files. The treemap and 2D pie keep structural areas, while 3D defaults to fixed 0-100% coverage heights sorted from highest to lowest. Browser-selected files are read locally without uploading them.
+Selecting only `session.xml` supplies hierarchy summaries; source and table details require the report's HTML files. Browser-selected files are read locally without uploading them.
+
+The viewer recognizes relocated source files when their filenames and all numbered report excerpts match the bundled source. Text mismatches disable line markers. The treemap and 2D pie keep structural areas, while 3D defaults to fixed 0-100% coverage heights sorted from highest to lowest.
 
 ### Convert a VDB in the viewer
 

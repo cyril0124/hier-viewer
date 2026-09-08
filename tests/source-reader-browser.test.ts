@@ -247,6 +247,42 @@ describe('production source reader', () => {
       }, sourceLines);
       await page.evaluate(() => window.reader.renderSource(0, 'definition'));
       await page.waitForFunction(() => document.querySelector('[data-coverage-line="28"]')?.textContent === '0/1');
+      await page.evaluate(() => {
+        const original = window.readerCoverage!.report.getLineCoverage;
+        window.readerCoverage!.report.getLineCoverage = async (...args) => {
+          const data = await original(...args);
+          return data ? { ...data, filePath: '/old/different.sv' } : null;
+        };
+        window.readerCoverage = { ...window.readerCoverage! };
+        window.reader.refreshCoverage();
+      });
+      await page.waitForFunction(() => document.querySelector('#source-coverage-status')!.textContent!.includes('Source file does not match') && !document.querySelector('[data-coverage-line]'));
+      assert.equal(await page.locator('[data-coverage-line]').count(), 0);
+      await page.evaluate(() => {
+        const original = window.readerCoverage!.report.getLineCoverage;
+        window.readerCoverage!.report.getLineCoverage = async (...args) => {
+          const data = await original(...args);
+          return data ? { ...data, filePath: '/old/queue.sv' } : null;
+        };
+        window.readerCoverage = { ...window.readerCoverage! };
+        window.reader.refreshCoverage();
+      });
+      await page.waitForFunction(() => document.querySelector('[data-coverage-line="28"]')?.textContent === '0/1');
+      assert.match(await page.locator('#source-coverage-status').textContent() ?? '', /report text matched; source relocated/);
+      await page.evaluate(() => {
+        const view = window.reader.currentSourceView!;
+        view.lines![27] = 'different RTL;';
+        window.readerCoverage = { ...window.readerCoverage! };
+        window.reader.refreshCoverage();
+      });
+      await page.waitForFunction(() => document.querySelector('#source-coverage-status')!.textContent!.includes('Source text does not match') && !document.querySelector('[data-coverage-line]'));
+      assert.equal(await page.locator('[data-coverage-line]').count(), 0, 'Relocated sources must still pass source text validation');
+      await page.evaluate(() => {
+        window.reader.currentSourceView!.lines![27] = 'wire signal_27;';
+        window.readerCoverage = { ...window.readerCoverage! };
+        window.reader.refreshCoverage();
+      });
+      await page.waitForFunction(() => document.querySelector('[data-coverage-line="28"]')?.textContent === '0/1');
       await page.locator('[data-coverage-export-line="28"]').check();
       assert.equal(await page.locator('#coverage-export-count').textContent(), '1 selected');
       await page.locator('#coverage-export-open').click();

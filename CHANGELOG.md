@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Line coverage supports relocated source files after validating the instance, module, filename, and all numbered report excerpts. Mismatched text disables markers. Status and exports identify relocated sources.
+
 - Bundled coverage errors remain visible through layout redraws, preserving root-matching diagnostics.
 
 - 3D coverage bars and their legend are sorted by descending coverage, with no-data entries last and stable ordering for equal scores.

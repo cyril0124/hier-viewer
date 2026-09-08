@@ -111,7 +111,9 @@ Server imports provide an **Open URG Report** link. Browser-only file imports do
 2. Switch metric tabs or pages to collect more entries. The selected count includes entries hidden by pagination or **Uncovered only**. **Clear selection** removes all entries. Switching the instance, source view, or imported report clears the selection automatically.
 3. Click **Export selected** to inspect the Markdown, then **Copy Markdown** or **Download .md**. If automatic copying is unavailable, the viewer selects the preview text for manual copying.
 
-The export includes the hierarchy and coverage instance paths, module, source file, report name/release, original subtree metrics, and selected observations. Detail rows retain their headers, expression/reference text, and raw cells, including Assert counters. Line ratios remain covered/total points. Referenced source ranges include up to three surrounding lines and merge overlaps; detail source context is attached only when the report source path matches the bundled file. Toggle or Assert rows without line references do not invent source locations. Source context comes from the bundle and does not establish the simulation's RTL revision.
+The export includes instance paths, module, source file, report name and release, subtree metrics, and selected observations. Detail rows retain their headers, expressions, source references, and raw cells, including Assert counters. Line ratios count covered/total points.
+
+Source context includes up to three surrounding lines, with overlapping ranges merged. Detail context is included when source paths match or Line validation has verified a relocated file for the current instance and view. Metadata records the bundled path and the report path verified by Line coverage. Rows without line references have no source context. Source text comes from the bundle; it does not establish the simulation's RTL revision.
 
 Selection, formatting, clipboard copying, and download run in the browser. The viewer does not send the selection to an AI service. Only selected rows are exported; choosing one page never selects hidden pages.
 
@@ -121,7 +123,9 @@ The importer reads `session.xml` format 1.1 and the URG module-list, self-instan
 
 Matching with an explicit root rebases the chosen coverage root to the chosen hierarchy node, then matches child names exactly. Automatic preload matching uses the same complete descendant-name/structure requirement and refuses ambiguous results. Neither mode merges by module name or guesses generate-name aliases. Use the same top, parameters, defines, and RTL version as the simulation. Review unmatched paths before applying a report.
 
-Line details must agree with the instance's own Line total. Before adding source colors, the viewer checks the reported file path and the text of every reported coverage row against the bundled source. A mismatch disables the overlay. This detects report-to-bundle differences but does not prove that either file matches the original simulation compilation. Preserve the original simulation RTL revision separately.
+Line details must agree with the instance's own Line total. The parser verifies the selected instance and module. The viewer then compares every numbered source row in the report with the bundled source at the same line number. This includes context without coverage counts and ignores leading and trailing whitespace.
+
+When source paths differ, the viewer accepts the relocated file if its filename matches and all report excerpts pass validation. The status identifies relocated files. Different filenames, conflicting text, missing source excerpts, or out-of-range line numbers disable the overlay. Validation covers the report excerpts; keep the simulation's RTL revision separately to establish the full source version.
 
 Ambiguous multi-file attribution, unsupported exclusion layouts, missing pages, invalid counts, and unrecognized line formats fail explicitly instead of becoming zero coverage. Detailed exclusions are not inferred from colors or comments. Other metric sections and annotation-only rows such as `MISSING_ELSE` are not treated as source lines.
 

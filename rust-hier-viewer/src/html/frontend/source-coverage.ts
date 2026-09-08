@@ -1,3 +1,4 @@
+import { validateCoverageSource } from "./coverage-source.js";
 import { createCoverageDetails } from "./coverage-details.js";
 import { createCoverageExport, type CoverageExportEntry } from "./coverage-export.js";
 import type { CoverageLine, CoverageSelection } from "./coverage-types.js";
@@ -108,6 +109,7 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
     generation++;
     rows = [];
     reportPath = "";
+    exporter.setVerifiedSource(null);
     byLine = null;
     missing = [];
     selectedLine = 0;
@@ -152,18 +154,14 @@ export function createSourceCoverage(deps: SourceCoverageDependencies) {
         return;
       }
       if (data.instancePath !== instancePath) throw new Error("Line coverage belongs to a different instance.");
-      if (data.filePath.replace(/\\/g, "/") !== node.definitionFilePath?.replace(/\\/g, "/")) throw new Error("Source path does not match the coverage report.");
-      for (const row of data.lines) {
-        const index = row.line - expectedView.firstLineNumber;
-        if (index < 0 || index >= (expectedView.lines?.length ?? 0) || expectedView.lines![index].trim() !== row.sourceText.trim()) {
-          throw new Error(`Source text does not match the report at line ${row.line}; coverage overlay disabled.`);
-        }
-      }
+      const relocated = validateCoverageSource(data, node.definitionFilePath, expectedView);
+      exporter.setVerifiedSource(data.filePath);
       reportPath = data.reportPath;
       rows = [...data.lines].sort((left, right) => left.line - right.line);
       byLine = new Map(rows.map(row => [row.line, row]));
       missing = rows.filter(row => !row.excluded && row.covered < row.total).map(row => row.line);
-      if (status) status.textContent = `${data.totals.covered}/${data.totals.total} points; ${missing.length} uncovered or partial lines; report text matched`;
+      const sourceNote = relocated ? "; source relocated" : "";
+      if (status) status.textContent = `${data.totals.covered}/${data.totals.total} points; ${missing.length} uncovered or partial lines; report text matched${sourceNote}`;
       updateVisibility();
       renderPage();
       deps.repaint();

@@ -197,8 +197,9 @@ function totalCounts(table: AstElement): CoverageCounts {
   return found;
 }
 
-function parseCode(pre: AstElement, expected: CoverageCounts): CoverageLine[] {
+function parseCode(pre: AstElement, expected: CoverageCounts): Pick<CoverageLineData, "lines" | "sourceLines"> {
   const byLine = new Map<number, CoverageLine>();
+  const sourceByLine = new Map<number, string>();
   for (const rawLine of nodeText(pre).split(/\r?\n/)) {
     if (rawLine.trim() === "" || rawLine.trim() === "MISSING_ELSE") continue;
     const numbered = /^\s*(\d+)/.exec(rawLine);
@@ -206,6 +207,13 @@ function parseCode(pre: AstElement, expected: CoverageCounts): CoverageLine[] {
     if (rawLine.length < 26) fail(`incomplete Line code row: ${rawLine.trim()}`);
     const prefix = rawLine.slice(0, 26);
     const sourceText = rawLine.slice(26);
+    const sourceLine = parseNonnegativeInteger(numbered[1], "source line number");
+    if (sourceLine === 0) fail("source line number must be positive");
+    const previousSource = sourceByLine.get(sourceLine);
+    if (previousSource !== undefined && previousSource !== sourceText) {
+      fail(`conflicting source text on line ${sourceLine}`);
+    }
+    sourceByLine.set(sourceLine, sourceText);
     const context = /^\s*(\d+)\s*$/.exec(prefix);
     if (context) {
       parseNonnegativeInteger(context[1], "source line number");
@@ -238,7 +246,10 @@ function parseCode(pre: AstElement, expected: CoverageCounts): CoverageLine[] {
   if (covered !== expected.covered || total !== expected.total) {
     fail(`Line detail ${covered}/${total} does not match TOTAL ${expected.covered}/${expected.total}`);
   }
-  return lines;
+  // Keep unmeasured context too: matching coverage statements alone could hide
+  // a changed enclosing condition when accepting a relocated source file.
+  const sourceLines = [...sourceByLine].map(([line, sourceText]) => ({ line, sourceText }));
+  return { lines, sourceLines };
 }
 
 function hasCoverageHeader(section: AstElement[], prefix: string, target: string): boolean {
@@ -570,11 +581,12 @@ export class CoverageReport implements CoverageLineProvider {
       (element) => element.tagName === "pre" && (attribute(element, "class") ?? "").split(/\s+/).includes("code"),
     );
     if (code.length !== 1) fail(`expected one Line code block for ${instancePath}`);
-    const lines = parseCode(code[0], totals);
+    const { lines, sourceLines } = parseCode(code[0], totals);
     return {
       instancePath,
       filePath: sourcePath,
       lines,
+      sourceLines,
       totals,
       reportPath: `${reportFile}#${anchorName}`,
     };

@@ -195,6 +195,8 @@ describe("CoverageReport", () => {
     assert.deepEqual(second, first);
     assert.equal(reads.length, readCount);
     assert.equal(first?.filePath, "rtl/single.sv");
+    assert.deepEqual(first?.sourceLines?.map(row => row.line), [9, 10, 11]);
+    assert.equal(first?.sourceLines?.[0].sourceText.trim(), 'always_comb begin');
     assert.equal(first?.reportPath, "mod1.html#Line");
     assert.deepEqual(first?.totals, { covered: 1, total: 2, excluded: 0 });
     assert.deepEqual(first?.lines.map((line) => [line.line, line.covered, line.total, line.sourceText]), [

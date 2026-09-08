@@ -43,10 +43,15 @@ export interface CoverageLine {
   sourceText: string;
   excluded?: boolean;
 }
+export interface CoverageSourceLine {
+  line: number;
+  sourceText: string;
+}
 export interface CoverageLineData {
   instancePath: string;
   filePath: string;
   lines: CoverageLine[];
+  sourceLines?: CoverageSourceLine[];
   totals: CoverageCounts;
   reportPath: string;
 }
