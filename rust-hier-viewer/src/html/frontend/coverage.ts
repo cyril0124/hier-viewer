@@ -133,9 +133,12 @@ function validateSummaryRoots(summary: CoverageSummary): void {
   }
 }
 
-function validateScopeSubtree(summary: CoverageSummary, root: number): number[] {
+function validateScopeSubtree(
+  summary: CoverageSummary,
+  root: number,
+  seen = new Uint8Array(summary.scopes.length),
+): number[] {
   const order: number[] = [];
-  const seen = new Uint8Array(summary.scopes.length);
   const stack = [root];
   while (stack.length > 0) {
     const id = stack.pop()!;
@@ -189,6 +192,62 @@ function validateNodeSubtree(
     childByName.set(id, names);
   }
   return { order, childByName };
+}
+
+/** Find the unique report subtree with the same descendant names and structure.
+ * The root's own name is ignored: simulation instance names differ from RTL tops.
+ * Structural matching does not establish module identity or the simulation revision.
+ */
+export function inferCoverageRoot(summary: CoverageSummary, nodes: CoverageHierarchy, targetRoot: number): number {
+  validId(targetRoot, nodes.length, "target root");
+  validateSummaryRoots(summary);
+  const coverageOrder: number[] = [];
+  const seen = new Uint8Array(summary.scopes.length);
+  for (const root of summary.roots) {
+    for (const id of validateScopeSubtree(summary, root, seen)) coverageOrder.push(id);
+  }
+  if (coverageOrder.length !== summary.scopes.length) fail("coverage hierarchy contains unreachable scopes");
+  const { order: nodeOrder } = validateNodeSubtree(nodes, targetRoot);
+
+  // Intern exact child-name/shape tuples rather than probabilistic hashes. IDs
+  // keep a deep chain linear in space; repeated subtrees share the same shape.
+  const shapes = new Map<string, number>();
+  function buildShapes(tree: readonly { name: string; children: number[] }[], order: readonly number[]) {
+    const ids = new Uint32Array(tree.length);
+    for (let index = order.length - 1; index >= 0; index--) {
+      const id = order[index];
+      const children = tree[id].children.map(child => [tree[child].name, ids[child]] as const);
+      children.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+      const signature = JSON.stringify(children);
+      let shape = shapes.get(signature);
+      if (shape === undefined) {
+        shape = shapes.size + 1;
+        shapes.set(signature, shape);
+      }
+      ids[id] = shape;
+    }
+    return ids;
+  }
+
+  const targetShape = buildShapes(nodes, nodeOrder)[targetRoot];
+  const reportShapes = buildShapes(summary.scopes, coverageOrder);
+  const matches: number[] = [];
+  for (const id of coverageOrder) {
+    if (reportShapes[id] === targetShape) matches.push(id);
+  }
+  if (matches.length === 1) return matches[0];
+
+  // Bound diagnostics, not the search. Never silently choose the first match.
+  const describePaths = (ids: readonly number[]) => {
+    const shown = ids.slice(0, 20).map(id => summary.scopes[id].path).join(", ");
+    return ids.length > 20 ? `${shown} (showing 20 of ${ids.length})` : shown;
+  };
+  if (matches.length > 1) {
+    throw new Error(`Multiple coverage roots match (${matches.length}): ${describePaths(matches)}. Specify --coverage-root <path>.`);
+  }
+  const sameChildCount = coverageOrder.filter(id => summary.scopes[id].children.length === nodes[targetRoot].children.length);
+  const candidates = sameChildCount.length ? sameChildCount : summary.roots;
+  throw new Error(`No coverage root matches the complete design hierarchy. Report paths to inspect (not exact matches): ${describePaths(candidates)}. Check the report/design inputs or specify --coverage-root <path>.`);
 }
 
 export function mapCoverage(

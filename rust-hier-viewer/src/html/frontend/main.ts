@@ -329,6 +329,7 @@ declare global {
     const state = createViewerState(DATA);
     let activeCoverage: CoverageSelection | null = null;
     let coverageImport: ReturnType<typeof createCoverageImport> | null = null;
+    let coverageLoadError = "";
     const {
       getNode,
       getAnalysisDefinitionMap,
@@ -1084,8 +1085,9 @@ declare global {
         `<strong>${escapeHtml(root.path || root.name || "(root)")}</strong> · ${root.children.length} children · ` +
         `${metricLabel()}: <strong>${metricValue}</strong> · <strong>${layoutModeLabel()}</strong> · depth <strong>${visibleDepthLabel()}</strong> · ` +
         `zoom <strong>${zoomLabel}</strong>${analysisText}${selectText}${matchText}`;
-      statusRight.textContent = state.searchError || state.analysisError;
-      statusRight.classList.toggle("error", Boolean(state.searchError || state.analysisError));
+      const statusError = state.searchError || state.analysisError || coverageLoadError;
+      statusRight.textContent = statusError;
+      statusRight.classList.toggle("error", Boolean(statusError));
       if (clearTreemapCollapsesBtn) {
         clearTreemapCollapsesBtn.disabled = state.treeCollapsedIds.size === 0;
       }
@@ -1473,6 +1475,7 @@ declare global {
       nodes, homeRoot: state.homeRoot,
       getTargetRoot: () => state.selectedId ?? state.currentRoot,
       onApply: selection => {
+        coverageLoadError = "";
         disposeCoverage(activeCoverage);
         activeCoverage = selection;
         state.coverage = selection.display;
@@ -1486,6 +1489,7 @@ declare global {
         draw();
       },
       onClear: () => {
+        coverageLoadError = "";
         disposeCoverage(activeCoverage);
         activeCoverage = null;
         delete state.coverage;
@@ -2144,7 +2148,9 @@ declare global {
       try {
         await (await loadCoverageImporter()).loadBundled(bundledCoverage);
       } catch (error) {
-        statusRight.textContent = `Coverage import failed: ${error instanceof Error ? error.message : String(error)}`;
+        // Keep preload diagnostics visible through subsequent layout redraws.
+        coverageLoadError = `Coverage import failed: ${error instanceof Error ? error.message : String(error)}`;
+        updateStatus();
       }
     }
     setLoadingState(100, "Ready", `${nodes.length} hierarchy nodes ready.`);

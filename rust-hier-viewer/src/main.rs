@@ -1,4 +1,5 @@
 mod cli;
+mod coverage_bundle;
 mod coverage_import;
 mod html;
 mod input;
@@ -16,6 +17,7 @@ use std::path::Path;
 use std::process;
 
 use cli::parse_args;
+use coverage_bundle::BundledCoverage;
 use html::{
     render_analysis_bin, render_chart_js, render_core_bin, render_coverage_js, render_html,
     render_meta_json, render_three_core_js, render_three_js,
@@ -137,6 +139,12 @@ fn run_generate(mut config: Config) -> Result<(), String> {
         ));
     }
 
+    let coverage = config
+        .coverage
+        .as_ref()
+        .map(|coverage| BundledCoverage::prepare(coverage, Path::new(&output_dir)))
+        .transpose()?;
+
     info("hier-viewer", "Loading hierarchy input...");
     let input_data = match startup_selection.as_ref() {
         Some(selection) => {
@@ -157,7 +165,7 @@ fn run_generate(mut config: Config) -> Result<(), String> {
     info("hier-viewer", "Building viewer model...");
     let data = build_viewer_data(input_data, &config)?;
     info("hier-viewer", "Rendering HTML bundle assets...");
-    let html = render_html(&data);
+    let html = render_html(&data, coverage.as_ref().map(BundledCoverage::manifest_url));
     let meta_json = render_meta_json(&data);
     let core_bin = render_core_bin(&data)?;
     let analysis_bin = render_analysis_bin(&data)?;
@@ -179,6 +187,16 @@ fn run_generate(mut config: Config) -> Result<(), String> {
         three_core_js,
     };
     write_bundle(&output_dir, &assets)?;
+    if let Some(coverage) = coverage {
+        info(
+            "hier-viewer",
+            format!(
+                "Bundled coverage: {} (mapped when the page loads)",
+                coverage.manifest_url()
+            ),
+        );
+        coverage.persist();
+    }
     info("hier-viewer", "Bundle generation finished.");
     if config.preview {
         serve_output_dir(

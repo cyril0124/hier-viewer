@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, test } from "vitest";
 import { coverageColor, coverageDetailsHtml } from "../rust-hier-viewer/src/html/frontend/coverage-display.js";
 import { CoverageReport } from "../rust-hier-viewer/src/html/frontend/coverage-report.js";
-import { mapCoverage } from "../rust-hier-viewer/src/html/frontend/coverage.js";
+import { inferCoverageRoot, mapCoverage } from "../rust-hier-viewer/src/html/frontend/coverage.js";
 import type {
   CoverageFileSource,
   CoverageHierarchy,
@@ -48,6 +48,40 @@ function scope(name: string, path: string, parent: number | null, children: numb
 function node(id: number, name: string, parent: number | null, children: number[] = []) {
   return { id, name, module: `M${id}`, parent, children };
 }
+
+test("infers the unique complete subtree regardless of root name or sibling order", () => {
+  const nodes = [node(0, "Top", null, [1, 2]), node(1, "left", 0), node(2, "right", 0)];
+  const coverage = summary([
+    scope("tb", "tb", null, [1, 4]),
+    scope("u_dut", "tb.u_dut", 0, [3, 2]),
+    scope("left", "tb.u_dut.left", 1),
+    scope("right", "tb.u_dut.right", 1),
+    scope("other", "tb.other", 0, [5, 6]),
+    scope("left", "tb.other.left", 4),
+    scope("extra", "tb.other.extra", 4),
+  ], [0]);
+  assert.equal(inferCoverageRoot(coverage, nodes, 0), 1);
+  const mapped = mapCoverage(coverage, 1, nodes, 0);
+  assert.equal(mapped.matched, 3);
+  assert.deepEqual(mapped.unmatchedScopes, []);
+});
+
+test("automatic roots reject ambiguous leaves and non-matching descendant names", () => {
+  const coverage = summary([scope("a", "tb.a", null), scope("b", "tb.b", null)], [0, 1]);
+  assert.throws(() => inferCoverageRoot(coverage, [node(0, "Top", null)], 0), /Multiple coverage roots match.*tb.a, tb.b.*--coverage-root/);
+  const nodes = [node(0, "Top", null, [1]), node(1, "missing", 0)];
+  assert.throws(() => inferCoverageRoot(coverage, nodes, 0), /No coverage root matches.*not exact matches.*tb.a, tb.b/);
+});
+
+test("automatic root search handles deep trees and reports bounded diagnostics for all matches", () => {
+  const length = 10000;
+  const nodes = Array.from({ length }, (_, id) => node(id, "stage", id ? id - 1 : null, id + 1 < length ? [id + 1] : []));
+  const scopes = Array.from({ length: length + 1 }, (_, id) => scope(id === 1 ? "u_dut" : "stage", `scope-${id}`, id ? id - 1 : null, id < length ? [id + 1] : []));
+  assert.equal(inferCoverageRoot(summary(scopes, [0]), nodes, 0), 1);
+
+  const leaves = Array.from({ length: 5000 }, (_, id) => scope(`u${id}`, `tb.u${id}`, null));
+  assert.throws(() => inferCoverageRoot(summary(leaves, leaves.map((_, id) => id)), [node(0, "Top", null)], 0), /Multiple coverage roots match \(5000\).*showing 20 of 5000/);
+});
 
 test("rebases selected roots and reports unmatched nodes and scopes", () => {
   const coverage = summary([

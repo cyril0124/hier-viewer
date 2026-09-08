@@ -2,13 +2,13 @@
 
 [English](README.md)
 
-RTL 层级可视化与结构分析工具。
+RTL 层级可视化、结构分析与覆盖率查看工具。
 
 `hier-viewer` 将展开后的实例层级生成为交互式静态站点，用于层级浏览、模块统计比较和 RTL 源码定位。支持矩形树图、2D 饼图和 3D 图表。
 
 内置的 `slang-hier-exporter` 将层级、信号统计和源码位置导出至 SQLite。Rust 程序读取导出结果，或通过 `--db` 指定的已有数据库，生成静态站点。浏览和浏览器文件覆盖率导入仅需 HTTP 文件服务器；可选的服务端 VDB 转换使用内置本地服务。
 
-[安装](#安装) · [快速开始](#快速开始) · [常见命令](#常见命令) · [开发者说明](#开发者说明)
+[安装](#安装) · [快速开始](#快速开始) · [覆盖率](#覆盖率) · [常见命令](#常见命令) · [开发者说明](#开发者说明)
 
 ## 安装
 
@@ -117,11 +117,61 @@ Zen 模式隐藏大部分界面控件，扩大可视化显示区域。
 
 ## 覆盖率
 
-在网页点击 **Import coverage**，选择 URG 报告目录或 `session.xml`。矩形图和 2D 饼图保留规模面积，用颜色显示覆盖率；3D 默认使用固定 0–100% 纵轴，柱高线性表示覆盖率。各视图均显示实例级 Line、Condition、Branch、Toggle 计数；包含 HTML 明细时，模块源码窗口可显示当前实例的逐行覆盖率，并通过 Condition、Branch、Toggle 页签查看其他明细。
+使用与仿真一致的 RTL 和配置生成层级站点，再导入覆盖率。支持 Line、Condition、Branch、Toggle；报告包含断言覆盖率时，还会显示 Assert。
 
-报告包含断言覆盖率时，还会显示可选的 Assert 指标和明细表。
+### 纯命令行预加载覆盖率
 
-导入服务端报告路径或转换 VDB 时，使用 `hier-viewer serve out` 打开已有站点。VDB 转换要求服务端为 Linux 且已安装 Synopsys URG，超时可在导入框设置。流程、实例映射、源码校验和限制见[覆盖率导入文档](docs/coverage.md)。
+生成站点时传入报告目录：
+
+```bash
+hier-viewer -f rtl/files.f --no-wizard \
+  --output out \
+  --coverage-report /path/to/urgReport \
+  --preview -- --top Top
+```
+
+页面打开后直接显示覆盖率，不需要点击 **Import coverage**。查看器会按完整子层级的实例名和结构，自动选择唯一匹配的报告根节点。多个根节点匹配时，添加 `--coverage-root tb_top.u_dut` 指定目标报告实例；没有匹配时，根据列出的路径检查报告和设计输入。匹配和报错在页面加载时执行。覆盖率参数应放在 `--` 之前，也可与 `--db` 输入配合使用。去掉 `--preview` 即只生成静态站点，供 CI 或其他 HTTP 服务器部署。
+
+如果输入是 VDB，先用 Synopsys URG 生成报告，再执行上面的站点生成命令：
+
+```bash
+urg -dir /path/to/simv.vdb -report /path/to/urgReport \
+  -format both -show fullhier -show ratios -xml_verbose \
+  -metric line+cond+branch+tgl+assert
+```
+
+只有转换这一步需要 URG 和 Synopsys 许可证。CLI 会把报告的 XML/HTML 文件复制进 `out`，移动站点或刷新页面后仍可自动加载。实例映射和报告校验在页面加载时执行。预加载站点也可通过 `--preview-host 0.0.0.0` 提供远程静态访问，细节见[预加载部署说明](docs/coverage.md#preloaded-static-deployment)。
+
+### 通过浏览器导入
+
+1. 按[快速开始](#快速开始)生成并打开层级站点。已有 `out` 站点时，运行 `hier-viewer serve out`，访问终端输出的 HTTP URL。
+2. 点击 **Import coverage**，选择 **URG report files**，通过 **Choose folder** 选中 `urgReport` 目录。
+3. 将 **Coverage root** 设为报告中的完整实例路径，例如 `tb_top.u_dut`，并选择对应的 **Target hierarchy**。点击 **Check mapping**，检查未匹配实例后点击 **Apply**。
+4. 选择 **Coverage** 指标查看层级着色。打开实例的 **Module Source**，查看 Line 逐行覆盖率，或切换 Condition、Branch、Toggle 和可选的 Assert 明细页签。
+
+仅选择 `session.xml` 时只能查看层级汇总；源码和表格明细需要报告中的 HTML 文件。矩形图和 2D 饼图保留结构面积，3D 默认使用固定 0–100% 覆盖率柱高，并按覆盖率从高到低排序。浏览器选择的文件在本地读取，不会上传。
+
+### 在网页中转换 VDB
+
+在保存 VDB 的 Linux 机器上，通过回环地址启动已有站点：
+
+```bash
+hier-viewer serve out --host 127.0.0.1 --port 8000
+```
+
+访问终端输出的 URL。在 **Import coverage** 中选择 **VDB server directory**，填写该机器上的 VDB 路径，点击 **Load report**，再按上述步骤检查并应用层级映射。服务端需要 `PATH` 中有可执行的 `urg`，并具备相应 Synopsys 许可证；导入框可设置超时或取消任务。
+
+已有服务端报告可选择 **URG report server directory** 并填写路径。这些服务端导入功能仅在绑定回环地址时可用；`--host 0.0.0.0` 仅提供静态访问和浏览器文件导入。远程 VDB 转换使用 [SSH 转发连接本地服务](docs/coverage.md#import-a-vdb-or-server-report)。
+
+### 选中覆盖率并复制给 AI
+
+1. 在 **Module Source** 中选择指标页签，勾选需要的条目；也可点击 **Select uncovered**，一次加入当前指标全部分页的未覆盖条目，包括部分覆盖的 Line 行。
+2. 切换页签或分页继续选择。**Clear selection** 清空选择；切换实例、源码视图或报告也会清空。
+3. 点击 **Export selected** 预览 Markdown，再点击 **Copy Markdown** 粘贴给 AI，或通过 **Download .md** 下载文件。
+
+导出包含实例路径、报告指标、原始表头、选中条目及可定位的源码上下文。自动复制不可用时，预览文本会被选中，便于手动复制。查看器不会自动向 AI 服务发送数据。
+
+预加载报告、映射规则、源码校验、断言语义及格式限制见[覆盖率使用指南](docs/coverage.md)。
 
 ## 示例
 
@@ -232,6 +282,8 @@ hier-viewer serve <output-dir> [--host IP] [--port N]
 | `--preview` | 生成后启动预览服务 |
 | `--preview-host <h>` | 绑定地址，默认 `127.0.0.1` |
 | `--preview-port <n>` | 起始端口，默认 `8000`，占用时自动顺延 |
+| `--coverage-report <dir>` | 将 URG 报告复制进生成站点，打开页面时自动加载 |
+| `--coverage-root <path>` | 可选报告实例路径，默认自动选择唯一匹配的层级；需与 `--coverage-report` 配合使用 |
 | `--no-wizard` | 禁用向导，要求显式输入 |
 | `-t, --title <text>` | 自定义页面标题 |
 | `--debug` | 启用查看器调试叠加层，例如 UI 标签 |

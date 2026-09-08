@@ -637,6 +637,7 @@ mod tests {
             filelists: Vec::new(),
             extra_args_tokens: Vec::new(),
             debug: false,
+            coverage: None,
         };
         let data = build_viewer_data(
             InputData {

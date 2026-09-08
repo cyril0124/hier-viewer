@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `--coverage-report` preloads a URG report during CLI generation. The browser selects a unique hierarchy match automatically; optional `--coverage-root` resolves ambiguous roots, and diagnostics list paths when no unique match exists.
+
 - Coverage rows can be selected across metric tabs and pages, then copied or downloaded as Markdown with instance identity, report metrics, original detail headers/cells, and referenced source context. Select uncovered adds all unhit or partial entries in the current metric across every page. Selections clear on instance, source-view, or report changes.
 
 - With imported coverage active, the 3D view defaults to Coverage (%) mode: linear bar heights on a fixed 0-100% axis, preserving zero-coverage entries and distinguishing missing data. 2D pie areas continue to represent structural size.
@@ -23,11 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Bundled coverage errors remain visible through layout redraws, preserving root-matching diagnostics.
+
 - 3D coverage bars and their legend are sorted by descending coverage, with no-data entries last and stable ordering for equal scores.
 - Condition coverage is included in URG conversion, imported from XML, and available in instance details and the coverage metric selector. Line parsing stops before Condition detail sections.
 
 ### Changed
 
+- The hier-viewer launch-script skill includes CLI coverage preloading, optional automatic root matching, VDB report preparation, and browser verification of preloaded coverage.
+- English and Chinese READMEs include a Coverage navigation link and command-line preload, browser import, VDB conversion, and selected-coverage export instructions.
 - Coverage import code loads on demand in `viewer-coverage.js`; original report pages are sandboxed, and coverage data stays separate from cached source text and structural statistics.
 - Source-reader browser tests disable unused filesystem watching to avoid exhausting watch limits in large checkouts.
 

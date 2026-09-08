@@ -1431,6 +1431,7 @@ mod tests {
             filelists: Vec::new(),
             extra_args_tokens: Vec::new(),
             debug: false,
+            coverage: None,
         }
     }
 

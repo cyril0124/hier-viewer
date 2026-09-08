@@ -84,7 +84,7 @@ This starts a temporary loopback server and loads the production TypeScript read
 
 `rust-hier-viewer/src/html/frontend/` contains the authored TypeScript. HTML, CSS, and the vendored Three.js r183 modules remain under `rust-hier-viewer/src/html/`.
 
-Vite builds three minified IIFE scripts into `rust-hier-viewer/src/html/generated/`: `viewer-app.js`, `viewer-chart.js`, and `viewer-coverage.js`. Coverage import loads its script only after the user opens Import; parser dependency license notices are included in that script. These generated files are versioned and must be regenerated with `npm run build` whenever their sources change. Do not edit them by hand. Type checking is separate: `npm run typecheck` runs TypeScript in strict mode.
+Vite builds three minified IIFE scripts into `rust-hier-viewer/src/html/generated/`: `viewer-app.js`, `viewer-chart.js`, and `viewer-coverage.js`. Coverage import loads its script when the user opens Import or when the page starts with a bundled report; parser dependency license notices are included in that script. These generated files are versioned and must be regenerated with `npm run build` whenever their sources change. Do not edit them by hand. Type checking is separate: `npm run typecheck` runs TypeScript in strict mode.
 
 Rust embeds the generated scripts at compile time. The app script remains inline in `index.html`; chart and coverage scripts remain separate static assets. Three.js is loaded from the existing local module files only when the 3D view needs it. Bundle binary formats, source URLs, and persisted UI state are unchanged by the frontend build.
 

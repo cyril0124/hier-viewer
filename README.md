@@ -2,13 +2,13 @@
 
 [中文说明](README.zh-CN.md)
 
-RTL hierarchy visualization and structural analysis.
+RTL hierarchy visualization, structural analysis, and coverage inspection.
 
 `hier-viewer` generates an interactive static site for inspecting elaborated instance hierarchies, comparing module statistics, and navigating RTL source. It supports treemaps, 2D pie charts, and 3D charts.
 
 The embedded `slang-hier-exporter` extracts hierarchy, signal statistics, and source locations into SQLite. The Rust application generates the site from this export or an existing database supplied with `--db`. The generated site requires only an HTTP file server for browsing and browser-file coverage imports. Optional server-side VDB conversion uses the built-in local service.
 
-[Install](#install) · [Quick start](#quick-start) · [Common commands](#common-commands) · [Development](#development)
+[Install](#install) · [Quick start](#quick-start) · [Coverage](#coverage) · [Common commands](#common-commands) · [Development](#development)
 
 ## Install
 
@@ -117,11 +117,61 @@ The source reader navigates to instance declarations and module definitions. It 
 
 ## Coverage
 
-Use **Import coverage** in the viewer to load a URG report folder or `session.xml`. The treemap and 2D pie retain structural areas and use coverage colors; 3D defaults to linear percentage heights on a fixed 0-100% scale. All views show instance-level Line, Condition, Branch, or Toggle counts, and the module source reader shows per-instance line coverage and Condition/Branch/Toggle detail tabs when HTML detail files are available.
+Import coverage into a hierarchy viewer generated from the simulation's RTL and configuration. Line, Condition, Branch, and Toggle metrics are supported; Assert appears when the report contains assertion coverage.
 
-Optional Assert metrics and detail tables appear when the report contains assertion coverage.
+### Preload coverage from the command line
 
-For server-side report paths or VDB conversion, open the existing bundle with `hier-viewer serve out`. VDB conversion requires Linux and Synopsys URG on the server; its timeout is configurable in the import dialog. See [coverage import](docs/coverage.md) for the workflow, mapping rules, source validation, and limitations.
+Pass the report directory when generating the site:
+
+```bash
+hier-viewer -f rtl/files.f --no-wizard \
+  --output out \
+  --coverage-report /path/to/urgReport \
+  --preview -- --top Top
+```
+
+The page opens with coverage already loaded; no **Import coverage** action is needed. The viewer automatically selects a unique report subtree whose descendant instance names and structure match the design. If several roots match, add `--coverage-root tb_top.u_dut` to choose the intended report instance. If none match, check the report/design inputs against the listed paths. Matching and diagnostics run when the page loads. Supply the coverage options before `--`. They also work with `--db` input. Omit `--preview` to generate the static bundle for CI or a separate HTTP server.
+
+For a VDB, first create the report with Synopsys URG, then run the generation command above:
+
+```bash
+urg -dir /path/to/simv.vdb -report /path/to/urgReport \
+  -format both -show fullhier -show ratios -xml_verbose \
+  -metric line+cond+branch+tgl+assert
+```
+
+Only this conversion step requires URG and a Synopsys license. The CLI copies the report's XML/HTML files into `out`; coverage remains available after moving the bundle and on every page reload. Root mapping and report validation run when the page loads. Preloaded bundles also work with `--preview-host 0.0.0.0` for remote static access. See [preloaded deployment details](docs/coverage.md#preloaded-static-deployment).
+
+### Import through the browser
+
+1. Generate and open the hierarchy viewer using [Quick start](#quick-start). For an existing `out` bundle, run `hier-viewer serve out` and open the printed HTTP URL.
+2. Click **Import coverage**, choose **URG report files**, and use **Choose folder** to select `urgReport`.
+3. Set **Coverage root** to the full report instance path, such as `tb_top.u_dut`, and choose the corresponding **Target hierarchy**. Click **Check mapping**, inspect unmatched instances, then **Apply**.
+4. Select a **Coverage** metric to color the hierarchy. Open **Module Source** for an instance to inspect Line coverage or the Condition, Branch, Toggle, and optional Assert detail tabs.
+
+Selecting only `session.xml` supplies hierarchy summaries; source and table details require the report's HTML files. The treemap and 2D pie keep structural areas, while 3D defaults to fixed 0-100% coverage heights sorted from highest to lowest. Browser-selected files are read locally without uploading them.
+
+### Convert a VDB in the viewer
+
+On the Linux machine that holds the VDB, serve the existing bundle on loopback:
+
+```bash
+hier-viewer serve out --host 127.0.0.1 --port 8000
+```
+
+Open the printed URL. In **Import coverage**, choose **VDB server directory**, enter the VDB's path on that machine, and click **Load report**. Then check and apply the hierarchy mapping as above. The server needs `urg` on `PATH` and the applicable Synopsys license. The dialog provides a timeout and cancellation controls.
+
+**URG report server directory** loads an already generated report by server path. These server-side imports require a loopback binding; `--host 0.0.0.0` serves static content with browser-file imports only. For remote VDB conversion, use [SSH forwarding to the local service](docs/coverage.md#import-a-vdb-or-server-report).
+
+### Copy selected coverage for AI analysis
+
+1. In **Module Source**, choose a coverage tab and check individual rows, or click **Select uncovered** to add uncovered entries across all pages of that metric. Partially covered Line rows are included.
+2. Switch tabs or pages to collect more entries. **Clear selection** removes the selection; changing the instance, source view, or report also clears it.
+3. Click **Export selected** to preview the Markdown, then **Copy Markdown** and paste it into your AI conversation, or use **Download .md**.
+
+The export includes instance paths, report metrics, original table headers and selected rows, and available source context. If automatic copying is unavailable, the preview text is selected for manual copying. The viewer does not send data to an AI service.
+
+See the [coverage guide](docs/coverage.md) for preloaded reports, mapping rules, source validation, assertion semantics, and format limitations.
 
 ## Examples
 
@@ -232,6 +282,8 @@ Run `hier-viewer --help` for the full option list.
 | `--preview` | Start the preview server after generation |
 | `--preview-host <h>` | Bind address; default `127.0.0.1` |
 | `--preview-port <n>` | Starting port; default `8000`, increments if occupied |
+| `--coverage-report <dir>` | Copy a URG report into the generated site for automatic loading |
+| `--coverage-root <path>` | Optional report instance path; defaults to a unique hierarchy match. Requires `--coverage-report` |
 | `--no-wizard` | Disable the wizard; require explicit inputs |
 | `-t, --title <text>` | Override the page title |
 | `--debug` | Enable viewer debug overlays, such as UI labels |

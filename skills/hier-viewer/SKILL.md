@@ -1,12 +1,12 @@
 ---
 name: hier-viewer
-description: Use when asked to inspect RTL hierarchy with hier-viewer or generate a one-command viewer launch script with remote HTTP access.
+description: Generate one-command RTL hierarchy viewers with optional coverage preloading and remote HTTP access.
 disable-model-invocation: true
 ---
 
 # Hier-viewer launch scripts
 
-Deliver an executable `.hier-viewer/view-<slug>.sh` in the target project. Running it generates a viewer bundle in `.hier-viewer/<slug>/` and serves that bundle on `0.0.0.0`. The target project is the RTL workspace, not necessarily the directory containing this skill.
+Deliver an executable `.hier-viewer/view-<slug>.sh` in the target project. Running it generates a viewer bundle in `.hier-viewer/<slug>/` and serves that bundle on `0.0.0.0`. When coverage is requested, preload the report through CLI options so opening the page requires no import-dialog interaction. The target project is the RTL workspace, not necessarily the directory containing this skill.
 
 ## 1. Resolve the design and executable
 
@@ -19,13 +19,29 @@ Choose one input mode:
 - RTL: explicit sources and/or repeated `--filelist`; pass verified top/include/define options after `--`.
 - Database: `--db` with a readable SQLite hierarchy database, without RTL, filelists, or compiler arguments. Source files referenced by the database must still be readable when generating the bundle. This mode does not reparse changed RTL.
 
-Completion: the executable and all inputs are concrete and verified, with no guessed top or unresolved generated-source prerequisite.
+### Coverage inputs, when requested
+
+Locate the requested URG report and its `session.xml`. Verify that the chosen executable supports `--coverage-report` and describes `--coverage-root` as optional. If those flags are unavailable, look for an existing compatible binary. If none is available, report the executable/update prerequisite before generating a script that uses them.
+
+Set `coverage_args=(--coverage-report 'path/to/urgReport')` in the template. Leave `--coverage-root` unset by default. Automatic matching checks the complete descendant instance names and structure when the page loads; it is not a module-name lookup. If several report subtrees match, use report/design evidence to choose the intended instance and append `--coverage-root 'tb_top.u_dut'`. Ask only if that evidence cannot distinguish the candidates. If none match, resolve the report/design mismatch; specifying a root does not bypass hierarchy validation.
+
+If only a VDB is available, verify `urg` and the applicable Synopsys license, then generate a report into a fresh directory outside the served bundle:
+
+```bash
+urg -dir /path/to/simv.vdb -report /path/to/urgReport \
+  -format both -show fullhier -show ratios -xml_verbose \
+  -metric line+cond+branch+tgl+assert
+```
+
+Preserve the VDB. A script pointing at the generated report views that captured coverage; include report regeneration in the delivered workflow when refreshing from the VDB is requested. Keep the report input outside the viewer output. The CLI copies XML/HTML into the bundle, so preloading works on `0.0.0.0` without a server import API or UI import step.
+
+Completion: the executable and all inputs are concrete and verified, with no guessed top or unresolved generated-source prerequisite. Coverage requests have a readable report, or a verified VDB-to-report preparation step.
 
 ## 2. Generate the script
 
 Choose a short design/configuration slug matching `[a-z0-9]+(-[a-z0-9]+)*`. Inspect existing paths before writing; preserve unrelated scripts and bundles. Different configurations need different slugs.
 
-Use the template below, replacing `design`, the executable, input array, and compiler array with the discovered values. All example paths and names must be replaced before delivery. For database mode, use `inputs=(--db 'path/to/hiers.db')` and `compiler_args=()`.
+Use the template below, replacing `design`, the executable, input array, and compiler array with the discovered values. All example paths and names must be replaced before delivery. Leave `coverage_args=()` for hierarchy-only launches; use the coverage configuration above when requested. For database mode, use `inputs=(--db 'path/to/hiers.db')` and `compiler_args=()`.
 
 ```bash
 #!/usr/bin/env bash
@@ -39,6 +55,7 @@ SLUG='design'
 VIEWER='hier-viewer'
 inputs=(--filelist 'rtl/files.f')
 compiler_args=(--top 'Top' -I 'rtl/include' -D 'SYNTHESIS=1')
+coverage_args=()
 
 if ! command -v -- "$VIEWER" >/dev/null 2>&1; then
   printf 'hier-viewer executable unavailable: %s\n' "$VIEWER" >&2
@@ -53,17 +70,18 @@ args=(
   --preview-host 0.0.0.0
   --preview-port 8000
   "${inputs[@]}"
+  "${coverage_args[@]}"
 )
 if ((${#compiler_args[@]})); then
   args+=(-- "${compiler_args[@]}")
 fi
 
 printf 'Bundle: %s\n' "$SCRIPT_DIR/$SLUG"
-printf 'Network exposure: all interfaces; bundled RTL sources are accessible without authentication.\n'
+printf 'Network exposure: all interfaces; bundled RTL sources and any coverage report are accessible without authentication.\n'
 exec "$VIEWER" "${args[@]}"
 ```
 
-Keep the script directly under `.hier-viewer/`, outside the served bundle directory. Quote paths and use Bash arrays, not `eval` or command strings. Quote wildcard inputs so hier-viewer expands them. Resolve relative paths against the project root; when existing build inputs assume another working directory, explicitly preserve that directory and adjust the input paths accordingly.
+Keep coverage options in the application argument array, before the compiler `--` separator. Keep the script directly under `.hier-viewer/`, outside the served bundle directory. Quote paths and use Bash arrays, not `eval` or command strings. Quote wildcard inputs so hier-viewer expands them. Resolve relative paths against the project root; when existing build inputs assume another working directory, explicitly preserve that directory and adjust the input paths accordingly.
 
 Use a fixed output directory for cache reuse. RTL export caches live under `<output>/.hier-viewer-cache/`; do not delete them or force `--rebuild-sqlite` on every launch. If input preparation is required, keep generated filelists and supporting files in `.hier-viewer/`, outside served bundles. Preserve original RTL and filelists; do not silently patch a design or drop files to suppress exporter errors.
 
@@ -78,7 +96,10 @@ Run the generated script from outside the project root. Under an agent harness, 
 1. Export succeeds and the bundle contains nonempty `index.html`, `viewer-meta.json`, and `viewer-core.bin`.
 2. The startup log reports binding to `0.0.0.0`. Use its actual port for HTTP checks, not the requested port. Fetch the index, metadata, core data, JS modules, and a bundled source over HTTP; compare responses with the generated files.
 3. Stop the test server and rerun the unchanged script. In RTL mode, confirm the log reports cache reuse. Confirm both launches write to the same bundle directory even from different working directories.
+4. When coverage is configured, follow `data-coverage-manifest` from the generated HTML and check the manifest/report files over HTTP. Open the page and reload it: coverage must load without opening Import. A successful CLI exit alone does not validate root matching. Resolve any zero-match or ambiguous-root diagnostics before claiming coverage works; if browser verification is unavailable, mark automatic matching unverified.
 
-A local interactive terminal attempts to open the browser. SSH and noninteractive sessions print a URL instead; lack of a desktop does not prevent serving. For remote access, replace `127.0.0.1` in the printed URL with the server's reachable IP or hostname. `0.0.0.0` is a bind address, not the browser destination. Firewall rules can still prevent access, and this server provides neither authentication nor TLS. State that bundled source code is exposed to hosts that can reach the port.
+If exporting evidence for AI analysis is part of the request, also verify **Module Source → Select uncovered → Export selected → Copy Markdown** for a mapped instance. Confirm that the export includes the intended instance and report data.
+
+A local interactive terminal attempts to open the browser. SSH and noninteractive sessions print a URL instead; lack of a desktop does not prevent serving. For remote access, replace `127.0.0.1` in the printed URL with the server's reachable IP or hostname. `0.0.0.0` is a bind address, not the browser destination. Firewall rules can still prevent access, and this server provides neither authentication nor TLS. State that bundled source code and any included coverage report are exposed to hosts that can reach the port.
 
 Stop verification processes and remove only temporary verification files. Keep the delivered script and its intended bundle/cache. If the user also requested a running deployment, leave the managed service running and report its actual URL and stop mechanism. Otherwise deliver the script path and the one command `./.hier-viewer/view-<slug>.sh`. Report HTTP verification separately from browser auto-opening and external reachability; mark anything not tested as unverified.

@@ -102,6 +102,12 @@ pub(crate) struct ViewerData {
 }
 
 #[derive(Debug)]
+pub(crate) struct CoverageConfig {
+    pub(crate) report_path: String,
+    pub(crate) root: Option<String>,
+}
+
+#[derive(Debug)]
 pub(crate) struct Config {
     pub(crate) db_path: Option<String>,
     pub(crate) output_path: Option<String>,
@@ -115,6 +121,7 @@ pub(crate) struct Config {
     pub(crate) filelists: Vec<String>,
     pub(crate) extra_args_tokens: Vec<String>,
     pub(crate) debug: bool,
+    pub(crate) coverage: Option<CoverageConfig>,
 }
 
 #[derive(Debug)]

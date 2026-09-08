@@ -4,13 +4,28 @@ Coverage is imported into an already generated hierarchy viewer. It does not cha
 
 ## Preloaded static deployment
 
-A deployment can set `data-coverage-manifest="./coverage/manifest.json"` on the generated page's `body`. The manifest contains `name`, the full coverage `root`, and a `files` array of report-relative filenames. Serve those files beside the manifest, including `session.xml`, module lists, and module detail pages. The viewer automatically loads the report and maps it to the design root on every page load. Both sides of the selected hierarchy must match completely. No server execution API is needed; omit the attribute to keep ordinary imports on demand.
+Generate a bundle with coverage entirely from the command line:
+
+```sh
+hier-viewer -f rtl/files.f --no-wizard \
+  --output out \
+  --coverage-report /path/to/urgReport \
+  --preview -- --top Top
+```
+
+`--coverage-report` is a generation option, also supported with `--db`. Without `--coverage-root`, the browser searches the entire report for a subtree with exactly the same descendant instance names and structure as the generated design root. Sibling order and the root's own name do not affect matching. A unique match is selected automatically; zero matches or multiple matches produce an error with report paths to inspect. Diagnostics show at most 20 paths and state the total when more exist; the search itself is not truncated. Structural matching does not prove module identity or the simulation's RTL revision, and even a leaf-only design can be ambiguous.
+
+Use `--coverage-root tb_top.u_dut` to select an explicit report instance. An invalid explicit root never falls back to automatic selection. Root existence, complete hierarchy matching, XML metrics, and detail/source validation are checked by the browser on load. Remove `--preview` for non-serving CI generation. A VDB must first be converted with the URG command below.
+
+The generator copies regular `.xml` and `.html` files into a fresh `coverage-*` directory inside the output bundle and adds the manifest attribute automatically. The input report is read-only, symlinks are not copied, and output cannot be inside the input report. Keep the entire output directory when deploying; runtime access to the original report and the local import API is unnecessary. Existing report copies are preserved when regenerating. Omitting the coverage options on a later generation removes automatic loading from the new page, but does not delete earlier copies from the output directory.
+
+For a manually assembled deployment, set `data-coverage-manifest="./coverage/manifest.json"` on the generated page's `body`. The manifest contains `name`, an optional full coverage `root`, and a `files` array of report-relative filenames. Omit `root` to request automatic matching. Serve those files beside the manifest, including `session.xml`, module lists, and module detail pages. The viewer automatically loads the report and maps it to the design root on every page load. Both sides of the selected hierarchy must match completely. No server execution API is needed; omit the attribute to keep ordinary imports on demand.
 
 ```json
 {"name":"Regression coverage","root":"tb_top.u_dut","files":["session.xml","modlist.html","mod0.html"]}
 ```
 
-Bundled report paths must be relative and served from the same origin. Treat this manifest and the report as part of the deployment; regenerating the HTML requires restoring the attribute. Source validation and instance-specific detail rules still apply.
+Bundled report paths must be relative and served from the same origin. Treat this manifest and the report as part of the deployment; manually assembled bundles require restoring the attribute after regenerating the HTML. Source validation and instance-specific detail rules still apply.
 
 ## Import a report
 
@@ -83,7 +98,7 @@ Selection, formatting, clipboard copying, and download run in the browser. The v
 
 The importer reads `session.xml` format 1.1 and the URG module-list, self-instance, and Line HTML sections. It has been checked against URG U-2023.03. Instance pages split across `modN_*.html` are followed on demand. A module-level Line section is used only when the report proves that the module has exactly one instance.
 
-Matching rebases the explicitly chosen coverage root to the chosen hierarchy node, then matches child names exactly. It does not merge by module name or guess generate-name aliases. Use the same top, parameters, defines, and RTL version as the simulation. Review unmatched paths before applying a report.
+Matching with an explicit root rebases the chosen coverage root to the chosen hierarchy node, then matches child names exactly. Automatic preload matching uses the same complete descendant-name/structure requirement and refuses ambiguous results. Neither mode merges by module name or guesses generate-name aliases. Use the same top, parameters, defines, and RTL version as the simulation. Review unmatched paths before applying a report.
 
 Line details must agree with the instance's own Line total. Before adding source colors, the viewer checks the reported file path and the text of every reported coverage row against the bundled source. A mismatch disables the overlay. This detects report-to-bundle differences but does not prove that either file matches the original simulation compilation. Preserve the original simulation RTL revision separately.
 
@@ -94,6 +109,8 @@ HTML is parsed as data with `parse5`; imported scripts are not executed. XML DTD
 ## Verification
 
 Run the standard frontend and Rust checks described in the project README. Native XML, stale-response, shared-file instance, and large-source tests run with `npm run test:browser`.
+
+Run `node tests/run-coverage-cli.mjs` after building the CLI to check report packaging, static automatic loading/reload without import APIs, regeneration, and input-directory protection. This test creates and removes its own synthetic RTL and report files.
 
 A real-report browser check accepts independently established expectations:
 

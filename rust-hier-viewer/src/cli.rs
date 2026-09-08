@@ -1,6 +1,6 @@
 use std::process;
 
-use crate::model::{AppCommand, Config, ServeConfig, UpdateConfig};
+use crate::model::{AppCommand, Config, CoverageConfig, ServeConfig, UpdateConfig};
 use crate::preview::{DEFAULT_PREVIEW_HOST, DEFAULT_PREVIEW_PORT};
 
 pub(crate) fn parse_args<I>(args: I) -> Result<AppCommand, String>
@@ -43,6 +43,8 @@ where
     let mut filelists = Vec::new();
     let mut extra_args_tokens = Vec::new();
     let mut debug = false;
+    let mut coverage_report = None;
+    let mut coverage_root = None;
 
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
@@ -92,6 +94,22 @@ where
                     .ok_or_else(|| "--preview-port requires a port number".to_string())?;
                 preview_port = parse_preview_port(&value)?;
             }
+            "--coverage-report" => {
+                coverage_report = Some(
+                    iter.next()
+                        .ok_or("--coverage-report requires a report directory")?,
+                );
+            }
+            "--coverage-root" => {
+                let root = iter
+                    .next()
+                    .ok_or("--coverage-root requires an instance path")?;
+                let root = root.trim();
+                if root.is_empty() {
+                    return Err("--coverage-root must not be empty".to_string());
+                }
+                coverage_root = Some(root.to_string());
+            }
             "--debug" => {
                 debug = true;
             }
@@ -138,6 +156,14 @@ where
         return Err("--preview-host only applies when --preview is enabled".to_string());
     }
 
+    let coverage = match (coverage_report, coverage_root) {
+        (Some(report_path), root) => Some(CoverageConfig { report_path, root }),
+        (None, None) => None,
+        _ => {
+            return Err("--coverage-root requires --coverage-report".to_string());
+        }
+    };
+
     Ok(Config {
         db_path,
         output_path,
@@ -151,6 +177,7 @@ where
         filelists,
         extra_args_tokens,
         debug,
+        coverage,
     })
 }
 
@@ -314,6 +341,8 @@ Options:
       --preview-port <n>   Preferred starting port for --preview (default: 8000; auto-increments if occupied)
   -o, --output <dir>       Write bundle files into a directory (required)
   -t, --title <text>       Override page title
+      --coverage-report <dir>  Bundle a URG report for automatic coverage loading
+      --coverage-root <path>   Optional report instance root; auto-select a unique hierarchy match by default
       --debug              Enable viewer debug overlays such as UI element labels
   -h, --help               Show this help
 
@@ -376,6 +405,50 @@ mod tests {
             AppCommand::Update(config) => assert_eq!(config.target_tag.as_deref(), Some("v1.2.3")),
             AppCommand::Generate(_) | AppCommand::Serve(_) => panic!("expected update command"),
         }
+    }
+
+    #[test]
+    fn coverage_root_is_optional_but_requires_a_report() {
+        for args in [
+            vec!["--coverage-root", "tb.dut"],
+            vec!["--coverage-report", "report", "--coverage-root", " "],
+            vec!["--coverage-report"],
+            vec!["--coverage-root"],
+        ] {
+            assert!(parse_args(args.into_iter().map(str::to_string)).is_err());
+        }
+        let command = parse_args(
+            [
+                "--db",
+                "design.db",
+                "--output",
+                "out",
+                "--coverage-report",
+                "urg report",
+                "--coverage-root",
+                " tb.dut ",
+            ]
+            .into_iter()
+            .map(str::to_string),
+        )
+        .expect("parse coverage arguments");
+        let AppCommand::Generate(config) = command else {
+            panic!("expected generation")
+        };
+        let coverage = config.coverage.expect("coverage configuration");
+        assert_eq!(coverage.report_path, "urg report");
+        assert_eq!(coverage.root.as_deref(), Some("tb.dut"));
+
+        let command = parse_args(
+            ["--coverage-report", "report"]
+                .into_iter()
+                .map(str::to_string),
+        )
+        .expect("report without explicit root");
+        let AppCommand::Generate(config) = command else {
+            panic!("expected generation")
+        };
+        assert!(config.coverage.unwrap().root.is_none());
     }
 
     #[test]

@@ -513,6 +513,33 @@ fn inspect_report(
     id: &str,
     preferred_name: Option<&str>,
 ) -> Result<ReportInfo, ServiceError> {
+    let files = report_files(root)?;
+    let dashboard = root.join("dashboard.html");
+    let report_url = fs::canonicalize(&dashboard)
+        .ok()
+        .filter(|path| path.starts_with(root) && path.is_file())
+        .map(|_| format!("/coverage-reports/{id}/dashboard.html"));
+    let name = preferred_name
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .or_else(|| {
+            root.file_name()
+                .and_then(|name| name.to_str())
+                .map(str::to_owned)
+        })
+        .unwrap_or_else(|| "coverage report".to_string());
+
+    Ok(ReportInfo {
+        id: id.to_string(),
+        name,
+        files,
+        base_url: format!("/api/coverage/files/{id}/"),
+        report_url,
+    })
+}
+
+// The caller supplies a canonical directory. Do not follow report symlinks.
+pub(crate) fn report_files(root: &Path) -> Result<Vec<String>, ServiceError> {
     let session = root.join("session.xml");
     let session = fs::canonicalize(&session).map_err(|err| {
         ServiceError::bad_request(format!("report has no readable session.xml: {err}"))
@@ -546,28 +573,7 @@ fn inspect_report(
         ));
     }
 
-    let dashboard = root.join("dashboard.html");
-    let report_url = fs::canonicalize(&dashboard)
-        .ok()
-        .filter(|path| path.starts_with(root) && path.is_file())
-        .map(|_| format!("/coverage-reports/{id}/dashboard.html"));
-    let name = preferred_name
-        .filter(|name| !name.is_empty())
-        .map(str::to_owned)
-        .or_else(|| {
-            root.file_name()
-                .and_then(|name| name.to_str())
-                .map(str::to_owned)
-        })
-        .unwrap_or_else(|| "coverage report".to_string());
-
-    Ok(ReportInfo {
-        id: id.to_string(),
-        name,
-        files,
-        base_url: format!("/api/coverage/files/{id}/"),
-        report_url,
-    })
+    Ok(files)
 }
 
 fn canonical_directory(path: &Path, label: &str) -> Result<PathBuf, ServiceError> {

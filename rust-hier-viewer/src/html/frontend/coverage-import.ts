@@ -1,6 +1,6 @@
 import type { HierarchyNode } from "./types.js";
 import type { CoverageFileSource, CoverageMapping, CoverageMetric, CoverageSelection, CoverageSummary } from "./coverage-types.js";
-import { parseCoverageSummary, mapCoverage } from "./coverage.js";
+import { parseCoverageSummary, mapCoverage, inferCoverageRoot } from "./coverage.js";
 import { CoverageReport } from "./coverage-report.js";
 
 interface Capabilities { available: boolean; vdbAvailable: boolean; token: string }
@@ -305,8 +305,9 @@ export function createCoverageImport(deps: ImportDependencies) {
     operation = controller;
     const manifestUrl = new URL(manifestPath, location.href);
     if (manifestUrl.origin !== location.origin) throw new Error("Bundled coverage must be served from this site.");
-    const config = await responseJson<{ name: string; root: string; files: string[] }>(await fetch(manifestUrl, { signal: controller.signal, cache: "no-store" }));
-    if (typeof config.name !== "string" || typeof config.root !== "string" || !Array.isArray(config.files)
+    const config = await responseJson<{ name: string; root?: string; files: string[] }>(await fetch(manifestUrl, { signal: controller.signal, cache: "no-store" }));
+    const invalidRoot = config.root !== undefined && typeof config.root !== "string";
+    if (typeof config.name !== "string" || invalidRoot || !Array.isArray(config.files)
       || config.files.some(path => typeof path !== "string" || path.includes("\\") || path.includes(":") || path.split("/").some(part => !part || part === "." || part === ".."))) {
       throw new Error("Invalid bundled coverage manifest.");
     }
@@ -324,8 +325,10 @@ export function createCoverageImport(deps: ImportDependencies) {
     };
     const summary = parseCoverageSummary(await source.readText("session.xml", controller.signal));
     controller.signal.throwIfAborted();
-    const root = summary.byPath.get(config.root);
-    if (root === undefined) throw new Error("Bundled coverage root is missing.");
+    const root = config.root === undefined
+      ? inferCoverageRoot(summary, deps.nodes, deps.homeRoot)
+      : summary.byPath.get(config.root);
+    if (root === undefined) throw new Error(`Bundled coverage root does not exist: ${config.root}. Check --coverage-root <path>.`);
     const mapped = mapCoverage(summary, root, deps.nodes, deps.homeRoot);
     if (mapped.unmatchedScopes.length || mapped.unmatchedNodeIds.length) throw new Error("Bundled coverage does not match the hierarchy.");
     applySelection({ source, report: new CoverageReport(source), display: { summary, mapping: mapped, metric: "line", name: source.name } });
