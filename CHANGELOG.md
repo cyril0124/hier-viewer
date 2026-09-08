@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Generated-viewer CI tests wait for the expected treemap zoom status after its animation-frame update, avoiding failures caused by reading the previous frame.
+
 - The X beside the Coverage selector keeps the report loaded when turning coloring off. Metrics remain selectable; the workspace's Remove button unloads the report.
 
 - Line coverage supports relocated source files after validating the instance, module, filename, and all numbered report excerpts. Mismatched text disables markers. Status and exports identify relocated sources.
