@@ -30,8 +30,8 @@ use input::load_input_data;
 use launcher::{FileIndex, PatternMode, StartupSelection, run_hier_viewer_export};
 use logging::{error, info};
 use model::{AppCommand, Config, Node};
-use schematic::SchematicData;
 use preview::serve_output_dir;
+use schematic::SchematicData;
 use updater::run_update;
 use viewer::build_viewer_data;
 
@@ -307,7 +307,10 @@ fn write_bundle(output_dir: &str, assets: &BundleAssets<'_>) -> Result<(), Strin
     ] {
         let path = output_dir.join(name);
         fs::write(&path, script).map_err(|err| {
-            format!("failed to write schematic asset '{}': {err}", path.display())
+            format!(
+                "failed to write schematic asset '{}': {err}",
+                path.display()
+            )
         })?;
     }
     if let Some(schematic) = assets.schematic {
