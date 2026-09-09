@@ -3,19 +3,24 @@ import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 
 const html = fileURLToPath(new URL('./rust-hier-viewer/src/html/', import.meta.url));
+const entries: Record<string, { entry: string; name: string }> = {
+  app: { entry: 'main', name: 'HierarchyViewer' },
+  chart: { entry: 'chart', name: 'HierarchyCharts' },
+  coverage: { entry: 'coverage-import', name: 'HierarchyCoverage' },
+  schematic: { entry: 'schematic', name: 'HierarchySchematic' },
+  'schematic-worker': { entry: 'schematic-worker', name: 'HierarchySchematicWorker' },
+};
 
 export default defineConfig(({ mode }) => {
-  if (!['app', 'chart', 'coverage'].includes(mode)) {
-    throw new Error('Select the app, chart, or coverage build mode.');
-  }
-  const chart = mode === 'chart';
-  const coverage = mode === 'coverage';
-  const entry = coverage ? 'coverage-import' : chart ? 'chart' : 'main';
-  const output = coverage ? 'coverage' : chart ? 'chart' : 'app';
-  const licenses = coverage ? `/*!\nparse5\n${readFileSync(new URL('./node_modules/parse5/LICENSE', import.meta.url), 'utf8')}\nentities\n${readFileSync(new URL('./node_modules/entities/LICENSE', import.meta.url), 'utf8')}\n*/` : undefined;
+  const selected = entries[mode];
+  if (!selected) throw new Error(`Unknown frontend build mode: ${mode}`);
+  const readLicense = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
+  const licenses = mode === 'schematic-worker'
+    ? `/*! elkjs 0.12.0, Eclipse Public License 2.0. Source: https://github.com/kieler/elkjs/tree/0.12.0\n${readLicense('./node_modules/elkjs/LICENSE.md')}\n*/`
+    : mode === 'coverage' ? `/*!\nparse5\n${readLicense('./node_modules/parse5/LICENSE')}\nentities\n${readLicense('./node_modules/entities/LICENSE')}\n*/` : undefined;
   return {
-    plugins: coverage ? [{
-      name: 'coverage-license-notices',
+    plugins: licenses ? [{
+      name: 'dependency-license-notices',
       generateBundle(_options, bundle) {
         for (const output of Object.values(bundle)) {
           if (output.type === 'chunk') output.code = `${licenses}\n${output.code}`;
@@ -30,10 +35,10 @@ export default defineConfig(({ mode }) => {
       minify: true,
       sourcemap: false,
       lib: {
-        entry: `${html}/frontend/${entry}.ts`,
-        name: coverage ? 'HierarchyCoverage' : chart ? 'HierarchyCharts' : 'HierarchyViewer',
+        entry: `${html}/frontend/${selected.entry}.ts`,
+        name: selected.name,
         formats: ['iife'],
-        fileName: () => `viewer-${output}.js`,
+        fileName: () => `viewer-${mode}.js`,
       },
     },
   };

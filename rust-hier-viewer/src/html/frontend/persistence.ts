@@ -50,6 +50,11 @@ export function createPersistence(deps: PersistenceDependencies) {
           treePanelOpen: state.treePanelOpen,
           matchPanelOpen: state.matchPanelOpen,
           mainViewMode: state.mainViewMode,
+          schematicRoot: state.mainViewMode === "schematic" ? {
+            rootName: nodes[state.homeRoot].name,
+            path: nodes[state.currentRoot].path,
+            zen: state.zenMode,
+          } : undefined,
           chartPanelOpen: state.chartPanelOpen,
           chartMode: state.chartMode,
           chartRenderMode: state.chartRenderMode,
@@ -131,10 +136,18 @@ export function createPersistence(deps: PersistenceDependencies) {
         }
         state.treePanelOpen = !!saved.treePanelOpen;
         state.matchPanelOpen = !!saved.matchPanelOpen;
-        if ((["treemap", "pie2d", "three3d", "coverage"] as readonly unknown[]).includes(saved.mainViewMode)) {
+        if ((["treemap", "pie2d", "three3d", "coverage", "schematic"] as readonly unknown[]).includes(saved.mainViewMode)) {
           state.mainViewMode = saved.mainViewMode as ViewerState["mainViewMode"];
         } else if (saved.chartPanelOpen) {
           state.mainViewMode = saved.chartRenderMode === "three3d" ? "three3d" : "pie2d" as ViewerState["mainViewMode"];
+        }
+        if (state.mainViewMode === "schematic" && saved.schematicRoot && typeof saved.schematicRoot === "object") {
+          const root = saved.schematicRoot as Record<string, unknown>;
+          if (root.rootName === nodes[state.homeRoot].name && typeof root.path === "string") {
+            const node = root.path === "" ? nodes[state.homeRoot] : nodes.find(node => node.path === root.path);
+            if (node) state.currentRoot = node.id;
+          }
+          state.zenMode = root.zen === true;
         }
         state.chartPanelOpen = state.mainViewMode === "pie2d" || state.mainViewMode === "three3d";
         if ((["weighted_bits", "analysis", "coverage"] as readonly unknown[]).includes(saved.chartMode)) {

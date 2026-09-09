@@ -1,3 +1,5 @@
+use crate::schematic::{SchematicData, SchematicInput};
+
 #[derive(Clone, Debug)]
 pub(crate) struct DefinitionSignalStat {
     pub(crate) signal_name: String,
@@ -88,6 +90,7 @@ pub(crate) struct Node {
 pub(crate) struct InputData {
     pub(crate) entries: Vec<Entry>,
     pub(crate) analysis_definitions: Vec<AnalysisDefinition>,
+    pub(crate) schematic: Option<SchematicInput>,
 }
 
 #[derive(Debug)]
@@ -99,6 +102,7 @@ pub(crate) struct ViewerData {
     pub(crate) root_id: usize,
     pub(crate) default_metric: &'static str,
     pub(crate) analysis_definitions: Vec<AnalysisDefinition>,
+    pub(crate) schematic: Option<SchematicData>,
 }
 
 #[derive(Debug)]

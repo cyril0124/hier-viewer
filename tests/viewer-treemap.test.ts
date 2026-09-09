@@ -317,6 +317,19 @@ test("resize during an interaction rebuilds geometry and canvas backing dimensio
   assert.equal(f.subtreeDepth.mock.calls.length, 2);
 });
 
+test("schematic navigation preserves treemap camera and never invokes chart rendering", () => {
+  const f = fixture();
+  f.runtime.draw();
+  Object.assign(f.state, { mainViewMode: "schematic", zoom: 2, viewX: 90, viewY: -45 });
+  f.runtime.setRootAndReset(1);
+  assert.equal(f.state.currentRoot, 1);
+  assert.deepEqual([f.state.zoom, f.state.viewX, f.state.viewY], [2, 90, -45]);
+  assert.equal(f.chartRender.mock.calls.length, 1);
+  assert.equal(f.ctx.clearRect.mock.calls.length, 1);
+  assert.equal(f.state.areas.length, 0);
+  assert.equal(f.controls.renderTreePanel.mock.calls.length, 2);
+});
+
 for (const mode of ["pie2d", "three3d"] as const) {
   test(`${mode} skips treemap geometry and painting but retains global updates`, () => {
     const f = fixture();

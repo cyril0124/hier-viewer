@@ -80,12 +80,66 @@ This starts a temporary loopback server and loads the production TypeScript read
 
 `npm run test:ui` uses the built CLI to export the parameterized RTL fixture and serves the generated bundle. It checks desktop/mobile controls, Canvas pixels, treemap zoom/pan, filters, source navigation, bookmark persistence, persisted theme, and 2D/3D interactions. Its screenshots and bundle are written to `target/frontend-ui/`.
 
+## Schematic data
+
+The exporter records a versioned, instance-scoped semantic graph in six SQLite tables:
+
+```sql
+CREATE TABLE schematic_metadata (version INTEGER NOT NULL);
+CREATE TABLE schematic_scopes (path TEXT PRIMARY KEY);
+CREATE TABLE schematic_nodes (
+    scope_path TEXT, id TEXT, kind TEXT, label TEXT,
+    instance_path TEXT, detail TEXT,
+    PRIMARY KEY (scope_path, id)
+);
+CREATE TABLE schematic_ports (
+    scope_path TEXT, node_id TEXT, id TEXT, name TEXT,
+    direction TEXT, width INTEGER, ordinal INTEGER,
+    PRIMARY KEY (scope_path, node_id, id)
+);
+CREATE TABLE schematic_nets (
+    scope_path TEXT, id TEXT, name TEXT, width INTEGER, status TEXT,
+    PRIMARY KEY (scope_path, id)
+);
+CREATE TABLE schematic_endpoints (
+    scope_path TEXT, net_id TEXT, node_id TEXT, port_id TEXT, role TEXT
+);
+```
+
+`schematic_metadata` contains exactly one row, version `1`. Every exported instance has a scope row, including instances with empty graphs. Scope, node, net and port identities are meaningful within one export. External connections are scoped to the actual instance, not its `definition_key`.
+
+Node kinds are `module`, `boundary`, `expr`, `constant` and `unresolved`. Port directions are `input`, `output`, `inout`, `ref` and `unknown`; widths and declaration ordinals are nonnegative integers exactly representable by JavaScript. Width zero denotes unknown or non-bitstream width. Endpoint roles are `driver`, `sink`, `bidirectional` and `unknown`. Net status is `resolved`, `multi-driver`, `bidirectional` or `unresolved`. Boundary input ports are drivers within their scope. Expressions preserve semantic dependencies without claiming to represent synthesized gates. Compilation errors add an `unresolved` diagnostic node with ID `<scopePath>:elaboration-errors`; the frontend uses it to mark partial exports.
+
+Rust validates schema and versions before scanning the connection tables once in scope order. Value domains and references are checked as rows are consumed. Port and endpoint ordering is performed within each scope's nodes and nets, avoiding a design-wide endpoint sort. It serializes one scope at a time to temporary JSON files, allowing the input SQLite file to close before bundle generation. Temporary files are released before starting a preview server. The hierarchy path-to-ID mapping determines each output filename, `schematic/<viewerNodeId>.json`.
+
+```json
+{
+  "version": 1,
+  "scopePath": "top",
+  "nodes": [{
+    "id": "child:u", "kind": "module", "label": "u",
+    "instancePath": "top.u", "detail": "Child",
+    "ports": [{ "id": "p", "name": "data", "direction": "input", "width": 8, "ordinal": 0 }]
+  }],
+  "nets": [{
+    "id": "top.data", "name": "data", "width": 8, "status": "unresolved",
+    "endpoints": [{ "nodeId": "child:u", "portId": "p", "role": "sink" }]
+  }]
+}
+```
+
+`viewer-meta.json` advertises `"schematic":{"version":1,"directory":"schematic"}`. A legacy DB with none of these tables produces `"schematic":null`. A partial schema, an unsupported version or an invalid reference is an error, rather than a legacy DB or an empty graph. Forest and generated hierarchy containers without exported electrical scopes contain only their known child modules and no inferred nets.
+
+Export cache filenames already include the exporter binary fingerprint. A rebuilt exporter therefore invalidates older connectivity exports; source dependency validation remains as described above. Direct `--db` reads never rebuild RTL automatically.
+
+Interaction and engine references live in [Schematic view](schematic.md).
+
 ## Frontend assets
 
 `rust-hier-viewer/src/html/frontend/` contains the authored TypeScript. HTML, CSS, and the vendored Three.js r183 modules remain under `rust-hier-viewer/src/html/`.
 
-Vite builds three minified IIFE scripts into `rust-hier-viewer/src/html/generated/`: `viewer-app.js`, `viewer-chart.js`, and `viewer-coverage.js`. Coverage import loads its script when the user opens Import or when the page starts with a bundled report; parser dependency license notices are included in that script. These generated files are versioned and must be regenerated with `npm run build` whenever their sources change. Do not edit them by hand. Type checking is separate: `npm run typecheck` runs TypeScript in strict mode.
+Vite builds five minified IIFE scripts into `rust-hier-viewer/src/html/generated/`: `viewer-app.js`, `viewer-chart.js`, `viewer-coverage.js`, `viewer-schematic.js` and `viewer-schematic-worker.js`. Schematic loads its controller, layout worker and current scope data on demand. The worker embeds elkjs with its EPL-2.0 license notice, groups visible terminals, and computes port-aware layered placement and orthogonal routing. Coverage import loads its script when the user opens Import or when the page starts with a bundled report; parser dependency license notices are included in that script. These generated files are versioned and must be regenerated with `npm run build` whenever their sources change. Do not edit them by hand. Type checking is separate: `npm run typecheck` runs TypeScript in strict mode.
 
-Rust embeds the generated scripts at compile time. The app script remains inline in `index.html`; chart and coverage scripts remain separate static assets. Three.js is loaded from the existing local module files only when the 3D view needs it. Bundle binary formats, source URLs, and persisted UI state are unchanged by the frontend build.
+Rust embeds the generated scripts at compile time. The app script remains inline in `index.html`; chart, coverage and schematic scripts remain separate static assets. Three.js is loaded from the existing local module files only when the 3D view needs it. Bundle binary formats, source URLs, and persisted UI state are unchanged by the frontend build.
 
 `npm run check:generated` builds into a temporary directory, compares filenames and bytes with the versioned scripts, and fails on missing, extra, or stale files. CI and release builds run this check without first overwriting the versioned scripts. Cargo builds and release binaries do not invoke npm or require a Node runtime.

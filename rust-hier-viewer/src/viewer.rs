@@ -22,6 +22,7 @@ pub(crate) fn build_viewer_data(
     let InputData {
         entries,
         analysis_definitions,
+        schematic,
     } = input_data;
     let mut entries = entries;
     attach_source_hrefs(&mut entries, config)?;
@@ -232,6 +233,10 @@ pub(crate) fn build_viewer_data(
         }
     }
 
+    let schematic = schematic
+        .map(|input| input.bind(&path_to_id, nodes.len()))
+        .transpose()?;
+
     if nodes[0].children.is_empty() {
         let title = config
             .title
@@ -245,6 +250,7 @@ pub(crate) fn build_viewer_data(
             root_id: 0,
             default_metric: DEFAULT_METRIC,
             analysis_definitions,
+            schematic,
         });
     }
 
@@ -271,6 +277,7 @@ pub(crate) fn build_viewer_data(
         root_id,
         default_metric: DEFAULT_METRIC,
         analysis_definitions,
+        schematic,
     })
 }
 
@@ -643,6 +650,7 @@ mod tests {
             InputData {
                 entries: Vec::new(),
                 analysis_definitions: Vec::new(),
+                schematic: None,
             },
             &config,
         )

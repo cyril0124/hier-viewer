@@ -8,7 +8,9 @@
     "noEmit": true,
     "verbatimModuleSyntax": true,
     "types": ["node"],
-    "skipLibCheck": false
+    // elkjs indexes optional children in its declaration. Keep application code
+    // strict while skipping upstream declaration-body checks.
+    "skipLibCheck": true
   },
   "include": [
     "rust-hier-viewer/src/html/frontend/**/*.ts",
