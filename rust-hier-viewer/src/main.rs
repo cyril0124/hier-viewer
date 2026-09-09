@@ -9,6 +9,7 @@ mod launcher;
 mod logging;
 mod model;
 mod preview;
+mod schematic;
 mod updater;
 mod viewer;
 mod wizard;
@@ -22,12 +23,14 @@ use cli::parse_args;
 use coverage_bundle::BundledCoverage;
 use html::{
     render_analysis_bin, render_chart_js, render_core_bin, render_coverage_js, render_html,
-    render_meta_json, render_three_core_js, render_three_js,
+    render_meta_json, render_schematic_js, render_schematic_worker_js, render_three_core_js,
+    render_three_js,
 };
 use input::load_input_data;
 use launcher::{FileIndex, PatternMode, StartupSelection, run_hier_viewer_export};
 use logging::{error, info};
-use model::{AppCommand, Config};
+use model::{AppCommand, Config, Node};
+use schematic::SchematicData;
 use preview::serve_output_dir;
 use updater::run_update;
 use viewer::build_viewer_data;
@@ -38,6 +41,8 @@ const VIEWER_CORE_NAME: &str = "viewer-core.bin";
 const VIEWER_ANALYSIS_NAME: &str = "viewer-analysis.bin";
 const VIEWER_CHART_NAME: &str = "viewer-chart.js";
 const VIEWER_COVERAGE_NAME: &str = "viewer-coverage.js";
+const VIEWER_SCHEMATIC_NAME: &str = "viewer-schematic.js";
+const VIEWER_SCHEMATIC_WORKER_NAME: &str = "viewer-schematic-worker.js";
 const VIEWER_THREE_NAME: &str = "viewer-three.module.js";
 const VIEWER_THREE_CORE_NAME: &str = "three.core.js";
 
@@ -48,6 +53,10 @@ struct BundleAssets<'a> {
     analysis_bin: Option<&'a [u8]>,
     chart_js: &'a str,
     coverage_js: &'a str,
+    schematic_js: &'a str,
+    schematic_worker_js: &'a str,
+    schematic: Option<&'a SchematicData>,
+    nodes: &'a [Node],
     three_js: &'a str,
     three_core_js: &'a str,
 }
@@ -185,10 +194,16 @@ fn run_generate(mut config: Config) -> Result<(), String> {
         analysis_bin: analysis_bin.as_deref(),
         chart_js,
         coverage_js: render_coverage_js(),
+        schematic_js: render_schematic_js(),
+        schematic_worker_js: render_schematic_worker_js(),
+        schematic: data.schematic.as_ref(),
+        nodes: &data.nodes,
         three_js,
         three_core_js,
     };
     write_bundle(&output_dir, &assets)?;
+    // Release staged schematic JSON before entering a long-lived preview server.
+    drop(data);
     if let Some(coverage) = coverage {
         info(
             "hier-viewer",
@@ -285,6 +300,19 @@ fn write_bundle(output_dir: &str, assets: &BundleAssets<'_>) -> Result<(), Strin
             coverage_path.display()
         )
     })?;
+
+    for (name, script) in [
+        (VIEWER_SCHEMATIC_NAME, assets.schematic_js),
+        (VIEWER_SCHEMATIC_WORKER_NAME, assets.schematic_worker_js),
+    ] {
+        let path = output_dir.join(name);
+        fs::write(&path, script).map_err(|err| {
+            format!("failed to write schematic asset '{}': {err}", path.display())
+        })?;
+    }
+    if let Some(schematic) = assets.schematic {
+        schematic.write_bundle(output_dir, assets.nodes)?;
+    }
 
     let three_path = output_dir.join(VIEWER_THREE_NAME);
     fs::write(&three_path, assets.three_js).map_err(|err| {

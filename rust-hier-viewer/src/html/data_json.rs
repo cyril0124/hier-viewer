@@ -60,6 +60,16 @@ pub(crate) fn render_meta_json(data: &ViewerData) -> String {
             true,
         );
     }
+    push_json_field(
+        &mut json,
+        "schematic",
+        if data.schematic.is_some() {
+            r#"{"version":1,"directory":"schematic"}"#
+        } else {
+            "null"
+        },
+        true,
+    );
     json.push('}');
     json
 }

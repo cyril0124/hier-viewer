@@ -65,6 +65,7 @@ export interface ViewerData {
   defaultMetric: string;
   analysisDefinitions: Nullable<AnalysisDefinition[]>;
   analysisFile: Nullable<string>;
+  schematic?: { version: number; directory: string } | null;
   nodes: HierarchyNode[];
 }
 
@@ -75,7 +76,7 @@ export type AnalysisMode = "none" | "count" | "ratio" | "loc";
 export type PatternMode = "text" | "wildcard" | "regex";
 export type FilterScope = "path" | "instance" | "module" | "both";
 export type FilterMode = "text" | "wildcard" | "regex";
-export type MainViewMode = "treemap" | "pie2d" | "three3d" | "coverage";
+export type MainViewMode = "treemap" | "pie2d" | "three3d" | "coverage" | "schematic";
 export type ChartRenderMode = "pie2d" | "three3d";
 export type SourceTargetKind = "instance" | "definition";
 export type SourceRenderMode = "full" | "compact" | "plain";

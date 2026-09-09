@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Signal groups retain complete scrollable signal lists in top-right hover cards, and hovered or selected wires use a contrasting overlay that stays visible at crossings and every zoom level.
+
+- Independent Schematic view in normal and Zen navigation, with per-scope RTL connections, port directions and widths, expression and constant nodes, and explicit unresolved, bidirectional and multi-driver nets. Legacy hierarchy databases remain readable and show a regeneration message for schematic data.
+- Automatic signal groups, scrollable signal inspectors, orthogonal routing with obstacle clearance, module/group/wire dragging, mouse-anchored zoom, free pan, optional grid snapping, and pinnable schematic hover cards with hierarchy and source navigation. The view and its port-aware ELK Layered layout engine load from local static assets on demand.
+
 - Coverage workspace displays a searchable instance tree, module source, and detail tables side by side. Panes resize and switch to tabs on narrow screens. Source jumps require report text validation; coverage selections can be exported.
 
 - `install.sh` one-click installer. Inside a repository checkout it builds and installs the current directory with `cargo install --path . --locked`; outside a checkout (e.g. piped from curl) it downloads the latest prebuilt release binary into `~/.local/bin` (or `--to DIR`), resolving the latest tag via the `releases/latest` redirect to avoid GitHub API rate limits. `--source` forces a cargo build (`--path` when a checkout is present, `--git` otherwise), `--prebuilt` forces the release download, `--tag` pins a release for downloads and `--git` builds, and prebuilt failures fall back to a cargo build.
@@ -43,6 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Condition coverage is included in URG conversion, imported from XML, and available in instance details and the coverage metric selector. Line parsing stops before Condition detail sections.
 
 ### Changed
+
+- Wire selection now pins signal details with endpoint names in the top-right inspector, while Ctrl-click continues to maintain multiple selected nets.
+- Schematic module boxes now scale across the logarithmic range of the current Weighted Signal bits metric, with exact values in the hover card.
+- Schematic uses ELK Layered with fixed circuit ports and orthogonal routes. Shared interfaces use compact terminals and bus wires while retaining every physical pin and net in details. Expanding a bus reveals its signal rows without rerunning the layout engine. Large module scopes summarize their local RTL body, with a complete RTL detail view available on demand; overview zoom keeps module names visible.
 
 - Large 2D pie charts use a Canvas cache above 2,000 sectors and retain per-instance picking, labels, and zoom refinement. Smaller charts reuse SVG slices while panning and zooming; chart legends render visible rows and support Arrow keys, Home, and End to reach every instance.
 - 3D charts batch bars and pedestals into shared GPU draws, coalesce pointer redraws, and create at most 80 readable instance labels plus the coverage axis. Hover details remain available for every instance, including zero-coverage and missing-data pedestals.

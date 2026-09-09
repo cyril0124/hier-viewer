@@ -69,7 +69,8 @@ async function checkTreemap(page) {
     await shot('desktop');
     const treemapCanvas = page.locator('#treemap');
     await page.locator('#zoom-in-btn').click();
-    assert.ok(!(await page.locator('#status-left').textContent()).includes('zoom 1.00x'), 'Treemap zoom did not change');
+    // Zoom painting and its status update are coalesced into the next frame.
+    await page.waitForFunction(() => !document.querySelector('#status-left').textContent.includes('zoom 1.00x'));
     const zoomed = await treemapCanvas.screenshot();
     const treemapBox = await treemapCanvas.boundingBox();
     await page.mouse.move(treemapBox.x + treemapBox.width * 0.6, treemapBox.y + treemapBox.height * 0.6);

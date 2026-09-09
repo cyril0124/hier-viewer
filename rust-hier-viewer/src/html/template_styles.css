@@ -3807,6 +3807,100 @@
     }
 
     /* The coverage workspace uses the existing theme and a single docked reader. */
+    .schematic-stage { display: flex; flex-direction: column; background: var(--panel-strong); color: var(--text); overflow: hidden; }
+    .schematic-stage [hidden] { display: none !important; }
+    .schematic-toolbar { display: flex; flex: 0 0 auto; align-items: center; gap: 14px; padding: 9px 14px; min-height: 44px; background: var(--panel); border-bottom: 1px solid var(--border); font-size: 12px; }
+    .schematic-scope { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; min-width: 40px; }
+    .schematic-stats { margin-left: auto; color: var(--muted); white-space: nowrap; }
+    .schematic-stats.schematic-partial { color: #a56519; font-weight: 600; }
+    .schematic-option { display: flex; gap: 5px; align-items: center; white-space: nowrap; cursor: pointer; }
+    .schematic-option input { accent-color: var(--accent); }
+    .schematic-toolbar button { padding: 4px 10px; box-shadow: none; }
+    .schematic-viewport { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+    .schematic-viewport > svg { display: block; width: 100%; height: 100%; touch-action: none; user-select: none; cursor: grab; }
+    .schematic-viewport > svg.dragging { cursor: grabbing; }
+    .schematic-grid, .schematic-grid-line { pointer-events: none; }
+    .schematic-grid-line { fill: none; stroke: var(--text); stroke-opacity: .065; stroke-width: .7; }
+    .schematic-wire path { fill: none; stroke-linejoin: miter; stroke-linecap: butt; vector-effect: non-scaling-stroke; }
+    .schematic-wire-casing { stroke: var(--panel-strong); stroke-width: 5; pointer-events: none; }
+    .schematic-wire-line { stroke: color-mix(in srgb, var(--muted) 75%, var(--accent)); stroke-width: 1.25; pointer-events: none; }
+    .schematic-bus .schematic-wire-line { stroke: #458b99; stroke-width: 2.5; }
+    .schematic-bus .schematic-wire-casing { stroke-width: 6; }
+    .schematic-wire-hit { stroke: transparent; stroke-width: 10; cursor: move; pointer-events: stroke; }
+    .schematic-wire-highlight { pointer-events: none; }
+    .schematic-wire-highlight path { fill: none; stroke-linejoin: miter; stroke-linecap: round; vector-effect: non-scaling-stroke; pointer-events: none; }
+    .schematic-highlight-halo { stroke: #fbbf24; stroke-width: 9; stroke-opacity: .45; }
+    .schematic-highlight-line { stroke: #d45f00; stroke-width: 2.5; }
+    .schematic-wire-selection .schematic-highlight-halo { stroke-opacity: .28; }
+    .schematic-wire-selection .schematic-highlight-line { stroke: #ab4900; }
+    .schematic-wire.unresolved .schematic-wire-line { stroke-dasharray: 5 3; }
+    .schematic-wire.multi-driver .schematic-wire-line, .schematic-wire.bidirectional .schematic-wire-line { stroke: #b57b32; }
+    .schematic-node { cursor: move; }
+    .schematic-node text { fill: var(--text); pointer-events: none; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .schematic-node-body { fill: var(--panel-strong); stroke: color-mix(in srgb, var(--muted) 65%, var(--border)); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+    .schematic-module > .schematic-node-body { fill: color-mix(in srgb, var(--accent) 2%, var(--panel-strong)); }
+    .schematic-node-divider { stroke: var(--border); fill: none; vector-effect: non-scaling-stroke; pointer-events: none; }
+    .schematic-node-title { font-size: 12px; font-weight: 600; }
+    .schematic-overview-title { display: none; font-weight: 600; }
+    .schematic-kind-badge { font-size: 8px; font-weight: 700; letter-spacing: .08em; fill: var(--muted); }
+    .schematic-bus-mark { fill: none; stroke: #458b99; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+    .schematic-input > .schematic-node-body { fill: color-mix(in srgb, #4b83b8 8%, var(--panel-strong)); stroke: #4b83b8; }
+    .schematic-output > .schematic-node-body { fill: color-mix(in srgb, #8b5ca8 8%, var(--panel-strong)); stroke: #8b5ca8; }
+    .schematic-boundary-accent { fill: #4b83b8; pointer-events: none; }
+    .schematic-output .schematic-boundary-accent { fill: #8b5ca8; }
+    .schematic-boundary-arrow { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: none; }
+    .schematic-input .schematic-boundary-arrow { color: #4b83b8; }
+    .schematic-output .schematic-boundary-arrow { color: #8b5ca8; }
+    .schematic-node-header { fill: color-mix(in srgb, #536a82 12%, var(--panel-strong)); stroke: none; pointer-events: none; }
+    .schematic-module > .schematic-node-body { fill: color-mix(in srgb, #536a82 5%, var(--panel-strong)); stroke: #536a82; }
+    .schematic-expr > .schematic-node-body { fill: color-mix(in srgb, #7c6bab 8%, var(--panel-strong)); stroke: #8065a8; stroke-dasharray: 4 2; }
+    .schematic-constant > .schematic-node-body { fill: color-mix(in srgb, #b89435 10%, var(--panel-strong)); stroke: #a77a20; }
+    .schematic-unresolved > .schematic-node-body { fill: color-mix(in srgb, #b57b32 8%, var(--panel-strong)); stroke: #b57b32; stroke-dasharray: 5 3; }
+    .schematic-overview .schematic-overview-title { display: block; }
+    .schematic-overview .schematic-node-title, .schematic-overview .schematic-node-subtitle,
+    .schematic-overview .schematic-port-label, .schematic-overview .schematic-signal-row,
+    .schematic-overview .schematic-node-divider, .schematic-overview .schematic-kind-badge { display: none; }
+    .schematic-node .schematic-node-subtitle { font-size: 10px; fill: var(--muted); font-family: inherit; }
+    .schematic-port-label, .schematic-signal-row { font-size: 11px; }
+    .schematic-port { fill: #458b99; }
+    .schematic-node:hover > .schematic-node-body, .schematic-node.selected > .schematic-node-body { stroke: var(--accent); filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 55%, transparent)); }
+    .schematic-expr > .schematic-node-body { fill: color-mix(in srgb, #7c6bab 5%, var(--panel-strong)); stroke: #9684b3; }
+    .schematic-constant > .schematic-node-body { fill: color-mix(in srgb, #b89435 7%, var(--panel-strong)); stroke: #b09b65; }
+    .schematic-boundary > .schematic-node-body { fill: color-mix(in srgb, var(--muted) 5%, var(--panel-strong)); }
+    .schematic-unresolved > .schematic-node-body { stroke: #b57b32; stroke-dasharray: 5 3; }
+    .schematic-group > .schematic-node-body { fill: color-mix(in srgb, #458b99 8%, var(--panel-strong)); stroke: #458b99; }
+    .schematic-group .schematic-node-title { font-size: 11px; }
+    .schematic-group { cursor: pointer; }
+    .schematic-group[aria-expanded="true"] > .schematic-node-body { fill: color-mix(in srgb, var(--accent) 4%, var(--panel-strong)); }
+    .schematic-junction > .schematic-node-body { fill: var(--panel-strong); stroke: var(--muted); stroke-dasharray: 2 2; }
+    .schematic-notice { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); display: flex; flex-direction: column; gap: 12px; width: min(440px, calc(100% - 40px)); padding: 22px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-strong); box-shadow: var(--hover-card-shadow); font-size: 13px; }
+    .schematic-notice span { color: var(--muted); line-height: 1.6; overflow-wrap: anywhere; }
+    .schematic-notice progress { width: 100%; accent-color: var(--accent); height: 5px; }
+    .schematic-notice.error { border-color: #b57b32; }
+    .schematic-legend { position: absolute; bottom: 9px; left: 12px; max-width: calc(100% - 24px); color: var(--muted); background: color-mix(in srgb, var(--bg) 88%, transparent); font-size: 10px; pointer-events: none; }
+    .schematic-hover-card { left: auto; right: 12px; top: 12px; width: 360px; max-width: calc(100% - 24px); max-height: calc(100% - 24px); display: flex; flex-direction: column; cursor: default; transform: none; transition: opacity 120ms ease, visibility 120ms linear; }
+    .schematic-hover-card.hidden { transform: none; }
+    .schematic-hover-card .hover-topbar { flex: 0 0 auto; cursor: grab; }
+    .schematic-hover-card .hover-title { font-size: 14px; overflow-wrap: anywhere; }
+    .schematic-card-body { overflow: auto; min-height: 0; }
+    .schematic-signal-list { max-height: 300px; overflow: auto; font-size: 11px; }
+    .schematic-signal-detail { display: flex; flex-direction: column; gap: 3px; padding: 6px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+    .schematic-signal-detail span, .schematic-card-note { color: var(--muted); font-size: 10px; }
+    .schematic-port-detail { padding: 3px 0; overflow-wrap: anywhere; }
+    .schematic-expression { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.5; }
+    .schematic-context-menu { position: absolute; z-index: var(--z-hover-card); background: var(--panel-strong); border: 1px solid var(--border); padding: 4px; border-radius: 4px; box-shadow: var(--hover-card-shadow); }
+    .schematic-context-menu button { min-width: 90px; padding: 7px 12px; box-shadow: none; }
+    .app.schematic-active [data-ui-name="level-group"], .app.schematic-active #metric-group,
+    .app.schematic-active #select-mode-btn, .app.schematic-active #clear-treemap-collapses-btn,
+    .app.schematic-active #coverage-range-controls { display: none; }
+    .app.zen-active .schematic-toolbar { padding-top: 64px; padding-right: 14px; }
+    @media (max-width: 900px) {
+      .schematic-toolbar { gap: 8px; flex-wrap: wrap; padding: 8px; }
+      .schematic-scope { flex: 1; }
+      .schematic-stats { font-size: 10px; }
+      .app.zen-active .schematic-toolbar { padding-top: 64px; padding-right: 8px; }
+    }
+
     .coverage-workspace { --coverage-hit: #21765f; --coverage-miss: #bf3939; --coverage-partial: #94650d; display: none; background: var(--panel-strong); color: var(--text); }
     body:is([data-theme="vscode-dark"], [data-theme="tokyo-night"], [data-theme="nord"]) .coverage-workspace { --coverage-hit: #65caad; --coverage-miss: #f07878; --coverage-partial: #e6c077; }
     body:is([data-theme="vscode-dark"], [data-theme="tokyo-night"], [data-theme="nord"]) .coverage-source-host .tok-keyword { color: #82bfff; }

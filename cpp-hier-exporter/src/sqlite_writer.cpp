@@ -11,6 +11,7 @@
 #include <sqlite3.h>
 
 #include "filters.h"
+#include "schematic.h"
 
 namespace fs = std::filesystem;
 
@@ -154,6 +155,7 @@ void generateSqliteHierarchy(
     const std::vector<InstanceMetadata>& instanceMetadata,
     const std::vector<std::pair<uint64_t, DefinitionSignalSummary>>& definitionSignalSummaries,
     const std::vector<std::string>& dependencies,
+    slang::ast::Compilation& compilation,
     const std::string& outputPath,
     const ViewerConfig& config) {
     const auto compiled = compileViewerConfig(config);
@@ -416,6 +418,7 @@ void generateSqliteHierarchy(
             }
         }
 
+        writeSchematic(db, compilation, allowedPaths);
         exec(db, "COMMIT");
     } catch (...) {
         sqlite3_exec(db, "ROLLBACK", nullptr, nullptr, nullptr);

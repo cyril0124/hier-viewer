@@ -27,9 +27,14 @@ import { createHierarchyRuntime } from "./hierarchy-core.js";
 import type { HierarchyNode, ViewerData, ViewerState } from "./types.js";
 import type { LegendRow } from "./main-types.js";
 import type { ChartApi } from "./chart-types.js";
+import type { createSchematic } from "./schematic.js";
 
 declare global {
-  interface Window { HierarchyCoverage?: { createCoverageImport: typeof createCoverageImport } }
+  interface Window {
+    HierarchyCoverage?: { createCoverageImport: typeof createCoverageImport };
+    HierarchySchematic?: { createSchematic: typeof createSchematic };
+    hierarchySchematic?: ReturnType<typeof createSchematic>;
+  }
 }
 
     (async () => {
@@ -424,6 +429,80 @@ declare global {
     });
 
     let coverageWorkspace: ReturnType<typeof createCoverageWorkspace> | null = null;
+    let schematic: ReturnType<typeof createSchematic> | null = null;
+    let schematicLoad: Promise<void> | null = null;
+    let schematicLoadError = "";
+    const schematicStage = document.getElementById("schematic-stage")!;
+    let schematicPathIds: Map<string, number> | null = null;
+    let schematicPaths: string[] | null = null;
+
+    function ensureSchematicPaths() {
+      if (schematicPaths) return;
+      schematicPaths = new Array<string>(nodes.length);
+      schematicPathIds = new Map();
+      // Existing node.path is relative to the displayed root. The SQLite
+      // connection contract keeps absolute instance paths, including that root.
+      for (const node of nodes) {
+        const parentPath = node.parent === null ? "" : schematicPaths[node.parent];
+        const path = node.parent === null ? "" : parentPath ? `${parentPath}.${node.name}` : node.name;
+        schematicPaths[node.id] = path;
+        schematicPathIds.set(path, node.id);
+      }
+    }
+
+    function schematicNodeId(path: string) {
+      ensureSchematicPaths();
+      return schematicPathIds!.get(path);
+    }
+
+    function ensureSchematic() {
+      if (schematic || schematicLoad || schematicLoadError) return;
+      schematicStage.textContent = "Loading schematic viewer…";
+      schematicLoad = new Promise<void>((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "./viewer-schematic.js";
+        script.onload = () => {
+          try {
+            const factory = window.HierarchySchematic?.createSchematic;
+            if (!factory) throw new Error("Schematic viewer did not initialize.");
+            schematic = factory({
+              container: schematicStage,
+              available: !!DATA.schematic,
+              directory: DATA.schematic?.directory || "schematic",
+              scopePath: id => { ensureSchematicPaths(); return schematicPaths![id]; },
+              navigate: path => {
+                const id = schematicNodeId(path);
+                if (id !== undefined) setRootAndReset(id);
+              },
+              openSource: path => {
+                const id = schematicNodeId(path);
+                if (id !== undefined) renderSource(id, "definition");
+              },
+              hasSource: path => {
+                const id = schematicNodeId(path);
+                return id !== undefined && nodeHasDefinitionSource(getNode(id));
+              },
+              instanceWeight: path => {
+                const id = schematicNodeId(path);
+                if (id === undefined) return 0;
+                const node = getNode(id);
+                return node.subtreeVariableBits * state.weightedVariableWeight
+                  + node.subtreeNetBits * state.weightedNetWeight;
+              },
+            });
+            window.hierarchySchematic = schematic;
+            schematic.setActive(state.mainViewMode === "schematic", state.currentRoot);
+            resolve();
+          } catch (error) { script.remove(); reject(error); }
+        };
+        script.onerror = () => { script.remove(); reject(new Error("Unable to load local viewer-schematic.js. Regenerate the bundle.")); };
+        document.head.appendChild(script);
+      }).catch(error => {
+        schematicLoadError = error instanceof Error ? error.message : String(error);
+        schematicStage.textContent = schematicLoadError;
+        schematicStage.setAttribute("role", "alert");
+      }).finally(() => { schematicLoad = null; });
+    }
 
     const {
       currentThemeVisuals,
@@ -843,6 +922,16 @@ declare global {
       }
       coverageWorkspace?.setActive(state.mainViewMode === "coverage");
       coverageWorkspace?.refresh();
+      const schematicActive = state.mainViewMode === "schematic";
+      app.classList.toggle("schematic-active", schematicActive);
+      schematicStage.classList.toggle("active", schematicActive);
+      if (schematicActive) ensureSchematic();
+      schematic?.setActive(schematicActive, state.currentRoot);
+      for (const id of ["view-schematic-btn", "zen-view-schematic-btn"]) {
+        const button = document.getElementById(id)!;
+        button.classList.toggle("active", schematicActive);
+        button.setAttribute("aria-pressed", String(schematicActive));
+      }
       state.chartPanelOpen = state.mainViewMode === "pie2d" || state.mainViewMode === "three3d";
       treemapStage.classList.toggle("active", state.mainViewMode === "treemap");
       chartPanel.classList.toggle("active", state.chartPanelOpen);
@@ -891,14 +980,16 @@ declare global {
       }
       state.zenMode = next;
       applyZenModeState();
+      if (state.mainViewMode === "schematic") savePersistedState();
       requestAnimationFrame(() => draw());
     }
 
     function setMainViewMode(mode: string) {
-      const nextMode = ["treemap", "pie2d", "three3d", "coverage"].includes(mode) ? mode : "treemap";
+      const leavingChart = state.chartPanelOpen;
+      const nextMode = ["treemap", "pie2d", "three3d", "coverage", "schematic"].includes(mode) ? mode : "treemap";
       state.mainViewMode = nextMode as ViewerState["mainViewMode"];
       if (nextMode === "three3d" && state.coverage && state.coverage.metric !== "off") state.chartMode = "coverage";
-      else if (state.chartMode === "coverage") state.chartMode = "weighted_bits";
+      else if (nextMode === "pie2d" && state.chartMode === "coverage") state.chartMode = "weighted_bits";
       hideTreemapToggleTooltip();
       if (nextMode !== "treemap") {
         resetLockedSelection();
@@ -911,6 +1002,8 @@ declare global {
         updateHover(null, "node", { force: true });
       }
       applyMainViewMode();
+      // Deactivate GPU resources when leaving a chart; schematic owns no ChartApi.
+      if (leavingChart && nextMode === "schematic") chartController?.render();
       savePersistedState();
       draw();
     }
@@ -1109,6 +1202,12 @@ declare global {
 
     function updateStatus() {
       const root = getNode(state.currentRoot);
+      if (state.mainViewMode === "schematic") {
+        statusLeft.textContent = `${root.path || root.name || "(root)"} · RTL schematic`;
+        statusRight.textContent = schematicLoadError;
+        statusRight.classList.toggle("error", !!schematicLoadError);
+        return;
+      }
       const metricValue = formatMetricValue(weightForNode(state.currentRoot));
       const matchText = state.search || coverageFilterActive(state.coverage)
         ? `, <strong>${state.matches.length}</strong> ${coverageFilterActive(state.coverage) ? "coverage/filter" : "search"} matches`
@@ -1588,6 +1687,9 @@ declare global {
         return coverageImport!;
       } finally { importCoverageButton.disabled = false; }
     }
+    document.getElementById("view-schematic-btn")!.addEventListener("click", () => setMainViewMode("schematic"));
+    document.getElementById("zen-view-schematic-btn")!.addEventListener("click", () => setMainViewMode("schematic"));
+    window.addEventListener("pagehide", () => schematic?.dispose());
     document.getElementById("view-coverage-btn")!.addEventListener("click", () => setMainViewMode("coverage"));
     document.getElementById("zen-view-coverage-btn")!.addEventListener("click", () => setMainViewMode("coverage"));
     importCoverageButton.addEventListener("click", () => {
@@ -1609,7 +1711,8 @@ declare global {
     });
 
     zoomOutBtn.addEventListener("click", () => {
-      if (state.mainViewMode !== "treemap") {
+      if (state.mainViewMode === "schematic") { schematic?.zoomByFactor(1 / 1.25); return; }
+      if (state.mainViewMode === "pie2d" || state.mainViewMode === "three3d") {
         if (chartController) {
           chartController.zoomByFactor(1 / 1.25);
         }
@@ -1619,7 +1722,8 @@ declare global {
     });
 
     zoomInBtn.addEventListener("click", () => {
-      if (state.mainViewMode !== "treemap") {
+      if (state.mainViewMode === "schematic") { schematic?.zoomByFactor(1.25); return; }
+      if (state.mainViewMode === "pie2d" || state.mainViewMode === "three3d") {
         if (chartController) {
           chartController.zoomByFactor(1.25);
         }
@@ -1629,7 +1733,8 @@ declare global {
     });
 
     fitBtn.addEventListener("click", () => {
-      if (state.mainViewMode !== "treemap") {
+      if (state.mainViewMode === "schematic") { schematic?.fit(); return; }
+      if (state.mainViewMode === "pie2d" || state.mainViewMode === "three3d") {
         if (chartController) {
           chartController.fitView();
         }
@@ -1874,6 +1979,7 @@ declare global {
       syncMetricHelp();
       savePersistedState();
       draw();
+      schematic?.refreshWeights();
     });
 
     function updateWeightedMetricParameter(input: HTMLInputElement, fieldName: "weightedVariableWeight" | "weightedNetWeight", fallback: number) {
@@ -1881,6 +1987,7 @@ declare global {
       syncMetricHelp();
       savePersistedState();
       draw();
+      schematic?.refreshWeights();
     }
 
     weightedVariableInput.addEventListener("input", () => {

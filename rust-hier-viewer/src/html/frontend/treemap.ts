@@ -698,7 +698,7 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
         expandTreePath(preservedSelectedId!);
       }
       state.treePanelDirty = true;
-      resetView();
+      if (state.mainViewMode === "treemap") resetView();
       if (preserveSelection) {
         updateHover(preservedSelectedId, preservedSelectedAreaKind, { force: true });
       } else {
@@ -1572,7 +1572,7 @@ export function createTreemapRuntime(deps: TreemapDependencies) {
       updateStatus();
       renderTreePanel();
       renderMatchPanel();
-      if (deps.chartController) {
+      if (deps.chartController && state.mainViewMode !== "schematic") {
         deps.chartController.render();
       }
       applyHoverCardPosition();

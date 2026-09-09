@@ -78,14 +78,20 @@ add_executable(
   src/logger.cpp
   src/main.cpp
   src/sqlite_writer.cpp
+  src/schematic.cpp
   src/tree.cpp)
 
 target_include_directories(slang-hier-exporter PRIVATE src)
+if(TARGET SQLite3::SQLite3)
+  set(HIER_VIEWER_SQLITE_TARGET SQLite3::SQLite3)
+else()
+  set(HIER_VIEWER_SQLITE_TARGET SQLite::SQLite3)
+endif()
 target_link_libraries(
   slang-hier-exporter
   PRIVATE
     slang::slang
-    SQLite::SQLite3
+    ${HIER_VIEWER_SQLITE_TARGET}
     Threads::Threads
     ZLIB::ZLIB
     ${CMAKE_DL_LIBS})
@@ -97,4 +103,18 @@ set_target_properties(
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux" AND HIER_VIEWER_EXPORTER_FULLY_STATIC)
   target_link_options(slang-hier-exporter PRIVATE -static -static-libstdc++ -static-libgcc)
+endif()
+
+include(CTest)
+if(BUILD_TESTING)
+  find_package(Python3 COMPONENTS Interpreter QUIET)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME parameterized_cache
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_parameterized_cache.py
+                     $<TARGET_FILE:slang-hier-exporter>)
+    add_test(NAME semantic_schematic
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_semantic_schematic.py
+                     $<TARGET_FILE:slang-hier-exporter>)
+    set_tests_properties(parameterized_cache semantic_schematic PROPERTIES TIMEOUT 120)
+  endif()
 endif()

@@ -5,6 +5,8 @@
 
 #include "model.h"
 
+namespace slang::ast { class Compilation; }
+
 namespace hier {
 
 void generateCsvHierarchy(const std::vector<HierarchyEntry>& hierarchyData,
@@ -16,6 +18,7 @@ void generateSqliteHierarchy(
     const std::vector<InstanceMetadata>& instanceMetadata,
     const std::vector<std::pair<uint64_t, DefinitionSignalSummary>>& definitionSignalSummaries,
     const std::vector<std::string>& dependencies,
+    slang::ast::Compilation& compilation,
     const std::string& outputPath,
     const ViewerConfig& config);
 

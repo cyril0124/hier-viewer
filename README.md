@@ -4,11 +4,11 @@
 
 RTL hierarchy visualization, structural analysis, and coverage inspection.
 
-`hier-viewer` generates an interactive static site for inspecting elaborated instance hierarchies, comparing module statistics, and navigating RTL source. It supports treemaps, 2D pie charts, and 3D charts.
+`hier-viewer` generates an interactive static site for inspecting elaborated instance hierarchies, comparing module statistics, and navigating RTL source. It supports treemaps, 2D pie charts, 3D charts, and an independent [RTL schematic](docs/schematic.md) with real port connections and expandable signal groups.
 
-The embedded `slang-hier-exporter` extracts hierarchy, signal statistics, and source locations into SQLite. The Rust application generates the site from this export or an existing database supplied with `--db`. The generated site requires only an HTTP file server for browsing and browser-file coverage imports. Optional server-side VDB conversion uses the built-in local service.
+The embedded `slang-hier-exporter` extracts hierarchy, signal statistics, source locations, and instance-scoped semantic connections into SQLite. The Rust application generates the site from this export or an existing database supplied with `--db`. The generated site requires only an HTTP file server for browsing and browser-file coverage imports. The exporter ignores C/C++ source entries in RTL filelists because they are simulator/DPI build inputs rather than SystemVerilog sources. For designs containing intentionally oversized simulation memories, pass `--ignore-object-too-large` after `--` to continue hierarchy extraction while preserving other slang diagnostics. Verify the resulting diagnostics before treating the graph as complete. Optional server-side VDB conversion uses the built-in local service.
 
-[Install](#install) · [Quick start](#quick-start) · [Coverage](#coverage) · [Common commands](#common-commands) · [Development](#development)
+[Install](#install) · [Quick start](#quick-start) · [Schematic](docs/schematic.md) · [Coverage](#coverage) · [Common commands](#common-commands) · [Development](#development)
 
 ## Install
 

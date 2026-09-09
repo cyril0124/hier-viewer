@@ -1,6 +1,15 @@
 import type { HierarchyNode, ViewerData, AnalysisDefinition, DefinitionSignalStat } from "./types.js";
 import type { BinaryReader } from "./main-types.js";
 
+function decodeSchematicMetadata(value: unknown): ViewerData["schematic"] {
+  if (value === undefined || value === null) return null;
+  const meta = value as Record<string, unknown>;
+  if (typeof value !== "object" || meta.version !== 1 || meta.directory !== "schematic") {
+    throw new Error("Invalid schematic bundle metadata. Regenerate the RTL bundle.");
+  }
+  return { version: 1, directory: "schematic" };
+}
+
     export const CORE_BUNDLE_MAGIC = "HVC1";
 
     export const ANALYSIS_BUNDLE_MAGIC = "HVA1";
@@ -226,6 +235,7 @@ import type { BinaryReader } from "./main-types.js";
         defaultMetric: typeof meta.defaultMetric === "string" ? meta.defaultMetric : "instances",
         analysisDefinitions: null,
         analysisFile: typeof meta.analysisFile === "string" ? meta.analysisFile : null,
+        schematic: decodeSchematicMetadata(meta.schematic),
         nodes
       };
     }

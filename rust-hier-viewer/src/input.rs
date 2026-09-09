@@ -1,10 +1,11 @@
 use std::fs::File;
 use std::io::Read;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 
 use crate::logging::info;
 use crate::model::{AnalysisDefinition, DefinitionSignalStat, Entry, InputData};
+use crate::schematic::load_schematic;
 
 const SQLITE_HEADER: &[u8] = b"SQLite format 3\0";
 
@@ -29,7 +30,7 @@ fn is_sqlite_file(path: &str) -> Result<bool, String> {
 }
 
 fn parse_sqlite_input(path: &str) -> Result<InputData, String> {
-    let connection = Connection::open(path)
+    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|err| format!("failed to open sqlite input '{}': {err}", path))?;
 
     let mut entries = Vec::new();
@@ -151,6 +152,7 @@ fn parse_sqlite_input(path: &str) -> Result<InputData, String> {
     Ok(InputData {
         entries,
         analysis_definitions,
+        schematic: load_schematic(&connection)?,
     })
 }
 
