@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::iter::Peekable;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use rusqlite::Connection;
@@ -10,6 +10,9 @@ use serde::Serialize;
 use tempfile::TempDir;
 
 use crate::model::Node;
+
+mod cache;
+pub(crate) use cache::load_schematic_cached;
 
 #[cfg(test)]
 mod tests;
@@ -23,17 +26,33 @@ const TABLES: [&str; 6] = [
     "schematic_endpoints",
 ];
 
+#[derive(Debug)]
+enum SchematicDirectory {
+    Temporary(TempDir),
+    Persistent(PathBuf),
+}
+
+impl SchematicDirectory {
+    fn path(&self) -> &Path {
+        match self {
+            Self::Temporary(directory) => directory.path(),
+            Self::Persistent(path) => path,
+        }
+    }
+}
+
 /// Graphs are serialized while the input DB is alive. Only one scope's rows are
-/// retained in memory, and the temporary files survive until bundle writing.
+/// retained in memory, and completed scope files may be reused by later bundle
+/// generations when the SQLite input remains unchanged.
 #[derive(Debug)]
 pub(crate) struct SchematicInput {
-    directory: TempDir,
+    directory: SchematicDirectory,
     scopes: HashMap<String, usize>,
 }
 
 #[derive(Debug)]
 pub(crate) struct SchematicData {
-    directory: TempDir,
+    directory: SchematicDirectory,
     paths: Vec<String>,
     scope_files: Vec<Option<usize>>,
 }
@@ -89,6 +108,13 @@ fn corrupt(error: impl std::fmt::Display) -> String {
 }
 
 pub(crate) fn load_schematic(connection: &Connection) -> Result<Option<SchematicInput>, String> {
+    load_schematic_in(connection, None)
+}
+
+fn load_schematic_in(
+    connection: &Connection,
+    staging: Option<TempDir>,
+) -> Result<Option<SchematicInput>, String> {
     let present = TABLES
         .iter()
         .map(|table| {
@@ -130,8 +156,11 @@ pub(crate) fn load_schematic(connection: &Connection) -> Result<Option<Schematic
     connection
         .execute_batch("PRAGMA temp_store = FILE")
         .map_err(corrupt)?;
-    let directory = tempfile::tempdir()
-        .map_err(|err| format!("failed to create schematic staging directory: {err}"))?;
+    let directory = match staging {
+        Some(directory) => directory,
+        None => tempfile::tempdir()
+            .map_err(|err| format!("failed to create schematic staging directory: {err}"))?,
+    };
     let mut scopes = HashMap::new();
 
     // Each table is scanned once in scope order. In particular endpoints have
@@ -403,7 +432,10 @@ pub(crate) fn load_schematic(connection: &Connection) -> Result<Option<Schematic
             staging_time.as_secs_f64()
         ),
     );
-    Ok(Some(SchematicInput { directory, scopes }))
+    Ok(Some(SchematicInput {
+        directory: SchematicDirectory::Temporary(directory),
+        scopes,
+    }))
 }
 
 fn consume_scope<T>(

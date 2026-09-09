@@ -1,11 +1,12 @@
 use std::fs::File;
 use std::io::Read;
+use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags};
 
 use crate::logging::info;
 use crate::model::{AnalysisDefinition, DefinitionSignalStat, Entry, InputData};
-use crate::schematic::load_schematic;
+use crate::schematic::load_schematic_cached;
 
 const SQLITE_HEADER: &[u8] = b"SQLite format 3\0";
 
@@ -152,7 +153,7 @@ fn parse_sqlite_input(path: &str) -> Result<InputData, String> {
     Ok(InputData {
         entries,
         analysis_definitions,
-        schematic: load_schematic(&connection)?,
+        schematic: load_schematic_cached(&connection, Path::new(path))?,
     })
 }
 

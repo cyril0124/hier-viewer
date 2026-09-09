@@ -79,6 +79,34 @@ fn config() -> Config {
 }
 
 #[test]
+fn cached_scope_json_is_reused_and_rebuilt_after_corruption() {
+    let directory = tempfile::tempdir().expect("cache directory");
+    let path = directory.path().join("hierarchy.sqlite");
+    let connection = Connection::open(&path).expect("open file DB");
+    connection
+        .execute_batch(&format!("{SCHEMA}{CONNECTED_SCOPE}"))
+        .expect("create connected DB");
+
+    let first = load_schematic_cached(&connection, &path)
+        .expect("build schematic cache")
+        .expect("schematic data");
+    let first_directory = first.directory.path().to_owned();
+    assert!(first_directory.join("manifest.json").is_file());
+    drop(first);
+
+    let second = load_schematic_cached(&connection, &path)
+        .expect("reuse schematic cache")
+        .expect("cached schematic data");
+    assert_eq!(second.directory.path(), first_directory);
+    fs::remove_file(first_directory.join("0.json")).expect("corrupt cached scope");
+    drop(second);
+
+    let rebuilt = load_schematic_cached(&connection, &path)
+        .expect("rebuild corrupt schematic cache")
+        .expect("rebuilt schematic data");
+    assert_ne!(rebuilt.directory.path(), first_directory);
+}
+#[test]
 fn missing_tables_and_valid_empty_graphs_are_distinct() {
     let legacy = Connection::open_in_memory().expect("open legacy DB");
     assert!(load_schematic(&legacy).expect("legacy DB").is_none());

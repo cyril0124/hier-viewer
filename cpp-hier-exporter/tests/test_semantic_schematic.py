@@ -102,7 +102,19 @@ class SemanticTests(unittest.TestCase):
                 finally:
                     db.close()
 
-    def test_external_connections_are_instance_specific_in_both_orders(self):
+    def test_expression_storage_avoids_recursive_text_duplication(self):
+        for db in self.exports:
+            expression_labels = [row[0] for row in db.execute(
+                "SELECT label FROM schematic_nodes WHERE kind='expr'")]
+            self.assertTrue(expression_labels)
+            self.assertTrue(all(len(label) <= 32 for label in expression_labels))
+            nested_details = [row[0] for row in db.execute(
+                "SELECT detail FROM schematic_nodes WHERE kind='expr' AND detail LIKE '%operand of %'")]
+            self.assertTrue(nested_details)
+            self.assertTrue(all(row[0] == "value" for row in db.execute(
+                "SELECT name FROM schematic_nets WHERE id LIKE 'expr:%:value'")))
+
+
         for db in self.exports:
             keys = {row[0] for row in db.execute(
                 "SELECT definition_key FROM instances WHERE path IN ('semantic_top.first','semantic_top.second')")}

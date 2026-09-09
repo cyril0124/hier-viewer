@@ -51,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Schematic export stores short expression node labels and short value-net names. Top-level expressions retain their complete RTL text; nested operands keep topology and parent references to avoid repeated large text.
+- CLI bundled coverage reports use a metadata signature to reuse unchanged report copies across bundle generations.
+
 - Wire selection now pins signal details with endpoint names in the top-right inspector, while Ctrl-click continues to maintain multiple selected nets.
 - Schematic module boxes now scale across the logarithmic range of the current Weighted Signal bits metric, with exact values in the hover card.
 - Schematic uses ELK Layered with fixed circuit ports and orthogonal routes. Shared interfaces use compact terminals and bus wires while retaining every physical pin and net in details. Expanding a bus reveals its signal rows without rerunning the layout engine. Large module scopes summarize their local RTL body, with a complete RTL detail view available on demand; overview zoom keeps module names visible.

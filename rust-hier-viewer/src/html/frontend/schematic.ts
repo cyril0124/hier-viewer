@@ -1,6 +1,6 @@
 import { loadSchematicGraph } from "./schematic-data.js";
 import { OrthogonalRouter, GRID } from "./schematic-routing.js";
-import { compactLabel } from "./schematic-model.js";
+import { compactLabel, displayNetName } from "./schematic-model.js";
 import { visibleWires, type VisibleWire } from "./schematic-wires.js";
 import type { LayoutResponse, Point, SceneEdge, SceneNode, SchematicGraph, SchematicScene } from "./schematic-types.js";
 
@@ -371,7 +371,7 @@ export function createSchematic(options: SchematicOptions) {
       const net = netById.get(id);
       if (!net) continue;
       const row = element("div", "schematic-signal-detail");
-      row.append(element("code", "", net.name), element("span", "", `${bitWidthLabel(net.width)} · ${net.endpoints.length} endpoints · ${net.status}`));
+      row.append(element("code", "", displayNetName(net, nodeById)), element("span", "", `${bitWidthLabel(net.width)} · ${net.endpoints.length} endpoints · ${net.status}`));
       if (includeEndpoints) {
         const endpoints = net.endpoints.map(endpoint => {
           const node = nodeById.get(endpoint.nodeId);

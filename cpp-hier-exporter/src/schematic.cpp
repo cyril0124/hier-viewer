@@ -219,7 +219,10 @@ private:
     }
 
     std::string fresh(std::string_view kind) {
-        return path + ":" + std::string(kind) + ":" + std::to_string(sequence++);
+        // Node identities are already scoped by scope_path in every table.
+        // Repeating the full hierarchy path here multiplies it across ports,
+        // nets, endpoints and their indexes.
+        return std::string(kind) + ":" + std::to_string(sequence++);
     }
 
     void addNode(const std::string& id, std::string_view kind, const std::string& label,
@@ -316,7 +319,7 @@ private:
     // data operands flow outward; selector operands remain read dependencies.
     void connect(const Expression& expression, const std::string& node,
                  const std::string& port, std::string_view role,
-                 std::optional<ConstantRange> drivenRange = {}) {
+                 std::optional<ConstantRange> drivenRange = {}, size_t depth = 0) {
         const Expression* expr = &expression;
         if (expr->kind == ExpressionKind::Assignment && expr->as<AssignmentExpression>().isLValueArg())
             expr = &expr->as<AssignmentExpression>().left();
@@ -330,7 +333,7 @@ private:
 
         const auto width = expr->type->getBitstreamWidth();
         const auto id = fresh("expr");
-        const auto text = expressionText(*expr);
+        const auto text = depth == 0 ? expressionText(*expr) : std::string();
         const auto* constant = expr->getConstant();
         const bool isConstant = constant && bool(*constant);
         const bool writing = role == "driver";
@@ -347,14 +350,20 @@ private:
         const bool supported = supportedKind && (!partialWrite || selectedRange.has_value());
         std::string kind = supported ? "expr" : "unresolved";
         if (isConstant) kind = "constant";
-        std::string detail = std::string(toString(expr->kind)) + ": " + text;
+        const auto expressionKind = std::string(toString(expr->kind));
+        std::string detail = expressionKind + ": ";
+        // Keep the complete expression at the connection root. Nested
+        // expressions repeat their parent text almost in full, so retain their
+        // topology and a stable parent reference instead of another full copy.
+        if (depth == 0) detail += text;
+        else detail += "operand of " + node;
         if (isConstant) detail += " = " + constant->toString();
         if (!supported) detail = "Unsupported semantic expression: " + detail;
         if (partialWrite && !selectedRange)
             detail += "; exact bit mapping unavailable for nested, dynamic or unpacked write";
-        addNode(id, kind, text, detail);
+        addNode(id, kind, expressionKind, detail);
         addPort(id, "value", "value", bidirectional ? "inout" : writing ? "input" : "output", width, 0);
-        const auto net = addNet(id + ":value", text, width, !supported);
+        const auto net = addNet(id + ":value", "value", width, !supported);
         endpoint(net, node, port, role);
         endpoint(net, id, "value", bidirectional ? "bidirectional" : writing ? "sink" : "driver");
         if (isConstant) return;
@@ -374,7 +383,8 @@ private:
             // Slang normalizes direct packed selections into storage offsets.
             // Nested, dynamic and unpacked writes retain unknown dependencies.
             ++ordinal;
-            connect(child, id, childPort, childRole, dataOperand ? selectedRange : std::nullopt);
+            connect(child, id, childPort, childRole, dataOperand ? selectedRange : std::nullopt,
+                    depth + 1);
         }};
         ExpressionChildren visitor{children};
         expr->visit(visitor);

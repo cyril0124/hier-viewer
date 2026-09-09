@@ -34,6 +34,34 @@ export function compactLabel(label: string, length = 32): string {
   return label.length > length ? `${label.slice(0, length - 1)}…` : label;
 }
 
+/** Recover the useful expression caption stored in a node detail. */
+export function expressionLabel(node: { kind: string; label: string; detail: string }): string {
+  if (node.kind !== 'expr' && node.kind !== 'constant' && node.kind !== 'unresolved') return node.label;
+  const unsupportedPrefix = 'Unsupported semantic expression: ';
+  const detail = node.detail.startsWith(unsupportedPrefix)
+    ? node.detail.slice(unsupportedPrefix.length)
+    : node.detail;
+  const separator = detail.indexOf(': ');
+  if (separator < 0) return node.label;
+  const expression = detail.slice(separator + 2);
+  const valueSeparator = expression.indexOf(' = ');
+  return valueSeparator < 0 ? expression : expression.slice(0, valueSeparator);
+}
+
+/** Use the source expression for display while keeping the database net name short. */
+export function displayNetName(
+  net: SchematicNet,
+  nodes: ReadonlyMap<string, { kind: string; label: string; detail: string }>,
+): string {
+  if (net.name !== 'value') return net.name;
+  for (const endpoint of net.endpoints) {
+    if (net.id !== `${endpoint.nodeId}:value`) continue;
+    const node = nodes.get(endpoint.nodeId);
+    if (node && (node.kind === 'expr' || node.kind === 'constant' || node.kind === 'unresolved')) return expressionLabel(node);
+  }
+  return net.name;
+}
+
 /** Conservative monospace metrics also work in workers without a canvas. */
 export function labelWidth(label: string): number {
   let width = 0;
@@ -234,7 +262,12 @@ function splitBoundary(graph: SchematicGraph): SchematicGraph {
 export function buildScene(rawGraph: SchematicGraph, expanded: ReadonlySet<string>, detail = false): SchematicScene {
   const summary = detail ? { graph: rawGraph, hiddenNodes: 0, hiddenNets: 0 } : summarizeLogic(rawGraph);
   const graph = splitBoundary(summary.graph);
-  const nets = [...graph.nets].sort((a, b) => a.id.localeCompare(b.id));
+  const graphNodes = new Map(graph.nodes.map(node => [node.id, node]));
+  // Expression net names are reconstructed from their endpoint node in memory.
+  // The exported database stores only "value" instead of another full copy.
+  const nets = graph.nets
+    .map(net => ({ ...net, name: displayNetName(net, graphNodes) }))
+    .sort((a, b) => a.id.localeCompare(b.id));
   const netById = new Map(nets.map(net => [net.id, net]));
   const groups = findLinkGroups(nets);
   const definitionByNet = new Map(groups.flatMap(group => group.netIds.map(id => [id, group] as const)));
