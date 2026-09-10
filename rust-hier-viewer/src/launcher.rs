@@ -73,7 +73,7 @@ impl PatternMode {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub(crate) struct StartupSelection {
     pub(crate) output_dir: String,
     pub(crate) title: Option<String>,
@@ -555,6 +555,18 @@ pub(crate) fn run_hier_viewer_export(selection: &StartupSelection) -> Result<Exp
     })
 }
 
+/// Fingerprint compiler options, command files and the exporter without changing
+/// the process working directory. Used by persisted on-demand build recipes.
+pub(crate) fn schematic_export_fingerprint(
+    selection: &StartupSelection,
+    cwd: &Path,
+) -> Result<String, String> {
+    compute_sqlite_cache_key_at(selection, &locate_hierarchy_exporter()?, cwd)
+}
+
+mod schematic_worker;
+pub(crate) use schematic_worker::SchematicWorker;
+
 fn source_dependency_signature(db: &Connection) -> Result<Option<String>, String> {
     let mut statement = db
         .prepare("SELECT path FROM source_dependencies ORDER BY path")
@@ -594,7 +606,7 @@ fn store_dependency_signature(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn cached_dependencies_match(path: &Path) -> Result<bool, String> {
+pub(crate) fn cached_dependencies_match(path: &Path) -> Result<bool, String> {
     let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|err| format!("failed to open cached sqlite '{}': {err}", path.display()))?;
     let stored: String = db
@@ -928,9 +940,17 @@ fn compute_sqlite_cache_key(
     selection: &StartupSelection,
     exporter: &HierarchyExporter,
 ) -> Result<String, String> {
-    let mut hasher = StableHasher::default();
     let cwd = env::current_dir()
         .map_err(|err| format!("failed to determine current directory: {err}"))?;
+    compute_sqlite_cache_key_at(selection, exporter, &cwd)
+}
+
+fn compute_sqlite_cache_key_at(
+    selection: &StartupSelection,
+    exporter: &HierarchyExporter,
+    cwd: &Path,
+) -> Result<String, String> {
+    let mut hasher = StableHasher::default();
     let home = home_dir();
     let mut fingerprinted_command_files = BTreeSet::new();
     let mut previous_was_filelist = false;
@@ -949,7 +969,7 @@ fn compute_sqlite_cache_key(
                 &mut hasher,
                 Path::new(token),
                 CommandFilePathMode::WorkingDirectory,
-                &cwd,
+                cwd,
                 home.as_deref(),
                 &mut fingerprinted_command_files,
             )?;
@@ -961,9 +981,9 @@ fn compute_sqlite_cache_key(
             continue;
         }
 
-        let path = Path::new(token);
+        let path = cwd.join(token);
         if path.exists() {
-            write_path_fingerprint(&mut hasher, path)?;
+            write_path_fingerprint(&mut hasher, &path)?;
         }
     }
     Ok(hasher.finish_hex())

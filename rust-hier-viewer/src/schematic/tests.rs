@@ -67,6 +67,7 @@ fn config() -> Config {
         title: None,
         no_wizard: true,
         rebuild_sqlite: false,
+        schematic: true,
         preview: false,
         preview_host: String::new(),
         preview_port: 0,
@@ -142,7 +143,7 @@ fn legacy_input_still_builds_core_with_null_schematic_metadata() {
         .execute_batch("INSERT INTO instances(path) VALUES('legacy')")
         .expect("insert legacy instance");
     drop(connection);
-    let input = load_input_data(path.to_str().expect("UTF-8 path")).expect("load legacy DB");
+    let input = load_input_data(path.to_str().expect("UTF-8 path"), true).expect("load legacy DB");
     assert!(input.schematic.is_none());
     let data = build_viewer_data(input, &config()).expect("build legacy viewer");
     assert_eq!(data.nodes[data.root_id].name, "legacy");
@@ -405,7 +406,7 @@ fn scope_mapping_uses_instance_paths_and_survives_input_removal() {
         INSERT INTO schematic_endpoints VALUES('top.gen[0].u','bus','same','p','driver'),('top.gen[1].u','bus','same','p','sink');
     ").expect("insert instance graphs");
     drop(connection);
-    let input = load_input_data(db_path.to_str().expect("UTF-8 path")).expect("load input");
+    let input = load_input_data(db_path.to_str().expect("UTF-8 path"), true).expect("load input");
     fs::remove_file(&db_path).expect("remove original DB before bundle writing");
     let mut data = build_viewer_data(input, &config()).expect("build viewer");
     assert_eq!(data.root_id, 0);

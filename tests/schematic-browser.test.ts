@@ -36,6 +36,7 @@ function mountFixture(create: typeof createSchematic) {
   const controller = create({
     container: document.querySelector<HTMLElement>('#schematic-stage')!,
     available: new URLSearchParams(location.search).get('available') !== 'false',
+    onDemand: new URLSearchParams(location.search).get('mode') === 'lazy',
     directory: 'schematic', scopePath: id => id === 0 ? 'top' : `top.scope${id}`,
     navigate: path => navigated.push(path), openSource: path => sources.push(path), hasSource: () => true,
   });
@@ -604,6 +605,99 @@ test.each([
       if (!fixture.available) assert(!requests.get(page)!.some(url => url.endsWith('/schematic/0.json')));
       await screenshot(page, fixture.name);
     } finally { await finish(page); }
+}, 60_000);
+
+test('lazy scopes show generation immediately, poll building and busy, and load the ready graph', async () => {
+  const page = await newPage();
+  const methods: string[] = [];
+  let posts = 0;
+  try {
+    await page.route('**/api/schematic/scopes/0', async route => {
+      const request = route.request();
+      methods.push(request.method());
+      if (request.method() === 'GET') {
+        await route.fulfill({ json: twoModules() });
+        return;
+      }
+      assert.equal(request.headers()['x-hier-schematic'], '1');
+      assert.equal(request.postData(), null);
+      if (++posts === 1) {
+        assert.match((await page.locator('.schematic-notice').textContent())!, /Generating connections/);
+        await route.fulfill({ status: 202, json: { state: 'building', message: 'Compiling scope zero' } });
+      } else if (posts === 2) {
+        await route.fulfill({ status: 202, json: { state: 'busy', message: 'Waiting for another scope' } });
+      } else {
+        await route.fulfill({ json: { state: 'ready', url: './api/schematic/scopes/0' } });
+      }
+    });
+    await page.goto(`${baseUrl}schematic-fixture.html?mode=lazy&available=false`);
+    const state = await ready(page);
+    assert.equal(state.scopePath, 'top');
+    assert.equal(state.metrics.layouts, 1);
+    assert.deepEqual(methods, ['POST', 'POST', 'POST', 'GET']);
+    const stages = await page.evaluate(() => window.schematicTest.stages);
+    assert(stages.some(stage => stage.includes('Compiling scope zero')));
+    assert(stages.some(stage => stage.includes('Waiting for another scope')));
+    assert(!requests.get(page)!.some(url => url.includes('/schematic/0.json')));
+  } finally { await finish(page); }
+}, 60_000);
+
+test.each([404, 405])('lazy API HTTP %s offers serve instructions and a working retry', async status => {
+  const page = await newPage();
+  let missing = true;
+  try {
+    await page.route('**/api/schematic/scopes/0', route => {
+      if (missing) return route.fulfill({ status, body: 'API unavailable' });
+      return route.fulfill({ json: route.request().method() === 'POST'
+        ? { state: 'ready', url: './api/schematic/scopes/0' } : twoModules() });
+    });
+    await page.goto(`${baseUrl}schematic-fixture.html?mode=lazy`);
+    await page.waitForFunction(() => window.schematicTest && !window.schematicTest.controller.inspect().loading);
+    assert.match((await page.locator('.schematic-notice').textContent())!, /hier-viewer serve.*--schematic/s);
+    missing = false;
+    await page.getByRole('button', { name: 'Retry', exact: true }).click();
+    assert.equal((await ready(page)).scopePath, 'top');
+  } finally { await finish(page); }
+}, 60_000);
+
+test.each(['hide', 'switch'] as const)('lazy delayed readiness after %s cannot fetch or lay out the old scope', async action => {
+  const page = await newPage();
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  let requestSeen!: () => void;
+  const seen = new Promise<void>(resolve => { requestSeen = resolve; });
+  let finished!: () => void;
+  const fulfilled = new Promise<void>(resolve => { finished = resolve; });
+  const graphGets: string[] = [];
+  try {
+    await page.route('**/api/schematic/scopes/*', async route => {
+      const request = route.request();
+      if (request.method() === 'GET') {
+        graphGets.push(request.url());
+        await route.fulfill({ json: emptyGraph('top.scope1') });
+        return;
+      }
+      const id = request.url().endsWith('/0') ? 0 : 1;
+      if (id === 0) {
+        requestSeen();
+        await held;
+      }
+      await route.fulfill({ json: { state: 'ready', url: `./api/schematic/scopes/${id}` } }).catch(() => {});
+      if (id === 0) finished();
+    });
+    await page.goto(`${baseUrl}schematic-fixture.html?mode=lazy`);
+    await seen;
+    await page.evaluate(action => window.schematicTest.controller.setActive(action === 'switch', action === 'switch' ? 1 : 0), action);
+    if (action === 'switch') await ready(page);
+    const before = await inspect(page);
+    release();
+    await fulfilled;
+    await settle(page);
+    assert.deepEqual(await inspect(page), before);
+    assert.equal(before.metrics.layouts, action === 'switch' ? 1 : 0);
+    assert(graphGets.every(url => url.endsWith('/1')));
+    assert.equal(before.loading, false);
+  } finally { release(); await finish(page); }
 }, 60_000);
 
 test('switching scope and hiding cancels in-flight data and cannot show stale content on resume', async () => {

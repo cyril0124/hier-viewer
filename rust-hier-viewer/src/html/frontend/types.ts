@@ -65,7 +65,7 @@ export interface ViewerData {
   defaultMetric: string;
   analysisDefinitions: Nullable<AnalysisDefinition[]>;
   analysisFile: Nullable<string>;
-  schematic?: { version: number; directory: string } | null;
+  schematic?: { version: number; directory: string; mode?: 'lazy' | 'static' } | null;
   nodes: HierarchyNode[];
 }
 

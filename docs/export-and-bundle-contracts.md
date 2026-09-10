@@ -82,35 +82,63 @@ This starts a temporary loopback server and loads the production TypeScript read
 
 ## Schematic data
 
-The exporter records a versioned, instance-scoped semantic graph in six SQLite tables:
+Default RTL export omits all schematic tables and scope JSON. The built-in `--preview` or `hier-viewer serve <bundle>` service generates the requested scope on demand. Passing `--schematic` before `--` preserves eager export of all scopes and writes their JSON for ordinary static hosting or sharing.
+
+### Lazy generation and cache
+
+RTL bundles store a private recipe at `.hier-viewer-cache/schematic-recipe.json`. It records the source working directory, export options, and the hierarchy database's source-dependency metadata snapshot. Keep the original RTL and cache locally for `serve` restarts; bundled source-reader copies do not replace the original compiler inputs. The recipe is service state, not a public site asset.
+
+Cache identity includes the recipe, source metadata and exporter fingerprint. The service validates inputs against the hierarchy snapshot before generating or reusing a scope. Changed inputs are rejected with a regenerate-bundle message so new graphs cannot be mixed with stale hierarchy data. Metadata validation has the limits described under [Cached source dependencies](#cached-source-dependencies).
+
+The first uncached RTL request starts a persistent Slang API worker and parses and elaborates RTL once. The worker keeps the `Compilation` for subsequent requests. It reads allowed instance paths from the saved hierarchy database and produces only the requested graph plus an `instances(path)` table for reference validation; it does not repeat global statistics or hierarchy export. The worker-owned scratch database is consumed before the next request and is removed when the worker is reaped. The expanded design stays resident until service shutdown, worker failure, or source invalidation. Disk cache hits do not start a worker. Direct `--db` mode instead extracts a single scope from existing schematic tables without rebuilding RTL; the database must remain available. A database lacking those tables leaves Schematic unavailable. A partial schema or unsupported version is an error.
+
+The service builds one scope at a time. Further uncached requests report busy while a job runs; completed scope files are reusable after service restart. Worker initialization and scope requests each have a 10-minute timeout, and server shutdown cancels and reaps the worker. Switching scope or leaving the view aborts stale frontend waits and rejects late UI results; a completed server job may still populate the disk cache.
+
+### Schematic HTTP service
+
+Schematic endpoints work on loopback and non-loopback bindings, including `--preview-host 0.0.0.0` and `serve --host 0.0.0.0`. Coverage API rules remain unchanged, including their loopback restriction.
+
+| Request | Contract |
+| --- | --- |
+| `POST /api/schematic/scopes/<nodeId>` with `X-Hier-Schematic: 1` | Starts or checks scope generation. Returns `202` with building or busy status, or `200` with ready status and a `url` for the completed scope. |
+| `GET /api/schematic/scopes/<nodeId>` | Returns the scope JSON only if already built. Never starts generation. |
+
+The browser waits through building or busy responses and loads the returned URL when ready. An ordinary static file server cannot perform this protocol; shared static bundles require `--schematic`.
+
+### SQLite and scope JSON
+
+When schematic export is requested, the exporter records a versioned, instance-scoped semantic graph in six SQLite tables:
 
 ```sql
 CREATE TABLE schematic_metadata (version INTEGER NOT NULL);
-CREATE TABLE schematic_scopes (path TEXT PRIMARY KEY);
+CREATE TABLE schematic_scopes (path TEXT PRIMARY KEY) WITHOUT ROWID;
 CREATE TABLE schematic_nodes (
     scope_path TEXT, id TEXT, kind TEXT, label TEXT,
     instance_path TEXT, detail TEXT,
     PRIMARY KEY (scope_path, id)
-);
+) WITHOUT ROWID;
 CREATE TABLE schematic_ports (
     scope_path TEXT, node_id TEXT, id TEXT, name TEXT,
     direction TEXT, width INTEGER, ordinal INTEGER,
     PRIMARY KEY (scope_path, node_id, id)
-);
+) WITHOUT ROWID;
 CREATE TABLE schematic_nets (
     scope_path TEXT, id TEXT, name TEXT, width INTEGER, status TEXT,
     PRIMARY KEY (scope_path, id)
-);
+) WITHOUT ROWID;
 CREATE TABLE schematic_endpoints (
     scope_path TEXT, net_id TEXT, node_id TEXT, port_id TEXT, role TEXT
 );
+CREATE INDEX schematic_endpoints_scope ON schematic_endpoints (scope_path);
 ```
 
-`schematic_metadata` contains exactly one row, version `1`. Every exported instance has a scope row, including instances with empty graphs. Scope, node, net and port identities are meaningful within one export. External connections are scoped to the actual instance, not its `definition_key`.
+Scope-keyed tables use `WITHOUT ROWID` so the primary key and rows share one b-tree. The exporter writes rows in scope order in large per-table batches and creates the endpoint index after inserting rows, with index sorting backed by temporary disk storage.
+
+`schematic_metadata` contains exactly one row, version `1`. Eager export gives every exported instance a scope row, including instances with empty graphs; lazy RTL export includes only the requested scope. Scope, node, net and port identities are meaningful within one export. External connections are scoped to the actual instance, not its `definition_key`.
 
 Node kinds are `module`, `boundary`, `expr`, `constant` and `unresolved`. Port directions are `input`, `output`, `inout`, `ref` and `unknown`; widths and declaration ordinals are nonnegative integers exactly representable by JavaScript. Width zero denotes unknown or non-bitstream width. Endpoint roles are `driver`, `sink`, `bidirectional` and `unknown`. Net status is `resolved`, `multi-driver`, `bidirectional` or `unresolved`. Boundary input ports are drivers within their scope. Expressions preserve semantic dependencies without claiming to represent synthesized gates. Compilation errors add an `unresolved` diagnostic node with ID `<scopePath>:elaboration-errors`; the frontend uses it to mark partial exports.
 
-Rust validates schema and versions before scanning the connection tables once in scope order. Value domains and references are checked as rows are consumed. It serializes one scope at a time to JSON cache files beside the SQLite export, reusing those files while the SQLite file's metadata is unchanged. A failed or unwritable cache falls back to temporary staging. Port and endpoint ordering is performed within each scope's nodes and nets, avoiding a design-wide endpoint sort. The hierarchy path-to-ID mapping determines each output filename, `schematic/<viewerNodeId>.json`.
+Rust validates schema, versions, value domains and references when reading connection data. Lazy extraction reads only the requested scope. For eager `--schematic` generation, Rust scans the connection tables once in scope order through a memory mapping and uses a small writer pool to serialize and write scopes while scanning continues. This eager path caches scope JSON beside the SQLite export while its metadata is unchanged, with temporary staging when that cache fails or is unwritable. Port and endpoint ordering stays within each scope's nodes and nets, avoiding a design-wide endpoint sort. Prebuilt bundle filenames use the hierarchy path-to-ID mapping, `schematic/<viewerNodeId>.json`. Both generation modes use the same scope JSON format:
 
 ```json
 {
@@ -128,7 +156,7 @@ Rust validates schema and versions before scanning the connection tables once in
 }
 ```
 
-`viewer-meta.json` advertises `"schematic":{"version":1,"directory":"schematic"}`. A legacy DB with none of these tables produces `"schematic":null`. A partial schema, an unsupported version or an invalid reference is an error, rather than a legacy DB or an empty graph. Forest and generated hierarchy containers without exported electrical scopes contain only their known child modules and no inferred nets.
+For prebuilt scopes, `viewer-meta.json` advertises `"schematic":{"version":1,"directory":"schematic"}`. Lazy bundles advertise `"schematic":{"version":1,"directory":"schematic","mode":"lazy"}` without prebuilding JSON. A direct `--db` input with none of the schematic tables produces `"schematic":null`; default RTL bundles can generate from their recipe despite omitting those tables. A partial schema, an unsupported version or an invalid reference is an error, rather than a legacy DB or an empty graph. Forest and generated hierarchy containers without exported electrical scopes contain only their known child modules and no inferred nets.
 
 Export cache filenames already include the exporter binary fingerprint. A rebuilt exporter therefore invalidates older connectivity exports; source dependency validation remains as described above. Direct `--db` reads never rebuild RTL automatically.
 

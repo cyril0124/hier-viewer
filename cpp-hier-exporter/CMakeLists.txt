@@ -79,6 +79,7 @@ add_executable(
   src/main.cpp
   src/sqlite_writer.cpp
   src/schematic.cpp
+  src/schematic_worker.cpp
   src/tree.cpp)
 
 target_include_directories(slang-hier-exporter PRIVATE src)

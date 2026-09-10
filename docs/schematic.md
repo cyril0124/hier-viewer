@@ -2,7 +2,21 @@
 
 Schematic shows RTL connectivity for the current hierarchy scope. Choose **Schematic** in the normal or Zen view switcher. Double-click a module to enter it; use the breadcrumbs, hierarchy tree, Home or Parent controls to change scope. A module's pinned hover card also provides hierarchy and source actions.
 
-Regenerate a bundle from RTL to obtain connection data. An existing `--db` database without the schematic tables still supports the other views; Schematic displays a regeneration message. A valid empty scope displays an empty-graph message. Invalid connection data or missing scope files produce an explicit error. When a simulator filelist contains DPI or other C/C++ implementation files, the embedded exporter ignores those entries automatically. If a simulation-only memory exceeds slang's object-size limit, pass `--ignore-object-too-large` after `--`, for example `hier-viewer -f vsrc.f --output out -- --ignore-object-too-large`. This permits hierarchy and schematic extraction to continue, but the resulting **Partial RTL** graph must be checked before treating every connection as complete. A smaller memory stub is safer when one is available.
+## Loading scopes
+
+Default RTL generation skips all schematic tables and scope JSON. Run with `--preview`, or reopen the bundle with `hier-viewer serve out`, then choose **Schematic**. The built-in service generates only the current scope and caches the result on disk. The first uncached RTL scope starts a persistent Slang worker that parses and elaborates the design once. Later uncached scopes reuse its `Compilation` and extract their graph without repeating global signal statistics or hierarchy export. The worker retains the elaborated design in memory until service shutdown, worker failure, or source invalidation. A failed worker is restarted on an explicit retry; finished disk caches remain reusable. The service builds one scope at a time; further uncached requests show busy until the active job finishes.
+
+Keep the original RTL and the output's private `.hier-viewer-cache/` locally. Completed scope caches survive service restarts. If source inputs change, regenerate the bundle before loading more scopes. Switching scope or leaving Schematic stops the browser's old wait; a server job that finishes may still cache its result for a later visit. On-demand generation also works with `--preview-host 0.0.0.0` or `serve --host 0.0.0.0`; coverage service restrictions are unchanged.
+
+For ordinary static hosting or sharing, prebuild all scopes by placing `--schematic` before `--`:
+
+```bash
+hier-viewer -f rtl/files.f --output out --schematic -- --top Top
+```
+
+With `--db`, the built-in service extracts only the requested scope from existing schematic tables; keep the database available. A database without those tables cannot rebuild RTL and leaves Schematic unavailable. Regenerate from RTL to enable it. A valid empty scope displays an empty-graph message. Invalid connection data or missing prebuilt scope files produce an explicit error.
+
+When a simulator filelist contains DPI or other C/C++ implementation files, the embedded exporter ignores those entries automatically. If a simulation-only memory exceeds slang's object-size limit, pass `--ignore-object-too-large` after `--`, for example `hier-viewer -f vsrc.f --output out -- --ignore-object-too-large`. This permits hierarchy and schematic extraction to continue, but the resulting **Partial RTL** graph must be checked before treating every connection as complete. A smaller memory stub is safer when one is available.
 
 ## Reading and editing the view
 
@@ -26,7 +40,7 @@ The viewer uses ELK placement as the starting point, then reroutes initial edges
 
 The SVG renderer combines coincident bus paths and draws one trunk path per bus and module pair. The top-right signal inspector lists every net in a bus without changing the canvas. Dependencies that point back toward an earlier layer use an outer feedback lane when obstacle clearance permits. ELK runs when a scope has no cached scene. Dragging updates transforms and paths once per animation frame; pan and zoom only change the camera. Hover and selection use pointer-transparent overlays with stroke widths independent of zoom. Scope changes abort downloads, terminate obsolete workers and reject late results. The controller keeps four recent scenes and persists camera, group and module-position preferences separately from treemap/chart state. The worker is released after initial layout.
 
-Schematic loads `viewer-schematic.js`, `viewer-schematic-worker.js` and the current scope's JSON on demand. All resources use ordinary static HTTP. Node and npm are build-time tools; viewing requires no CDN, layout service or Node server. See [Export and bundle contracts](export-and-bundle-contracts.md#schematic-data) for the SQLite and JSON contract.
+Schematic loads `viewer-schematic.js`, `viewer-schematic-worker.js` and the current scope's JSON on demand. All viewer assets and source copies are local. Node and npm are build-time tools; viewing requires no CDN, external layout service or Node server. Default bundles use the built-in service for scope generation; bundles generated with `--schematic` use ordinary static HTTP. See [Export and bundle contracts](export-and-bundle-contracts.md#schematic-data) for the data, cache and service contracts.
 
 ## Layout references
 
@@ -41,6 +55,7 @@ npm run typecheck
 npm test
 npm run test:browser
 npm run test:schematic-ui
+npm run test:schematic-lazy
 npm run build
 npm run check:generated
 ```

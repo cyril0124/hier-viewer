@@ -1424,6 +1424,7 @@ mod tests {
             title: None,
             no_wizard: false,
             rebuild_sqlite: false,
+            schematic: false,
             preview: false,
             preview_host: "127.0.0.1".to_string(),
             preview_port: 8000,

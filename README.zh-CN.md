@@ -6,7 +6,7 @@ RTL 层级可视化、结构分析与覆盖率查看工具。
 
 `hier-viewer` 将展开后的实例层级生成为交互式静态站点，用于层级浏览、模块统计比较和 RTL 源码定位。支持矩形树图、2D 饼图、3D 图表，以及显示真实端口连接和可展开信号组的独立 [RTL Schematic 视图](docs/schematic.md)。
 
-内置的 `slang-hier-exporter` 将层级、信号统计、源码位置和按实例区分的语义连接导出至 SQLite。Rust 程序读取导出结果，或通过 `--db` 指定的已有数据库，生成静态站点。浏览和浏览器文件覆盖率导入仅需 HTTP 文件服务器；可选的服务端 VDB 转换使用内置本地服务。当 RTL filelist 包含 DPI 或其他仿真用 C/C++ 文件时，exporter 会自动跳过这些文件。若仿真 memory 超过 slang 的对象大小限制，可在 `--` 后加入 `--ignore-object-too-large` 继续导出，但仍需检查诊断信息。
+内置的 `slang-hier-exporter` 将层级、信号统计和源码位置导出至 SQLite。Rust 程序读取导出结果，或通过 `--db` 指定的已有数据库，生成静态站点。默认 RTL 导出跳过全部 Schematic 表和 scope JSON；打开 Schematic 时，通过内置服务生成当前 scope。普通静态托管需用 `--schematic` 预生成全部 scope。可选的服务端 VDB 转换使用内置本地服务。当 RTL filelist 包含 DPI 或其他仿真用 C/C++ 文件时，exporter 会自动跳过这些文件。若仿真 memory 超过 slang 的对象大小限制，可在 `--` 后加入 `--ignore-object-too-large` 继续导出，但仍需检查诊断信息。
 
 [安装](#安装) · [快速开始](#快速开始) · [Schematic](docs/schematic.md) · [覆盖率](#覆盖率) · [常见命令](#常见命令) · [开发者说明](#开发者说明)
 
@@ -64,6 +64,22 @@ hier-viewer update --to v1.0.0
 3. 生成完成后，访问终端输出的 URL。本机桌面环境下，程序也会尝试启动默认浏览器。按 `Ctrl-C` 可停止预览服务。
 
 仅在交互式终端中，且未提供 RTL 输入、文件列表或 `--db` 时，工具才会打开向导。脚本和 CI 必须显式传入这些输入。
+
+## Schematic 用法
+
+使用内置预览服务按需生成 Schematic：
+
+```bash
+hier-viewer -f rtl/files.f --output out --preview -- --top Top
+```
+
+打开 **Schematic** 时只生成当前 scope。首个未缓存的 scope 会启动 Slang worker，解析并展开 RTL 一次；后续未缓存 scope 复用该展开结果。worker 将展开后的设计保留在内存中，直到服务停止，或因失败、输入变化而被回收。完成的 scope 缓存到磁盘。请在本地保留原始 RTL 和 `.hier-viewer-cache/`，以便通过 `hier-viewer serve out` 重新打开站点。输入变化后需重新生成站点。加载与缓存行为见 [Schematic 使用指南](docs/schematic.md)。
+
+普通静态托管或分享时，将 `--schematic` 放在 **`--` 之前**，预生成全部 scope：
+
+```bash
+hier-viewer -f rtl/files.f --output out --schematic -- --top Top
+```
 
 ## 功能说明
 
@@ -170,7 +186,7 @@ hier-viewer serve out --host 127.0.0.1 --port 8000
 
 访问终端输出的 URL。在 **Import coverage** 中选择 **VDB server directory**，填写该机器上的 VDB 路径，点击 **Load report**，再按上述步骤检查并应用层级映射。服务端需要 `PATH` 中有可执行的 `urg`，并具备相应 Synopsys 许可证；导入框可设置超时或取消任务。
 
-已有服务端报告可选择 **URG report server directory** 并填写路径。这些服务端导入功能仅在绑定回环地址时可用；`--host 0.0.0.0` 仅提供静态访问和浏览器文件导入。远程 VDB 转换使用 [SSH 转发连接本地服务](docs/coverage.md#import-a-vdb-or-server-report)。
+已有服务端报告可选择 **URG report server directory** 并填写路径。这些服务端导入功能仅在绑定回环地址时可用；`--host 0.0.0.0` 支持静态访问、浏览器文件导入和按需 Schematic，但禁用覆盖率 API。远程 VDB 转换使用 [SSH 转发连接本地服务](docs/coverage.md#import-a-vdb-or-server-report)。
 
 ### 选中覆盖率并复制给 AI
 
@@ -210,7 +226,7 @@ RTL 位置参数采用 `Wildcard` 匹配，同时接受精确路径和目录。�
 hier-viewer --db path/to/hiers.db --output out --preview
 ```
 
-`--db` 与 RTL 输入及文件列表互斥。该模式直接读取数据库，不重新解析 RTL，也不验证导出缓存。仍需通过 `--output` 指定静态站点的输出目录。
+`--db` 与 RTL 输入及文件列表互斥。该模式直接读取数据库，不重新解析 RTL，也不验证导出缓存。仍需通过 `--output` 指定静态站点的输出目录。数据库包含 Schematic 表时，内置服务默认按需提取单个 scope，请保留该数据库供服务读取。`--schematic` 预生成全部可用 scope。数据库不含这些表时无法重建 RTL，Schematic 保持不可用。
 
 生成期间必须能够读取数据库引用的源码文件，程序会将其副本纳入站点。RTL 修改后，需通过 RTL 输入模式重新生成数据库，以获得更新后的统计结果。
 
@@ -288,7 +304,8 @@ hier-viewer serve <output-dir> [--host IP] [--port N]
 | `-f, --filelist <file>` | 添加文件列表，可重复 |
 | `-o, --output <dir>` | 输出目录，必填 |
 | `-r, --rebuild-sqlite` | 忽略导出缓存并重建 |
-| `--preview` | 生成后启动预览服务 |
+| `--schematic` | 预生成全部 Schematic scope，供静态托管或分享；放在 `--` 之前 |
+| `--preview` | 生成后启动内置服务，支持预览和按需 Schematic |
 | `--preview-host <h>` | 绑定地址，默认 `127.0.0.1` |
 | `--preview-port <n>` | 起始端口，默认 `8000`，占用时自动顺延 |
 | `--coverage-report <dir>` | 将 URG 报告复制进生成站点，打开页面时自动加载 |
@@ -355,10 +372,10 @@ out/
 ├── viewer-three.module.js
 ├── three.core.js
 ├── .hier-viewer-sources/      # 源码阅读器使用的源码副本
-└── .hier-viewer-cache/        # 仅在从 RTL 导出 SQLite 时生成
+└── .hier-viewer-cache/        # 私有生成配方与缓存
 ```
 
-部署时应保留完整的输出目录，包括 `.hier-viewer-sources/`。浏览器按需加载源码文本和信号分析数据。源码 URL 对空格和保留字符进行编码，详见[源码打包路径](docs/export-and-bundle-contracts.md#source-bundle-paths)。
+静态分享 Schematic 时，用 `--schematic` 生成站点，并发布站点资源，包括 `schematic/` 和 `.hier-viewer-sources/`。私有 `.hier-viewer-cache/` 留在本地，其中的按需生成配方记录本地路径和编译参数。查看器资源和源码副本均位于站点本地。浏览器按需加载源码文本和信号分析数据。源码 URL 对空格和保留字符进行编码，详见[源码打包路径](docs/export-and-bundle-contracts.md#source-bundle-paths)。
 
 ## 预览
 
@@ -376,7 +393,7 @@ hier-viewer --db path/to/hiers.db --output out --preview --preview-port 9000
 hier-viewer serve out --port 8000
 ```
 
-内置服务也提供本地覆盖率导入。`python3 -m http.server --directory out 8000` 等普通服务器支持静态浏览和浏览器文件导入，但不能执行 URG。非 loopback 绑定会禁用覆盖率 API。
+内置服务在回环和非回环绑定上均支持按需 Schematic，包括 `--preview-host 0.0.0.0` 和 `serve --host 0.0.0.0`。内置服务也提供本地覆盖率导入；非回环绑定仍禁用覆盖率 API。`python3 -m http.server --directory out 8000` 等普通服务器支持静态浏览和浏览器文件导入，但 Schematic 需要用 `--schematic` 生成的站点，且普通服务器不能执行 URG。
 
 也可使用 VSCode Live Server 托管输出目录，支持通过 VSCode Remote 访问。
 

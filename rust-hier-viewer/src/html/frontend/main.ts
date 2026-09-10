@@ -468,6 +468,7 @@ declare global {
             schematic = factory({
               container: schematicStage,
               available: !!DATA.schematic,
+              onDemand: DATA.schematic?.mode === "lazy",
               directory: DATA.schematic?.directory || "schematic",
               scopePath: id => { ensureSchematicPaths(); return schematicPaths![id]; },
               navigate: path => {

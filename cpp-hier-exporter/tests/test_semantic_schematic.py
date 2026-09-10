@@ -2,19 +2,24 @@
 """Assert semantic net identities using a real slang v11 exporter binary."""
 
 import argparse
+from contextlib import contextmanager
 from pathlib import Path
+from queue import Empty, Queue
 import sqlite3
 import subprocess
 import tempfile
+from threading import Thread
 import unittest
 
 FIXTURE = Path(__file__).with_name("semantic_schematic.sv").resolve()
 TABLES = ("schematic_scopes", "schematic_nodes", "schematic_ports", "schematic_nets", "schematic_endpoints")
 
 
-def export(binary, directory, reverse=False, top="semantic_top", extra=()):
+def export(binary, directory, reverse=False, top="semantic_top", extra=(), schematic=True):
     database = directory / f"{top}-{reverse}.db"
     command = [str(binary), "--sqlite", "-o", str(database), "--top", top]
+    if schematic:
+        command.append("--schematic")
     if reverse:
         command.append("+define+REVERSE_ORDER")
     subprocess.run([*command, *extra, str(FIXTURE)], check=True, timeout=60, capture_output=True)
@@ -57,12 +62,217 @@ class SemanticTests(unittest.TestCase):
         for table in TABLES[1:]:
             self.assertEqual(self.empty.execute(f"SELECT count(*) FROM {table}").fetchone()[0], 0)
 
+    def test_default_sqlite_has_no_schematic_tables(self):
+        with tempfile.TemporaryDirectory(prefix="hier-default-") as directory:
+            db = export(self.binary, Path(directory), schematic=False)
+            try:
+                self.assertEqual(list(db.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name GLOB 'schematic_*'")), [])
+                self.assertEqual({row[0] for row in db.execute("SELECT path FROM instances")},
+                                 {row[0] for row in self.exports[0].execute("SELECT path FROM instances")})
+            finally:
+                db.close()
+
+    def test_scoped_export_matches_full_graph(self):
+        cases = [("semantic_top", scope, self.exports[0]) for scope in
+                 ("semantic_top", "semantic_top.first", "semantic_top.first.lanes[0].first")]
+        cases.append(("empty_cell", "empty_cell", self.empty))
+        for top, scope, full in cases:
+            with self.subTest(scope=scope), tempfile.TemporaryDirectory(prefix="hier-scope-") as directory:
+                db = export(self.binary, Path(directory), top=top, schematic=False,
+                            extra=("--schematic-scope", scope))
+                try:
+                    self.assertEqual([tuple(row) for row in db.execute("SELECT * FROM schematic_metadata")], [(1,)])
+                    self.assertEqual([row[0] for row in db.execute("SELECT path FROM schematic_scopes")], [scope])
+                    self.assertEqual({row[0] for row in db.execute("SELECT path FROM instances")},
+                                     {row[0] for row in full.execute("SELECT path FROM instances")})
+                    for table in TABLES[1:]:
+                        self.assertCountEqual(
+                            [tuple(row) for row in db.execute(f"SELECT * FROM {table}")],
+                            [tuple(row) for row in full.execute(
+                                f"SELECT * FROM {table} WHERE scope_path=?", (scope,))], table)
+                    self.assertEqual(db.execute(
+                        "SELECT count(*) FROM schematic_nodes n LEFT JOIN instances i "
+                        "ON i.path=n.instance_path WHERE n.instance_path IS NOT NULL AND i.path IS NULL").fetchone()[0], 0)
+                finally:
+                    db.close()
+
+    @contextmanager
+    def worker(self, baseline, output):
+        with tempfile.TemporaryFile() as diagnostics:
+            process = subprocess.Popen(
+                [str(self.binary), "--sqlite", "--schematic-worker", str(baseline),
+                 "-o", str(output), "--top", "semantic_top", str(FIXTURE)],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=diagnostics)
+            messages = Queue()
+
+            def read_messages():
+                for line in process.stdout:
+                    messages.put(line)
+
+            reader = Thread(target=read_messages, daemon=True)
+            reader.start()
+
+            def expect(line, request=None):
+                if request is not None:
+                    process.stdin.write(request.encode("utf-8") + b"\n")
+                    process.stdin.flush()
+                try:
+                    actual = messages.get(timeout=60)
+                except Empty:
+                    self.fail(f"worker timed out waiting for {line!r}; exit={process.poll()}")
+                self.assertEqual(actual, line.encode("ascii") + b"\n")
+
+            try:
+                expect("HIER_SCHEMATIC_READY")
+                yield expect, diagnostics
+                process.stdin.close()
+                self.assertEqual(process.wait(timeout=10), 0)
+                reader.join(timeout=10)
+                self.assertFalse(reader.is_alive())
+                self.assertTrue(messages.empty(), "unexpected extra worker stdout")
+                diagnostics.seek(0)
+                logs = diagnostics.read().decode("utf-8")
+                self.assertNotIn("Collecting hierarchy and signal statistics", logs)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                process.wait(timeout=10)
+                reader.join(timeout=10)
+                process.stdin.close()
+                process.stdout.close()
+
+    def assert_worker_scope(self, output, scope, allowed_paths):
+        with sqlite3.connect(output) as db:
+            self.assertEqual({row[0] for row in db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")},
+                {"instances", "schematic_metadata", *TABLES})
+            self.assertEqual([row[1] for row in db.execute("PRAGMA table_info(instances)")], ["path"])
+            self.assertEqual({row[0] for row in db.execute("SELECT path FROM instances")}, allowed_paths)
+            self.assertEqual(db.execute("SELECT * FROM schematic_metadata").fetchall(), [(1,)])
+            for table in TABLES:
+                column = "path" if table == "schematic_scopes" else "scope_path"
+                self.assertCountEqual(
+                    db.execute(f"SELECT * FROM {table}").fetchall(),
+                    [tuple(row) for row in self.exports[0].execute(
+                        f"SELECT * FROM {table} WHERE {column}=?", (scope,))], table)
+            self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+
+    def test_worker_persists_and_matches_full_export(self):
+        baseline = Path(self.directory.name) / "semantic_top-False.db"
+        original = baseline.read_bytes()
+        allowed = {row[0] for row in self.exports[0].execute("SELECT path FROM instances")}
+        with tempfile.TemporaryDirectory(prefix="hier-worker-") as directory:
+            output = Path(directory) / "scope with spaces.sqlite"
+            with self.worker(baseline, output) as (expect, _):
+                for scope in ("semantic_top", "semantic_top.first", "semantic_top"):
+                    expect("HIER_SCHEMATIC_OK", scope)
+                    self.assert_worker_scope(output, scope, allowed)
+                    self.assertEqual(baseline.read_bytes(), original)
+        self.assertEqual(baseline.read_bytes(), original)
+
+    def test_worker_invalid_requests_recover_and_rollback(self):
+        with tempfile.TemporaryDirectory(prefix="hier-worker-invalid-") as directory:
+            baseline = Path(directory) / "hierarchy.sqlite"
+            allowed = {row[0] for row in self.exports[0].execute("SELECT path FROM instances")}
+            allowed.add("semantic_top.ghost")
+            # An allowed path missing from the compilation fails inside the write
+            # transaction, after the previous schematic tables have been dropped.
+            with sqlite3.connect(baseline) as db:
+                db.execute("CREATE TABLE instances(path TEXT PRIMARY KEY)")
+                db.executemany("INSERT INTO instances VALUES(?)", [(path,) for path in allowed])
+            original = baseline.read_bytes()
+            output = Path(directory) / "scope.sqlite"
+            with self.worker(baseline, output) as (expect, diagnostics):
+                expect("HIER_SCHEMATIC_OK", "semantic_top")
+                for scope in ("", "semantic_top.missing", "semantic_top.ghost",
+                              "semantic_top.含 空格", "semantic_top\r", "semantic_top\0"):
+                    expect("HIER_SCHEMATIC_ERROR", scope)
+                    self.assert_worker_scope(output, "semantic_top", allowed)
+                    expect("HIER_SCHEMATIC_OK", "semantic_top.first")
+                    self.assert_worker_scope(output, "semantic_top.first", allowed)
+                    expect("HIER_SCHEMATIC_OK", "semantic_top")
+                diagnostics.seek(0)
+                self.assertIn("semantic_top.含 空格", diagnostics.read().decode("utf-8"))
+            self.assertEqual(baseline.read_bytes(), original)
+
+    def test_worker_uses_baseline_filters(self):
+        with tempfile.TemporaryDirectory(prefix="hier-worker-filtered-") as directory:
+            root = Path(directory)
+            baseline_db = export(self.binary, root, schematic=False, extra=("--depth", "1"))
+            baseline_db.close()
+            baseline = root / "semantic_top-False.db"
+            original = baseline.read_bytes()
+            with self.worker(baseline, root / "scope.sqlite") as (expect, _):
+                expect("HIER_SCHEMATIC_ERROR", "semantic_top.first")
+                expect("HIER_SCHEMATIC_OK", "semantic_top")
+                with sqlite3.connect(root / "scope.sqlite") as db:
+                    self.assertEqual(db.execute("SELECT path FROM instances").fetchall(), [("semantic_top",)])
+                    self.assertGreater(db.execute(
+                        "SELECT count(*) FROM schematic_nodes WHERE kind='unresolved' "
+                        "AND detail LIKE 'Instance excluded by hierarchy filters:%'").fetchone()[0], 0)
+            self.assertEqual(baseline.read_bytes(), original)
+
+    def test_worker_options_and_source_protection(self):
+        with tempfile.TemporaryDirectory(prefix="hier-worker-options-") as directory:
+            root = Path(directory)
+            baseline = root / "hierarchy.sqlite"
+            baseline.write_bytes((Path(self.directory.name) / "semantic_top-False.db").read_bytes())
+            original = baseline.read_bytes()
+            output = root / "scope.sqlite"
+            worker_option = ("--schematic-worker", str(baseline))
+            cases = [
+                ((*worker_option, "-o", str(output)), "requires --sqlite"),
+                (("--sqlite", *worker_option), "requires -o"),
+                (("--sqlite", "--schematic-worker", "", "-o", str(output)), "non-empty"),
+                (("--sqlite", *worker_option, "-o", ""), "non-empty"),
+                (("--sqlite", *worker_option, "--schematic", "-o", str(output)), "mutually exclusive"),
+                (("--sqlite", *worker_option, "--schematic-scope", "semantic_top", "-o", str(output)), "mutually exclusive"),
+                (("--sqlite", "--schematic-worker", str(root / "missing.sqlite"), "-o", str(output)), "unable to open"),
+            ]
+            symlink = root / "symlink.sqlite"
+            symlink.symlink_to(baseline)
+            hardlink = root / "hardlink.sqlite"
+            hardlink.hardlink_to(baseline)
+            for alias in (baseline, symlink, hardlink):
+                cases.append((("--sqlite", *worker_option, "-o", str(alias)), "different files"))
+            for options, error in cases:
+                with self.subTest(options=options):
+                    result = subprocess.run(
+                        [str(self.binary), *options, "--top", "semantic_top", str(FIXTURE)],
+                        input="", timeout=60, capture_output=True, text=True)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(error, result.stderr)
+                    self.assertEqual(result.stdout, "")
+                    self.assertEqual(baseline.read_bytes(), original)
+            self.assertFalse((root / "missing.sqlite").exists())
+
+    def test_invalid_schematic_options_fail(self):
+        cases = [
+            (("--sqlite", "--schematic-scope", "semantic_top.missing"), "scope not found"),
+            (("--sqlite", "--schematic-scope", "semantic_top.fir"), "scope not found"),
+            (("--sqlite", "--schematic-scope", "semantic_top.first", "--depth", "1"), "scope not found"),
+            (("--sqlite", "--schematic", "--schematic-scope", "semantic_top"), "mutually exclusive"),
+            (("--sqlite", "--schematic-scope", ""), "non-empty exact hierarchical path"),
+        ]
+        for mode in ((), ("--csv",), ("--plain",), ("--tree",), ("--dir",)):
+            for option in (("--schematic",), ("--schematic-scope", "semantic_top")):
+                cases.append(((*mode, *option), "require --sqlite"))
+        for options, error in cases:
+            with self.subTest(options=options), tempfile.TemporaryDirectory(prefix="hier-invalid-") as directory:
+                result = subprocess.run(
+                    [str(self.binary), *options, "-o", str(Path(directory) / "invalid.db"),
+                     "--top", "semantic_top", str(FIXTURE)],
+                    timeout=60, capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(error, result.stderr)
+
     def test_compilation_errors_are_visible_in_each_scope(self):
         with tempfile.TemporaryDirectory(prefix="hier-partial-") as directory:
             source = Path(directory) / "damaged.sv"
             database = Path(directory) / "damaged.db"
             source.write_text("module damaged(input wire clk); missing_module u(); endmodule\n")
-            result = subprocess.run([str(self.binary), "--sqlite", "-o", str(database), "--top", "damaged", str(source)],
+            result = subprocess.run([str(self.binary), "--sqlite", "--schematic", "-o", str(database), "--top", "damaged", str(source)],
                                     check=True, timeout=60, capture_output=True, text=True)
             self.assertIn("Compilation reported errors", result.stderr)
             with sqlite3.connect(database) as db:

@@ -51,6 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- On-demand Schematic keeps a Slang API worker after the first uncached request, reusing its elaborated design for later scopes. Scope requests skip global statistics and hierarchy export. The worker is reaped on service shutdown or failure; source invalidation discards the stale compilation. This trades resident compiler memory for lower navigation latency.
+- Default RTL export skips all schematic tables and scope JSON. Opening Schematic through `--preview` or `hier-viewer serve <bundle>` generates the current scope and caches it on disk across service restarts. The first uncached RTL scope parses and elaborates the design. Keep the original RTL and private cache locally; changed inputs require regenerating the bundle. Pass `--schematic` before `--` to prebuild all scopes for static hosting or sharing.
+- Direct `--db` input lazily extracts individual scopes when schematic tables exist; databases without those tables cannot rebuild RTL and leave Schematic unavailable. The Schematic service supports non-loopback bindings without changing coverage API restrictions. It builds one scope at a time, reports busy for further uncached requests, and cancels export after 10 minutes or on server shutdown.
+- Schematic export uses `WITHOUT ROWID` scope-keyed tables, large per-table insertion batches, and an endpoint index created after row insertion.
+- Eager scope generation reads the export through a memory mapping and uses a small writer pool to serialize and write JSON while the scope scan continues.
+- Endpoint index sorting uses temporary disk storage to limit memory use.
 - Schematic export stores short expression node labels and short value-net names. Top-level expressions retain their complete RTL text; nested operands keep topology and parent references to avoid repeated large text.
 - CLI bundled coverage reports use a metadata signature to reuse unchanged report copies across bundle generations.
 

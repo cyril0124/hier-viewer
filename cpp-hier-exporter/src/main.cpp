@@ -18,6 +18,7 @@
 
 #include "exporter.h"
 #include "logger.h"
+#include "schematic_worker.h"
 #include "sqlite_writer.h"
 #include "tree.h"
 
@@ -223,6 +224,9 @@ int main(int argc, char** argv) {
         std::optional<bool> plainMode;
         std::optional<bool> csvMode;
         std::optional<bool> sqliteMode;
+        std::optional<bool> schematic;
+        std::optional<std::string> schematicScope;
+        std::optional<std::string> schematicWorker;
         std::optional<bool> noCompress;
         std::optional<bool> ignoreObjectTooLarge;
         std::optional<int> depth;
@@ -239,6 +243,12 @@ int main(int argc, char** argv) {
         driver.cmdLine.add("-c,--csv", csvMode, "Generate CSV hierarchy output");
         driver.cmdLine.add("-s,--sqlite", sqliteMode,
                            "Generate sqlite hierarchy database with signal details");
+        driver.cmdLine.add("--schematic", schematic,
+                           "Include schematic graphs for all exported scopes (requires --sqlite)");
+        driver.cmdLine.add("--schematic-scope", schematicScope,
+                           "Include only the exact instance's schematic graph (requires --sqlite)", "<path>");
+        driver.cmdLine.add("--schematic-worker", schematicWorker,
+                           "Serve schematic scope requests using an existing hierarchy (requires --sqlite)", "<file>");
         driver.cmdLine.add("-o", outputPath, "Output file/path", "<file>");
         driver.cmdLine.add("--no-compress-prefix", noCompress,
                            "Disable prefix compression in tree mode");
@@ -273,6 +283,24 @@ int main(int argc, char** argv) {
         const auto cliOptions = parseCliOptions(treeMode, dirMode, plainMode, csvMode, sqliteMode,
                                                 noCompress, depth, outputPath, excludeWildcards,
                                                 excludeRegexes);
+        if (schematicWorker && (schematic == true || schematicScope)) {
+            throw std::runtime_error("--schematic-worker, --schematic and --schematic-scope are mutually exclusive");
+        }
+        if (schematicWorker && cliOptions.mode != hier::OutputMode::Sqlite) {
+            throw std::runtime_error("--schematic-worker requires --sqlite");
+        }
+        if (schematicWorker && (schematicWorker->empty() || outputPath->empty())) {
+            throw std::runtime_error("--schematic-worker requires non-empty hierarchy and output paths");
+        }
+        if (schematic == true && schematicScope) {
+            throw std::runtime_error("--schematic and --schematic-scope are mutually exclusive");
+        }
+        if ((schematic == true || schematicScope) && cliOptions.mode != hier::OutputMode::Sqlite) {
+            throw std::runtime_error("--schematic and --schematic-scope require --sqlite");
+        }
+        if (schematicScope && schematicScope->empty()) {
+            throw std::runtime_error("--schematic-scope requires a non-empty exact hierarchical path");
+        }
         hier::logInfo("slang-hier-exporter", "Starting hierarchy export");
 
         driver.diagEngine.setSeverity(diag::MissingTimeScale, DiagnosticSeverity::Ignored);
@@ -312,6 +340,11 @@ int main(int argc, char** argv) {
                              "Compilation reported errors above; analysis will continue with partial results");
         }
         hier::logInfo("slang-hier-exporter", "Compilation and analysis finished");
+
+        if (schematicWorker) {
+            hier::runSchematicWorker(*compilation, *schematicWorker, *cliOptions.outputPath);
+            return 0;
+        }
 
         hier::logInfo("slang-hier-exporter", "Collecting hierarchy and signal statistics");
         const auto collected =
@@ -371,7 +404,8 @@ int main(int argc, char** argv) {
                 hier::generateSqliteHierarchy(collected.hierarchyEntries, collected.instanceMetadata,
                                               collected.definitionSignalSummaries,
                                               collectSourceDependencies(*compilation->getSourceManager()), *compilation,
-                                              *cliOptions.outputPath, cliOptions.viewerConfig);
+                                              *cliOptions.outputPath, cliOptions.viewerConfig,
+                                              schematic == true, schematicScope);
                 hier::logInfo("slang-hier-exporter",
                               std::string("SQLite hierarchy written to: ") + *cliOptions.outputPath);
                 break;

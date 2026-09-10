@@ -10,14 +10,14 @@ use crate::schematic::load_schematic_cached;
 
 const SQLITE_HEADER: &[u8] = b"SQLite format 3\0";
 
-pub(crate) fn load_input_data(path: &str) -> Result<InputData, String> {
+pub(crate) fn load_input_data(path: &str, include_schematic: bool) -> Result<InputData, String> {
     if !is_sqlite_file(path)? {
         return Err(format!(
             "input '{}' is not a sqlite hierarchy DB; use --db for prebuilt sqlite or pass RTL inputs to build one",
             path
         ));
     }
-    parse_sqlite_input(path)
+    parse_sqlite_input(path, include_schematic)
 }
 
 fn is_sqlite_file(path: &str) -> Result<bool, String> {
@@ -30,7 +30,7 @@ fn is_sqlite_file(path: &str) -> Result<bool, String> {
     Ok(bytes_read == SQLITE_HEADER.len() && header == SQLITE_HEADER)
 }
 
-fn parse_sqlite_input(path: &str) -> Result<InputData, String> {
+fn parse_sqlite_input(path: &str, include_schematic: bool) -> Result<InputData, String> {
     let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|err| format!("failed to open sqlite input '{}': {err}", path))?;
 
@@ -153,7 +153,11 @@ fn parse_sqlite_input(path: &str) -> Result<InputData, String> {
     Ok(InputData {
         entries,
         analysis_definitions,
-        schematic: load_schematic_cached(&connection, Path::new(path))?,
+        schematic: if include_schematic {
+            load_schematic_cached(&connection, Path::new(path))?
+        } else {
+            None
+        },
     })
 }
 

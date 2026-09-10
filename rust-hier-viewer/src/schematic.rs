@@ -3,6 +3,10 @@ use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc;
+use std::thread;
 use std::time::{Duration, Instant};
 
 use rusqlite::Connection;
@@ -15,6 +19,8 @@ mod cache;
 pub(crate) use cache::load_schematic_cached;
 
 #[cfg(test)]
+mod scope_tests;
+#[cfg(test)]
 mod tests;
 
 const TABLES: [&str; 6] = [
@@ -25,6 +31,12 @@ const TABLES: [&str; 6] = [
     "schematic_nets",
     "schematic_endpoints",
 ];
+
+/// Read-only mapping window for the export. Reading through it lets the kernel
+/// fault in several pages per request instead of issuing one read call per
+/// 4 KiB page, which is what makes a page-at-a-time walk slow on a network
+/// filesystem.
+const MMAP_SIZE_BYTES: i64 = 8 << 30;
 
 #[derive(Debug)]
 enum SchematicDirectory {
@@ -111,9 +123,40 @@ pub(crate) fn load_schematic(connection: &Connection) -> Result<Option<Schematic
     load_schematic_in(connection, None)
 }
 
+/// Validate and write one exported scope using the existing graph JSON schema.
+/// Missing schematic data or scopes are errors; an existing empty scope is valid.
+pub(crate) fn write_scope_from_db(
+    connection: &Connection,
+    scope: &str,
+    destination: &Path,
+) -> Result<(), String> {
+    let schematic = load_schematic_selected(connection, None, Some(scope))?
+        .ok_or_else(|| "schematic graph is unavailable: missing schematic schema".to_string())?;
+    let index = schematic
+        .scopes
+        .get(scope)
+        .ok_or_else(|| format!("schematic scope '{scope}' is missing"))?;
+    let source = schematic.directory.path().join(format!("{index}.json"));
+    fs::copy(&source, destination).map_err(|err| {
+        format!(
+            "failed to write schematic scope '{scope}' to '{}': {err}",
+            destination.display()
+        )
+    })?;
+    Ok(())
+}
+
 fn load_schematic_in(
     connection: &Connection,
     staging: Option<TempDir>,
+) -> Result<Option<SchematicInput>, String> {
+    load_schematic_selected(connection, staging, None)
+}
+
+fn load_schematic_selected(
+    connection: &Connection,
+    staging: Option<TempDir>,
+    scope: Option<&str>,
 ) -> Result<Option<SchematicInput>, String> {
     let present = TABLES
         .iter()
@@ -152,6 +195,11 @@ fn load_schematic_in(
             started.elapsed().as_secs_f64()
         ),
     );
+    // Reading through a memory mapping lets the kernel fault in several pages
+    // per request, instead of paying one read call per 4 KiB page.
+    connection
+        .pragma_update(None, "mmap_size", MMAP_SIZE_BYTES)
+        .map_err(corrupt)?;
     // Databases without scope indexes may spill their one-time sorts to disk.
     connection
         .execute_batch("PRAGMA temp_store = FILE")
@@ -163,19 +211,29 @@ fn load_schematic_in(
     };
     let mut scopes = HashMap::new();
 
-    // Each table is scanned once in scope order. In particular endpoints have
-    // no required index, so querying them separately for every scope is costly.
+    // Full exports scan each table once in scope order. Selected exports use
+    // equality predicates so SQLite can seek through available scope indexes.
     let mut scopes_stmt = connection
-        .prepare("SELECT path FROM schematic_scopes ORDER BY path")
+        .prepare(if scope.is_some() {
+            "SELECT path FROM schematic_scopes WHERE path = ?1 ORDER BY path"
+        } else {
+            "SELECT path FROM schematic_scopes ORDER BY path"
+        })
         .map_err(corrupt)?;
     let scope_rows = scopes_stmt
-        .query_map([], |row| row.get::<_, String>(0))
+        .query_map(rusqlite::params_from_iter(scope), |row| {
+            row.get::<_, String>(0)
+        })
         .map_err(corrupt)?;
     let mut nodes_stmt = connection
-        .prepare("SELECT scope_path, id, kind, label, instance_path, detail FROM schematic_nodes ORDER BY scope_path, id")
+        .prepare(if scope.is_some() {
+            "SELECT scope_path, id, kind, label, instance_path, detail FROM schematic_nodes WHERE scope_path = ?1 ORDER BY scope_path, id"
+        } else {
+            "SELECT scope_path, id, kind, label, instance_path, detail FROM schematic_nodes ORDER BY scope_path, id"
+        })
         .map_err(corrupt)?;
     let mut nodes = nodes_stmt
-        .query_map([], |row| {
+        .query_map(rusqlite::params_from_iter(scope), |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 GraphNode {
@@ -191,10 +249,14 @@ fn load_schematic_in(
         .map_err(corrupt)?
         .peekable();
     let mut ports_stmt = connection
-        .prepare("SELECT scope_path, node_id, id, name, direction, width, ordinal FROM schematic_ports ORDER BY scope_path")
+        .prepare(if scope.is_some() {
+            "SELECT scope_path, node_id, id, name, direction, width, ordinal FROM schematic_ports WHERE scope_path = ?1 ORDER BY scope_path"
+        } else {
+            "SELECT scope_path, node_id, id, name, direction, width, ordinal FROM schematic_ports ORDER BY scope_path"
+        })
         .map_err(corrupt)?;
     let mut ports = ports_stmt
-        .query_map([], |row| {
+        .query_map(rusqlite::params_from_iter(scope), |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 (
@@ -212,10 +274,14 @@ fn load_schematic_in(
         .map_err(corrupt)?
         .peekable();
     let mut nets_stmt = connection
-        .prepare("SELECT scope_path, id, name, width, status FROM schematic_nets ORDER BY scope_path, id")
+        .prepare(if scope.is_some() {
+            "SELECT scope_path, id, name, width, status FROM schematic_nets WHERE scope_path = ?1 ORDER BY scope_path, id"
+        } else {
+            "SELECT scope_path, id, name, width, status FROM schematic_nets ORDER BY scope_path, id"
+        })
         .map_err(corrupt)?;
     let mut nets = nets_stmt
-        .query_map([], |row| {
+        .query_map(rusqlite::params_from_iter(scope), |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 Net {
@@ -230,10 +296,14 @@ fn load_schematic_in(
         .map_err(corrupt)?
         .peekable();
     let mut endpoints_stmt = connection
-        .prepare("SELECT scope_path, net_id, node_id, port_id, role FROM schematic_endpoints ORDER BY scope_path")
+        .prepare(if scope.is_some() {
+            "SELECT scope_path, net_id, node_id, port_id, role FROM schematic_endpoints WHERE scope_path = ?1 ORDER BY scope_path"
+        } else {
+            "SELECT scope_path, net_id, node_id, port_id, role FROM schematic_endpoints ORDER BY scope_path"
+        })
         .map_err(corrupt)?;
     let mut endpoints = endpoints_stmt
-        .query_map([], |row| {
+        .query_map(rusqlite::params_from_iter(scope), |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 (
@@ -250,7 +320,11 @@ fn load_schematic_in(
         .peekable();
 
     let mut last_progress = Instant::now();
-    let mut staging_time = Duration::ZERO;
+    let staging_directory = directory.path().to_path_buf();
+    let staging_written = Arc::new(AtomicU64::new(0));
+    let writers = spawn_staging_writers(&staging_directory, Arc::clone(&staging_written));
+    let writer_count = writers.len();
+    let written_seconds = || staging_written.load(Ordering::Relaxed) as f64 / 1e9;
     for scope in scope_rows {
         let scope = scope.map_err(corrupt)?;
         if scope.is_empty() {
@@ -399,37 +473,53 @@ fn load_schematic_in(
                 ),
             );
         }
-        let staging_started = Instant::now();
-        write_graph(&directory.path().join(format!("{index}.json")), &graph)?;
-        staging_time += staging_started.elapsed();
+        let writer = &writers[index % writers.len()];
+        if writer.sender.send((index, graph)).is_err() {
+            let _ = finish_staging(writers);
+            return Err("schematic staging writer stopped before finishing".to_string());
+        }
         scopes.insert(scope, index);
         if report_progress {
             crate::logging::info(
                 "schematic",
                 format!(
-                    "Staged {} scopes in {:.2}s total; JSON staging {:.2}s",
+                    "Staged {} scopes in {:.2}s total; JSON write {:.2}s across {} writers",
                     scopes.len(),
                     started.elapsed().as_secs_f64(),
-                    staging_time.as_secs_f64()
+                    written_seconds(),
+                    writer_count
                 ),
             );
             last_progress = Instant::now();
+        }
+    }
+    finish_staging(writers)?;
+    if let Some(scope) = scope {
+        if !scopes.contains_key(scope) {
+            return Err(format!("schematic scope '{scope}' is missing"));
+        }
+        // Full exports check this when binding scopes to hierarchy nodes.
+        if !instance_paths.contains(scope) {
+            return Err(corrupt(format!(
+                "scope '{scope}' is absent from the hierarchy"
+            )));
         }
     }
     reject_remaining_rows(&mut nodes)?;
     reject_remaining_rows(&mut ports)?;
     reject_remaining_rows(&mut nets)?;
     reject_remaining_rows(&mut endpoints)?;
-    if instance_paths.iter().any(|path| !scopes.contains_key(path)) {
+    if scope.is_none() && instance_paths.iter().any(|path| !scopes.contains_key(path)) {
         return Err(corrupt("hierarchy instance is missing its schematic scope"));
     }
     crate::logging::info(
         "schematic",
         format!(
-            "Finished scanning and staging {} scopes in {:.2}s; JSON staging {:.2}s",
+            "Finished scanning and staging {} scopes in {:.2}s; JSON write {:.2}s across {} writers",
             scopes.len(),
             started.elapsed().as_secs_f64(),
-            staging_time.as_secs_f64()
+            written_seconds(),
+            writer_count
         ),
     );
     Ok(Some(SchematicInput {
@@ -644,6 +734,58 @@ impl SchematicData {
             write_graph(&path, &graph)?;
         }
         Ok(())
+    }
+}
+
+/// Scope JSON is written by a small pool. Serializing and writing one scope at a
+/// time leaves the filesystem idle while the graph is serialized, and this phase
+/// is dominated by file writes, so a few writers overlap the two. The pool also
+/// lets the scan keep pulling rows while earlier scopes are still being written.
+const STAGING_WRITERS: usize = 4;
+const STAGING_QUEUE: usize = 2;
+
+struct StagingWriter {
+    sender: mpsc::SyncSender<(usize, Graph)>,
+    handle: thread::JoinHandle<Result<(), String>>,
+}
+
+fn spawn_staging_writers(directory: &Path, written_nanos: Arc<AtomicU64>) -> Vec<StagingWriter> {
+    (0..STAGING_WRITERS)
+        .map(|_| {
+            let (sender, receiver) = mpsc::sync_channel::<(usize, Graph)>(STAGING_QUEUE);
+            let directory = directory.to_path_buf();
+            let written_nanos = Arc::clone(&written_nanos);
+            let handle = thread::spawn(move || {
+                while let Ok((index, graph)) = receiver.recv() {
+                    let started = Instant::now();
+                    write_graph(&directory.join(format!("{index}.json")), &graph)?;
+                    written_nanos.fetch_add(started.elapsed().as_nanos() as u64, Ordering::Relaxed);
+                }
+                Ok(())
+            });
+            StagingWriter { sender, handle }
+        })
+        .collect()
+}
+
+/// Closing the senders lets each writer drain its queue and exit. A writer that
+/// already failed closes its channel, which is how the scan notices the failure.
+fn finish_staging(writers: Vec<StagingWriter>) -> Result<(), String> {
+    let mut failure = None;
+    for writer in writers {
+        let StagingWriter { sender, handle } = writer;
+        drop(sender);
+        match handle.join() {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => failure = failure.or(Some(err)),
+            Err(_) => {
+                failure = failure.or_else(|| Some("schematic staging writer panicked".to_string()))
+            }
+        }
+    }
+    match failure {
+        Some(err) => Err(err),
+        None => Ok(()),
     }
 }
 

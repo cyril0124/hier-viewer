@@ -36,6 +36,7 @@ where
     let mut title = None;
     let mut no_wizard = false;
     let mut rebuild_sqlite = false;
+    let mut schematic = false;
     let mut preview = false;
     let mut preview_host = DEFAULT_PREVIEW_HOST.to_string();
     let mut preview_port = DEFAULT_PREVIEW_PORT;
@@ -82,6 +83,7 @@ where
             "-r" | "--rebuild-sqlite" => {
                 rebuild_sqlite = true;
             }
+            "--schematic" => schematic = true,
             "--preview" => {
                 preview = true;
             }
@@ -154,6 +156,20 @@ where
         }
     }
 
+    if extra_args_tokens
+        .iter()
+        .any(|arg| arg == "--schematic" || arg.starts_with("--schematic="))
+    {
+        return Err("pass --schematic before '--' to prebuild the static schematic bundle".into());
+    }
+    if extra_args_tokens.iter().any(|arg| {
+        arg == "--schematic-scope"
+            || arg.starts_with("--schematic-scope=")
+            || arg == "--schematic-worker"
+            || arg.starts_with("--schematic-worker=")
+    }) {
+        return Err("schematic scope and worker options are managed by the on-demand service; select scopes in the viewer".into());
+    }
     if db_path.is_some() && (!rtl_inputs.is_empty() || !filelists.is_empty()) {
         return Err("--db cannot be combined with RTL positional inputs or --filelist".to_string());
     }
@@ -199,6 +215,7 @@ where
         title,
         no_wizard,
         rebuild_sqlite,
+        schematic,
         preview,
         preview_host,
         preview_port,
@@ -364,6 +381,7 @@ Options:
       -- <args...>         Pass remaining args directly to slang / slang-hier-exporter
                            Examples: `-I inc`, `-D FOO=1`, `+incdir+rtl/include`, `--top top_mod`
       --no-wizard          Never open the startup wizard; require explicit `--db`, RTL inputs, or filelists instead
+  --schematic             Prebuild all schematic scopes for static hosting (default: on demand)
   -r, --rebuild-sqlite     Ignore cached sqlite exports and force rerun slang-hier-exporter
       --preview            After bundle generation, start a built-in local preview server and print the viewer URL
       --preview-host <h>   Bind host for --preview (default: 127.0.0.1; use 0.0.0.0 for remote access)
@@ -424,6 +442,22 @@ Options:
 mod tests {
     use super::{normalize_requested_tag, parse_args};
     use crate::model::AppCommand;
+
+    #[test]
+    fn schematic_is_opt_in_and_not_a_compiler_passthrough_option() {
+        let AppCommand::Generate(default) = parse_args(["design.sv".into()]).unwrap() else {
+            panic!("generate")
+        };
+        assert!(!default.schematic);
+        let AppCommand::Generate(eager) =
+            parse_args(["--schematic".into(), "design.sv".into()]).unwrap()
+        else {
+            panic!("generate")
+        };
+        assert!(eager.schematic);
+        assert!(parse_args(["--".into(), "--schematic".into()]).is_err());
+        assert!(parse_args(["--".into(), "--schematic-scope=top".into()]).is_err());
+    }
 
     #[test]
     fn parses_update_subcommand() {

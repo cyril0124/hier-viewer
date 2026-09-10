@@ -6,7 +6,7 @@ RTL hierarchy visualization, structural analysis, and coverage inspection.
 
 `hier-viewer` generates an interactive static site for inspecting elaborated instance hierarchies, comparing module statistics, and navigating RTL source. It supports treemaps, 2D pie charts, 3D charts, and an independent [RTL schematic](docs/schematic.md) with real port connections and expandable signal groups.
 
-The embedded `slang-hier-exporter` extracts hierarchy, signal statistics, source locations, and instance-scoped semantic connections into SQLite. The Rust application generates the site from this export or an existing database supplied with `--db`. The generated site requires only an HTTP file server for browsing and browser-file coverage imports. The exporter ignores C/C++ source entries in RTL filelists because they are simulator/DPI build inputs rather than SystemVerilog sources. For designs containing intentionally oversized simulation memories, pass `--ignore-object-too-large` after `--` to continue hierarchy extraction while preserving other slang diagnostics. Verify the resulting diagnostics before treating the graph as complete. Optional server-side VDB conversion uses the built-in local service.
+The embedded `slang-hier-exporter` extracts hierarchy, signal statistics, and source locations into SQLite. The Rust application generates the site from this export or an existing database supplied with `--db`. By default, RTL export skips all schematic tables and scope JSON; opening Schematic generates the current scope through the built-in service. Use `--schematic` to prebuild every scope for ordinary static hosting. The exporter ignores C/C++ source entries in RTL filelists because they are simulator/DPI build inputs rather than SystemVerilog sources. For designs containing intentionally oversized simulation memories, pass `--ignore-object-too-large` after `--` to continue hierarchy extraction while preserving other slang diagnostics. Verify the resulting diagnostics before treating the graph as complete. Optional server-side VDB conversion uses the built-in local service.
 
 [Install](#install) · [Quick start](#quick-start) · [Schematic](docs/schematic.md) · [Coverage](#coverage) · [Common commands](#common-commands) · [Development](#development)
 
@@ -64,6 +64,22 @@ hier-viewer update --to v1.0.0
 3. After generation completes, open the URL printed in the terminal. On local desktop sessions, the application also attempts to launch the default browser. Press `Ctrl-C` to stop the preview server.
 
 The wizard opens only in an interactive terminal when no RTL inputs, filelists, or `--db` are supplied. In scripts or CI, pass those inputs explicitly.
+
+## Schematic usage
+
+For on-demand Schematic, generate with the built-in preview service:
+
+```bash
+hier-viewer -f rtl/files.f --output out --preview -- --top Top
+```
+
+Open **Schematic** to generate only the current scope. The first uncached scope starts a Slang worker that parses and elaborates RTL once; later uncached scopes reuse that compilation. The worker retains the elaborated design in memory until the service stops or the worker is discarded after a failure or input change. Completed scopes are cached on disk. Keep the original RTL and `.hier-viewer-cache/` locally to reopen the bundle with `hier-viewer serve out`. Changed inputs require regenerating the bundle. See [Schematic view](docs/schematic.md) for loading and cache behavior.
+
+For static hosting or sharing, prebuild all scopes with `--schematic` **before `--`**:
+
+```bash
+hier-viewer -f rtl/files.f --output out --schematic -- --top Top
+```
 
 ## Features
 
@@ -170,7 +186,7 @@ hier-viewer serve out --host 127.0.0.1 --port 8000
 
 Open the printed URL. In **Import coverage**, choose **VDB server directory**, enter the VDB's path on that machine, and click **Load report**. Then check and apply the hierarchy mapping as above. The server needs `urg` on `PATH` and the applicable Synopsys license. The dialog provides a timeout and cancellation controls.
 
-**URG report server directory** loads an already generated report by server path. These server-side imports require a loopback binding; `--host 0.0.0.0` serves static content with browser-file imports only. For remote VDB conversion, use [SSH forwarding to the local service](docs/coverage.md#import-a-vdb-or-server-report).
+**URG report server directory** loads an already generated report by server path. These server-side imports require a loopback binding; `--host 0.0.0.0` supports static content, browser-file imports, and on-demand Schematic, but disables coverage APIs. For remote VDB conversion, use [SSH forwarding to the local service](docs/coverage.md#import-a-vdb-or-server-report).
 
 ### Copy selected coverage for AI analysis
 
@@ -210,7 +226,7 @@ Statistics use each instance's elaborated parameters and active generate branche
 hier-viewer --db path/to/hiers.db --output out --preview
 ```
 
-`--db` is mutually exclusive with RTL inputs and filelists. It reads the database without reparsing RTL or validating the export cache. `--output` remains required as the destination for the generated site.
+`--db` is mutually exclusive with RTL inputs and filelists. It reads the database without reparsing RTL or validating the export cache. `--output` remains required as the destination for the generated site. By default, the built-in service extracts one schematic scope on demand if the database contains schematic tables; keep that database available. `--schematic` prebuilds all available scopes. A database without those tables cannot rebuild RTL, so Schematic remains unavailable.
 
 Source files referenced by the database must be readable during generation so the application can include copies in the site. After RTL changes, regenerate the database through RTL input mode to obtain updated statistics.
 
@@ -288,7 +304,8 @@ Run `hier-viewer --help` for the full option list.
 | `-f, --filelist <file>` | Add a filelist; repeatable |
 | `-o, --output <dir>` | Output directory; required |
 | `-r, --rebuild-sqlite` | Ignore the export cache and rebuild it |
-| `--preview` | Start the preview server after generation |
+| `--schematic` | Prebuild all schematic scopes for static hosting or sharing; place before `--` |
+| `--preview` | Start the built-in service for preview and on-demand Schematic after generation |
 | `--preview-host <h>` | Bind address; default `127.0.0.1` |
 | `--preview-port <n>` | Starting port; default `8000`, increments if occupied |
 | `--coverage-report <dir>` | Copy a URG report into the generated site for automatic loading |
@@ -355,10 +372,10 @@ out/
 ├── viewer-three.module.js
 ├── three.core.js
 ├── .hier-viewer-sources/      # source copies for the reader
-└── .hier-viewer-cache/        # only when exporting RTL to SQLite
+└── .hier-viewer-cache/        # private generation recipe and caches
 ```
 
-Publish the complete output directory, including `.hier-viewer-sources/`. The browser loads source text and signal-analysis data on demand. Source URLs encode spaces and reserved characters; see [source bundle paths](docs/export-and-bundle-contracts.md#source-bundle-paths) for details.
+For static sharing with Schematic, generate with `--schematic` and publish the site assets, including `schematic/` and `.hier-viewer-sources/`. Keep the private `.hier-viewer-cache/` local; its lazy-generation recipe records local paths and compiler options. All viewer assets and source copies are local to the bundle. The browser loads source text and signal-analysis data on demand. Source URLs encode spaces and reserved characters; see [source bundle paths](docs/export-and-bundle-contracts.md#source-bundle-paths) for details.
 
 ## Preview
 
@@ -376,7 +393,7 @@ To serve an existing bundle without regenerating it:
 hier-viewer serve out --port 8000
 ```
 
-The built-in server also supplies local coverage import. An ordinary server such as `python3 -m http.server --directory out 8000` supports static viewing and browser-file report import, but cannot run URG. Coverage APIs are disabled on non-loopback bindings.
+The built-in server supplies on-demand Schematic on both loopback and non-loopback bindings, including `--preview-host 0.0.0.0` and `serve --host 0.0.0.0`. It also supplies local coverage import; coverage APIs remain disabled on non-loopback bindings. An ordinary server such as `python3 -m http.server --directory out 8000` supports static viewing and browser-file report import, but needs a bundle generated with `--schematic` for Schematic and cannot run URG.
 
 VSCode Live Server can also serve the output directory, including through VSCode Remote.
 

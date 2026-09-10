@@ -251,6 +251,7 @@ pub(crate) fn build_viewer_data(
             default_metric: DEFAULT_METRIC,
             analysis_definitions,
             schematic,
+            schematic_on_demand: false,
         });
     }
 
@@ -278,6 +279,7 @@ pub(crate) fn build_viewer_data(
         default_metric: DEFAULT_METRIC,
         analysis_definitions,
         schematic,
+        schematic_on_demand: false,
     })
 }
 
@@ -637,6 +639,7 @@ mod tests {
             title: None,
             no_wizard: true,
             rebuild_sqlite: false,
+            schematic: false,
             preview: false,
             preview_host: String::new(),
             preview_port: 0,

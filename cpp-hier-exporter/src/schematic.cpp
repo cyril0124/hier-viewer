@@ -1,6 +1,7 @@
 #include "schematic.h"
 
 #include <algorithm>
+#include <cstring>
 #include <functional>
 #include <stdexcept>
 #include <unordered_map>
@@ -20,6 +21,14 @@ namespace {
 using namespace slang;
 using namespace slang::ast;
 
+// Rows are accumulated in memory and written in large per-table batches.
+// SQLite allocates pages as rows arrive, so inserting every scope into all four
+// tables at once spreads each table's pages across the whole file. Scattered
+// pages defeat readahead and make a later full scan an order of magnitude
+// slower, so each table is written in long contiguous runs instead.
+constexpr size_t BATCH_BYTES = 32u << 20;
+constexpr uint32_t NUMBER_FIELD = 1u << 31;
+
 class Insert {
 public:
     Insert(sqlite3* db, const char* sql) : db(db) {
@@ -31,19 +40,73 @@ public:
     Insert& operator=(const Insert&) = delete;
 
     void text(int column, std::string_view value) {
-        check(sqlite3_bind_text(stmt, column, value.data(), int(value.size()), SQLITE_TRANSIENT));
+        append(uint32_t(column), uint32_t(value.size()), value.data(), value.size());
     }
     void number(int column, uint64_t value) {
-        check(sqlite3_bind_int64(stmt, column, sqlite3_int64(value)));
+        append(uint32_t(column), NUMBER_FIELD, &value, sizeof(value));
     }
     void run() {
-        check(sqlite3_step(stmt));
-        check(sqlite3_reset(stmt));
-        check(sqlite3_clear_bindings(stmt));
+        rowFields.push_back(pending);
+        pending = 0;
+        ++rows;
+        if (batch.size() >= BATCH_BYTES)
+            flush();
+    }
+    void finish() {
+        if (rows != 0)
+            flush();
     }
 private:
     sqlite3* db;
     sqlite3_stmt* stmt = nullptr;
+    std::vector<char> batch;
+    // A row may bind fewer columns than its table has, for example a NULL
+    // instance_path, so the field count travels with each buffered row.
+    std::vector<uint32_t> rowFields;
+    uint32_t pending = 0;
+    size_t rows = 0;
+
+    void append(uint32_t column, uint32_t header, const void* data, size_t size) {
+        ++pending;
+        const size_t offset = batch.size();
+        batch.resize(offset + 2 * sizeof(uint32_t) + size);
+        std::memcpy(batch.data() + offset, &column, sizeof(column));
+        std::memcpy(batch.data() + offset + sizeof(column), &header, sizeof(header));
+        if (size != 0)
+            std::memcpy(batch.data() + offset + sizeof(column) + sizeof(header), data, size);
+    }
+
+    void flush() {
+        size_t cursor = 0;
+        for (size_t row = 0; row < rows; ++row) {
+            for (uint32_t field = 0; field < rowFields[row]; ++field) {
+                uint32_t column = 0;
+                uint32_t header = 0;
+                std::memcpy(&column, batch.data() + cursor, sizeof(column));
+                cursor += sizeof(column);
+                std::memcpy(&header, batch.data() + cursor, sizeof(header));
+                cursor += sizeof(header);
+                if (header & NUMBER_FIELD) {
+                    uint64_t value = 0;
+                    std::memcpy(&value, batch.data() + cursor, sizeof(value));
+                    cursor += sizeof(value);
+                    check(sqlite3_bind_int64(stmt, int(column), sqlite3_int64(value)));
+                }
+                else {
+                    check(sqlite3_bind_text(stmt, int(column), batch.data() + cursor,
+                                            int(header), SQLITE_TRANSIENT));
+                    cursor += header;
+                }
+            }
+            check(sqlite3_step(stmt));
+            check(sqlite3_reset(stmt));
+            check(sqlite3_clear_bindings(stmt));
+        }
+        batch.clear();
+        rowFields.clear();
+        rows = 0;
+    }
+
     void check(int result) {
         if (result != SQLITE_OK && result != SQLITE_DONE)
             throw std::runtime_error(sqlite3_errmsg(db));
@@ -57,6 +120,13 @@ struct SchematicInserts {
         port(db, "INSERT INTO schematic_ports VALUES(?1,?2,?3,?4,?5,?6,?7)"),
         net(db, "INSERT INTO schematic_nets VALUES(?1,?2,?3,?4,?5)"),
         endpoint(db, "INSERT INTO schematic_endpoints VALUES(?1,?2,?3,?4,?5)") {}
+
+    void finish() {
+        node.finish();
+        port.finish();
+        net.finish();
+        endpoint.finish();
+    }
 };
 
 struct Net {
@@ -533,24 +603,31 @@ private:
 } // namespace
 
 void writeSchematic(sqlite3* db, slang::ast::Compilation& compilation,
-                    const std::set<std::string>& allowedPaths) {
+                    const std::set<std::string>& allowedPaths,
+                    const std::optional<std::string>& selectedScope) {
+    // Scope-keyed tables are WITHOUT ROWID so the primary key and the rows
+    // share one b-tree. On a rowid table the autoindex is a second b-tree whose
+    // pages interleave with the rows, and a scan that walks the index and then
+    // fetches each row ends up jumping across the file.
     const char* schema =
         "CREATE TABLE schematic_metadata(version INTEGER NOT NULL);"
         "INSERT INTO schematic_metadata VALUES(1);"
-        "CREATE TABLE schematic_scopes(path TEXT PRIMARY KEY);"
-        "CREATE TABLE schematic_nodes(scope_path TEXT,id TEXT,kind TEXT,label TEXT,instance_path TEXT,detail TEXT,PRIMARY KEY(scope_path,id));"
-        "CREATE TABLE schematic_ports(scope_path TEXT,node_id TEXT,id TEXT,name TEXT,direction TEXT,width INTEGER,ordinal INTEGER,PRIMARY KEY(scope_path,node_id,id));"
-        "CREATE TABLE schematic_nets(scope_path TEXT,id TEXT,name TEXT,width INTEGER,status TEXT,PRIMARY KEY(scope_path,id));"
-        "CREATE TABLE schematic_endpoints(scope_path TEXT,net_id TEXT,node_id TEXT,port_id TEXT,role TEXT);"
-        "CREATE INDEX schematic_endpoints_scope ON schematic_endpoints(scope_path);";
+        "CREATE TABLE schematic_scopes(path TEXT PRIMARY KEY) WITHOUT ROWID;"
+        "CREATE TABLE schematic_nodes(scope_path TEXT,id TEXT,kind TEXT,label TEXT,instance_path TEXT,detail TEXT,PRIMARY KEY(scope_path,id)) WITHOUT ROWID;"
+        "CREATE TABLE schematic_ports(scope_path TEXT,node_id TEXT,id TEXT,name TEXT,direction TEXT,width INTEGER,ordinal INTEGER,PRIMARY KEY(scope_path,node_id,id)) WITHOUT ROWID;"
+        "CREATE TABLE schematic_nets(scope_path TEXT,id TEXT,name TEXT,width INTEGER,status TEXT,PRIMARY KEY(scope_path,id)) WITHOUT ROWID;"
+        "CREATE TABLE schematic_endpoints(scope_path TEXT,net_id TEXT,node_id TEXT,port_id TEXT,role TEXT);";
     if (sqlite3_exec(db, schema, nullptr, nullptr, nullptr) != SQLITE_OK)
         throw std::runtime_error(sqlite3_errmsg(db));
     SchematicInserts inserts(db);
     Insert scopeInsert(db, "INSERT INTO schematic_scopes VALUES(?1)");
+    bool foundScope = false;
     std::function<void(const Scope&)> visitScope;
     std::function<void(const InstanceSymbol&)> visitInstance = [&](const InstanceSymbol& instance) {
         const auto path = instance.getHierarchicalPath();
-        if (allowedPaths.contains(path)) {
+        // Keep the full allowed path set so children remain navigable in a single-scope graph.
+        if (allowedPaths.contains(path) && (!selectedScope || path == *selectedScope)) {
+            foundScope = true;
             scopeInsert.text(1, path);
             scopeInsert.run();
             ScopeGraph(inserts, instance, allowedPaths, compilation.hasIssuedErrors()).collect();
@@ -568,6 +645,23 @@ void writeSchematic(sqlite3* db, slang::ast::Compilation& compilation,
         }
     };
     for (const auto* instance : compilation.getRoot().topInstances) visitInstance(*instance);
+    if (selectedScope && !foundScope) {
+        throw std::runtime_error("schematic scope not found in exported hierarchy: " + *selectedScope);
+    }
+    inserts.finish();
+    scopeInsert.finish();
+    // Building the index while rows trickle in would interleave its pages with
+    // every table's data pages. Creating it once, after all rows are written,
+    // keeps the index pages contiguous too. The sort is spilled to a temporary
+    // file because holding every endpoint key in memory adds about 2 GiB to the
+    // peak resident set.
+    if (sqlite3_exec(db, "PRAGMA temp_store=FILE", nullptr, nullptr, nullptr) != SQLITE_OK)
+        throw std::runtime_error(sqlite3_errmsg(db));
+    if (sqlite3_exec(db, "CREATE INDEX schematic_endpoints_scope ON schematic_endpoints(scope_path)",
+                     nullptr, nullptr, nullptr) != SQLITE_OK)
+        throw std::runtime_error(sqlite3_errmsg(db));
+    if (sqlite3_exec(db, "PRAGMA temp_store=MEMORY", nullptr, nullptr, nullptr) != SQLITE_OK)
+        throw std::runtime_error(sqlite3_errmsg(db));
 }
 
 } // namespace hier

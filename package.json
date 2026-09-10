@@ -12,7 +12,8 @@
     "check:generated": "node scripts/check-generated.mjs",
     "test:browser": "vitest run tests/source-reader-browser.test.ts tests/chart-rendering-browser.test.ts tests/schematic-browser.test.ts --testTimeout 60000 --hookTimeout 60000",
     "test:ui": "node tests/run-viewer-ui.mjs",
-    "test:schematic-ui": "node tests/run-schematic-ui.mjs"
+    "test:schematic-ui": "node tests/run-schematic-ui.mjs",
+    "test:schematic-lazy": "node tests/run-schematic-lazy.mjs"
   },
   "devDependencies": {
     "@types/node": "22.20.1",

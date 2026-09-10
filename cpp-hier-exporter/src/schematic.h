@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <set>
 #include <string>
 
@@ -8,8 +9,10 @@ namespace slang::ast { class Compilation; }
 
 namespace hier {
 
-// Writes one scope at a time inside the caller's SQLite transaction.
+// Writes all allowed scopes, or one exact scope, inside the caller's transaction.
+// Throws if the requested scope is absent or excluded by hierarchy filters.
 void writeSchematic(sqlite3* db, slang::ast::Compilation& compilation,
-                    const std::set<std::string>& allowedPaths);
+                    const std::set<std::string>& allowedPaths,
+                    const std::optional<std::string>& selectedScope);
 
 } // namespace hier

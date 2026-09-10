@@ -10,6 +10,7 @@ mod logging;
 mod model;
 mod preview;
 mod schematic;
+mod schematic_service;
 mod updater;
 mod viewer;
 mod wizard;
@@ -102,7 +103,7 @@ fn run_generate(mut config: Config) -> Result<(), String> {
 
     let needs_export_selection =
         config.db_path.is_none() && (interactive_terminal || has_source_inputs(&config));
-    let startup_selection = if needs_export_selection {
+    let mut startup_selection = if needs_export_selection {
         if has_source_inputs(&config) {
             let file_index = FileIndex::for_inputs(&config.rtl_inputs)?;
             let selection = StartupSelection {
@@ -134,6 +135,12 @@ fn run_generate(mut config: Config) -> Result<(), String> {
         None
     };
 
+    if config.schematic
+        && let Some(selection) = startup_selection.as_mut()
+    {
+        selection.extra_args_tokens.push("--schematic".to_string());
+    }
+
     let output_dir = config
         .output_path
         .clone()
@@ -157,24 +164,35 @@ fn run_generate(mut config: Config) -> Result<(), String> {
         .transpose()?;
 
     info("hier-viewer", "Loading hierarchy input...");
-    let input_data = match startup_selection.as_ref() {
+    let (sqlite_path, temporary) = match startup_selection.as_ref() {
         Some(selection) => {
             let export = run_hier_viewer_export(selection)?;
-            let result = load_input_data(&export.sqlite_path);
-            if export.temporary {
-                let _ = fs::remove_file(&export.sqlite_path);
-            }
-            result?
+            (export.sqlite_path, export.temporary)
         }
-        None => load_input_data(
+        None => (
             config
                 .db_path
-                .as_deref()
+                .clone()
                 .ok_or_else(|| "missing --db path".to_string())?,
-        )?,
+            false,
+        ),
     };
+    let input_data = load_input_data(&sqlite_path, config.schematic)?;
     info("hier-viewer", "Building viewer model...");
-    let data = build_viewer_data(input_data, &config)?;
+    let mut data = build_viewer_data(input_data, &config)?;
+    if config.schematic && data.schematic.is_none() {
+        return Err("--schematic requires connectivity data. Regenerate the input from RTL with --schematic.".into());
+    }
+    data.schematic_on_demand = schematic_service::prepare(
+        Path::new(&output_dir),
+        Path::new(&sqlite_path),
+        startup_selection.as_ref(),
+        &data.nodes,
+        config.schematic,
+    )?;
+    if temporary {
+        let _ = fs::remove_file(&sqlite_path);
+    }
     info("hier-viewer", "Rendering HTML bundle assets...");
     let html = render_html(&data, coverage.as_ref().map(BundledCoverage::manifest_url));
     let meta_json = render_meta_json(&data);

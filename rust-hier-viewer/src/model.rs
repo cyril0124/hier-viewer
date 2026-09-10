@@ -103,6 +103,7 @@ pub(crate) struct ViewerData {
     pub(crate) default_metric: &'static str,
     pub(crate) analysis_definitions: Vec<AnalysisDefinition>,
     pub(crate) schematic: Option<SchematicData>,
+    pub(crate) schematic_on_demand: bool,
 }
 
 #[derive(Debug)]
@@ -126,6 +127,7 @@ pub(crate) struct Config {
     pub(crate) title: Option<String>,
     pub(crate) no_wizard: bool,
     pub(crate) rebuild_sqlite: bool,
+    pub(crate) schematic: bool,
     pub(crate) preview: bool,
     pub(crate) preview_host: String,
     pub(crate) preview_port: u16,

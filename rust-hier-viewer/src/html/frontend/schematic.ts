@@ -1,4 +1,4 @@
-import { loadSchematicGraph } from "./schematic-data.js";
+import { loadSchematicGraph, requestSchematicScope } from "./schematic-data.js";
 import { OrthogonalRouter, GRID } from "./schematic-routing.js";
 import { compactLabel, displayNetName } from "./schematic-model.js";
 import { visibleWires, type VisibleWire } from "./schematic-wires.js";
@@ -7,6 +7,7 @@ import type { LayoutResponse, Point, SceneEdge, SceneNode, SchematicGraph, Schem
 export interface SchematicOptions {
   container: HTMLElement;
   available: boolean;
+  onDemand?: boolean;
   directory: string;
   scopePath: (nodeId: number) => string;
   navigate: (instancePath: string) => void;
@@ -125,7 +126,13 @@ export function createSchematic(options: SchematicOptions) {
   const phaseDetail = element("span");
   const progress = element("progress");
   progress.max = 1;
-  notice.append(phaseLabel, phaseDetail, progress);
+  const retryButton = element("button", "", "Retry");
+  retryButton.type = "button";
+  retryButton.hidden = true;
+  retryButton.onclick = () => {
+    if (active && currentId >= 0 && !loading) void loadScope(currentId);
+  };
+  notice.append(phaseLabel, phaseDetail, progress, retryButton);
   const legend = element("div", "schematic-legend", "RTL dependencies · double-click a module to enter · drag wires to edit bends");
   viewport.append(svg, notice, legend);
   host.replaceChildren(toolbar, viewport);
@@ -206,6 +213,7 @@ export function createSchematic(options: SchematicOptions) {
     phaseLabel.textContent = title;
     phaseDetail.textContent = detail;
     progress.hidden = failure || fraction === 1;
+    retryButton.hidden = !failure || !options.onDemand;
     if (fraction === undefined) progress.removeAttribute("value");
     else progress.value = fraction;
   }
@@ -718,7 +726,14 @@ export function createSchematic(options: SchematicOptions) {
     scopeLabel.textContent = options.scopePath(nodeId);
     const started = performance.now();
     try {
-      const graph = await loadSchematicGraph(`./${options.directory}/${nodeId}.json`, controller.signal, (received, total) => {
+      let url = `./${options.directory}/${nodeId}.json`;
+      if (options.onDemand) {
+        url = await requestSchematicScope(nodeId, controller.signal, (title, detail) => {
+          if (id === requestId && active) setNotice(title, detail);
+        });
+        if (id !== requestId || !active || controller.signal.aborted) return;
+      }
+      const graph = await loadSchematicGraph(url, controller.signal, (received, total) => {
         if (id !== requestId) return;
         const detail = total > 0 ? `${numberLabel(received)} / ${numberLabel(total)} bytes` : `${numberLabel(received)} bytes received`;
         setNotice("Loading connections…", detail, total > 0 ? received / total : undefined);
@@ -739,7 +754,7 @@ export function createSchematic(options: SchematicOptions) {
       if (changed) { persist(); cacheView(); cancelPending(); hideCard(true); hoverEdge(null); endGesture(); }
       return;
     }
-    if (!options.available) {
+    if (!options.available && !options.onDemand) {
       setNotice("Schematic data is missing", "Regenerate this bundle from RTL with the current hier-viewer. Existing hierarchy, charts and coverage remain available.", undefined, true);
       return;
     }

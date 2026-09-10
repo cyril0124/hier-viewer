@@ -53,6 +53,60 @@ export function parseSchematicGraph(raw: unknown): SchematicGraph {
   return { version: 1, scopePath: raw.scopePath, nodes: raw.nodes as SchematicNode[], nets: raw.nets as SchematicNet[] };
 }
 
+function abortableDelay(milliseconds: number, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, milliseconds);
+    function onAbort() {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      reject(signal.reason);
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/** Ask the local server to validate or generate a scope before reading its graph. */
+export async function requestSchematicScope(
+  nodeId: number,
+  signal: AbortSignal,
+  notice: (title: string, detail: string) => void,
+): Promise<string> {
+  signal.throwIfAborted();
+  if (!Number.isSafeInteger(nodeId) || nodeId < 0) throw new Error("Invalid schematic scope ID.");
+  const url = `./api/schematic/scopes/${nodeId}`;
+  const serveHelp = "Serve this bundle with hier-viewer serve, or regenerate with --schematic for static hosting.";
+  notice("Generating connections...", "Checking the source and cached schematic.");
+  for (;;) {
+    signal.throwIfAborted();
+    const response = await fetch(url, { method: "POST", headers: { "X-Hier-Schematic": "1" }, signal });
+    signal.throwIfAborted();
+    const result: unknown = await response.json().catch(() => null);
+    signal.throwIfAborted();
+    if (response.status === 404 || response.status === 405) {
+      const detail = record(result) && text(result.error) ? `${result.error} ` : "";
+      throw new Error(`${detail}The local schematic API is unavailable (HTTP ${response.status}). ${serveHelp}`);
+    }
+    if (!response.ok) {
+      const detail = record(result) && text(result.error) ? result.error : `HTTP ${response.status} while generating connections.`;
+      throw new Error(`${detail} Resolve the server error, then retry.`);
+    }
+    if (response.status === 200 && record(result) && result.state === "ready" && result.url === url) {
+      return result.url;
+    }
+    if (response.status === 202 && record(result) && (result.state === "building" || result.state === "busy") && text(result.message)) {
+      const busy = result.state === "busy";
+      notice(busy ? "Waiting to generate connections..." : "Generating connections...", result.message);
+      await abortableDelay(busy ? 1000 : 500, signal);
+      continue;
+    }
+    throw new Error(`Unexpected response from the local schematic API. ${serveHelp}`);
+  }
+}
+
 export async function loadSchematicGraph(url: string, signal: AbortSignal, progress: (received: number, total: number) => void): Promise<SchematicGraph> {
   const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`HTTP ${response.status} while loading ${url}. Regenerate the RTL bundle if a scope file is missing.`);

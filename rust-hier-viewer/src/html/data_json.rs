@@ -63,7 +63,9 @@ pub(crate) fn render_meta_json(data: &ViewerData) -> String {
     push_json_field(
         &mut json,
         "schematic",
-        if data.schematic.is_some() {
+        if data.schematic_on_demand {
+            r#"{"version":1,"directory":"schematic","mode":"lazy"}"#
+        } else if data.schematic.is_some() {
             r#"{"version":1,"directory":"schematic"}"#
         } else {
             "null"

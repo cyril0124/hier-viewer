@@ -4,10 +4,13 @@ import type { BinaryReader } from "./main-types.js";
 function decodeSchematicMetadata(value: unknown): ViewerData["schematic"] {
   if (value === undefined || value === null) return null;
   const meta = value as Record<string, unknown>;
-  if (typeof value !== "object" || meta.version !== 1 || meta.directory !== "schematic") {
+  if (typeof value !== "object" || meta.version !== 1 || meta.directory !== "schematic"
+    || (meta.mode !== undefined && meta.mode !== "lazy" && meta.mode !== "static")) {
     throw new Error("Invalid schematic bundle metadata. Regenerate the RTL bundle.");
   }
-  return { version: 1, directory: "schematic" };
+  const schematic: NonNullable<ViewerData["schematic"]> = { version: 1, directory: "schematic" };
+  if (meta.mode !== undefined) schematic.mode = meta.mode;
+  return schematic;
 }
 
     export const CORE_BUNDLE_MAGIC = "HVC1";

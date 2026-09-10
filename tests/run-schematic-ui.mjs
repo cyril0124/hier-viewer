@@ -12,7 +12,7 @@ const evidence = resolve('target/schematic-evidence/integration');
 const bundle = resolve(evidence, 'bundle');
 const legacyBundle = resolve(evidence, 'legacy');
 await mkdir(evidence, { recursive: true });
-const generated = await execute(binary, [resolve('cpp-hier-exporter/tests/semantic_schematic.sv'), '--output', bundle, '--', '--top', 'semantic_top'], { timeout: 60_000 });
+const generated = await execute(binary, [resolve('cpp-hier-exporter/tests/semantic_schematic.sv'), '--schematic', '--output', bundle, '--', '--top', 'semantic_top'], { timeout: 60_000 });
 assert(!generated.stderr.includes('Compilation reported errors'), generated.stderr);
 const database = (await readdir(resolve(bundle, '.hier-viewer-cache'))).find(name => name.endsWith('.sqlite'));
 assert(database);
@@ -99,7 +99,7 @@ try {
   await page.waitForFunction(() => document.querySelector('.schematic-notice')?.textContent.includes('Schematic data is missing'));
   await page.screenshot({ path: resolve(evidence, 'legacy-database.png') });
   await page.locator('#view-treemap-btn').click();
-  assert(await page.locator('#treemap-stage.active').isVisible());
+  await page.locator('#treemap-stage.active').waitFor({ state: 'visible' });
   assert.deepEqual(errors, [], 'No browser exceptions in the generated site');
   console.log('Generated schematic site: lazy local resources, full-path navigation, source, Zen, restore and legacy DB checks passed.');
 } finally {

@@ -157,7 +157,9 @@ void generateSqliteHierarchy(
     const std::vector<std::string>& dependencies,
     slang::ast::Compilation& compilation,
     const std::string& outputPath,
-    const ViewerConfig& config) {
+    const ViewerConfig& config,
+    bool schematic,
+    const std::optional<std::string>& schematicScope) {
     const auto compiled = compileViewerConfig(config);
 
     std::vector<HierarchyEntry> filteredEntries;
@@ -418,7 +420,9 @@ void generateSqliteHierarchy(
             }
         }
 
-        writeSchematic(db, compilation, allowedPaths);
+        if (schematic || schematicScope) {
+            writeSchematic(db, compilation, allowedPaths, schematicScope);
+        }
         exec(db, "COMMIT");
     } catch (...) {
         sqlite3_exec(db, "ROLLBACK", nullptr, nullptr, nullptr);

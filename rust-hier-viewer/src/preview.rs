@@ -14,6 +14,7 @@ use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 use crate::coverage_import::{CoverageService, ImportRequest, ServiceError};
 use crate::interrupt::CancellationGuard;
 use crate::logging::{info, warn};
+use crate::schematic_service::SchematicService;
 
 pub(crate) const DEFAULT_PREVIEW_HOST: &str = "127.0.0.1";
 pub(crate) const DEFAULT_PREVIEW_PORT: u16 = 8000;
@@ -54,7 +55,7 @@ pub(crate) fn serve_output_dir(
         info(
             "preview",
             format!(
-                "Static preview is listening on all interfaces. Coverage import APIs are disabled. Replace {} with your server IP or use SSH port forwarding.",
+                "Preview is listening on all interfaces. Coverage import APIs are disabled; on-demand Schematic remains available. Replace {} with your server IP or use SSH port forwarding.",
                 server.viewer_host_display
             ),
         );
@@ -68,6 +69,7 @@ struct PreviewServer {
     root_dir: PathBuf,
     server: Arc<Server>,
     coverage: Arc<CoverageService>,
+    schematic: Arc<SchematicService>,
     port: u16,
     bind_host_display: String,
     viewer_host_display: String,
@@ -91,10 +93,12 @@ impl PreviewServer {
                         .map_err(|err| format!("failed to configure preview TCP socket: {err}"))?;
                     let server = Server::from_listener(listener, None)
                         .map_err(|err| format!("failed to initialize preview server: {err}"))?;
+                    let schematic = SchematicService::new(&root_dir)?;
                     return Ok(Self {
                         root_dir,
                         server: Arc::new(server),
                         coverage: CoverageService::new()?,
+                        schematic,
                         port,
                         bind_host_display,
                         viewer_host_display,
@@ -126,6 +130,7 @@ impl PreviewServer {
         let cancellation = CancellationGuard::install()?;
         let result = self.serve_until(cancellation.signal());
         self.coverage.shutdown();
+        self.schematic.shutdown();
         result
     }
 
@@ -136,10 +141,15 @@ impl PreviewServer {
                     let root_dir = self.root_dir.clone();
                     let coverage = Arc::clone(&self.coverage);
                     let coverage_enabled = self.coverage_enabled;
+                    let schematic = Arc::clone(&self.schematic);
                     thread::spawn(move || {
-                        if let Err(err) =
-                            handle_request(request, &root_dir, coverage, coverage_enabled)
-                        {
+                        if let Err(err) = handle_request(
+                            request,
+                            &root_dir,
+                            coverage,
+                            coverage_enabled,
+                            schematic,
+                        ) {
                             warn("preview", err);
                         }
                     });
@@ -155,6 +165,7 @@ impl PreviewServer {
 impl Drop for PreviewServer {
     fn drop(&mut self) {
         self.coverage.shutdown();
+        self.schematic.shutdown();
     }
 }
 
@@ -163,6 +174,7 @@ fn handle_request(
     root_dir: &Path,
     coverage: Arc<CoverageService>,
     coverage_enabled: bool,
+    schematic: Arc<SchematicService>,
 ) -> Result<(), String> {
     let path = request
         .url()
@@ -171,6 +183,9 @@ fn handle_request(
         .unwrap_or(request.url())
         .to_string();
 
+    if path.starts_with("/api/schematic/") {
+        return handle_schematic_api(request, &path, &schematic);
+    }
     if path.starts_with("/api/coverage/") {
         if !coverage_enabled {
             return respond_error(request, 404, "Not Found");
@@ -184,6 +199,55 @@ fn handle_request(
         return serve_registered_report(request, rest, &coverage);
     }
     serve_static(request, root_dir, &path, false)
+}
+
+fn handle_schematic_api(
+    request: Request,
+    path: &str,
+    schematic: &Arc<SchematicService>,
+) -> Result<(), String> {
+    // Unlike coverage import, this API accepts only an existing viewer ID, not
+    // arbitrary local paths. It also supports remote previews on a bound host.
+    if header_value(&request, "Sec-Fetch-Site").is_some_and(|site| site == "cross-site") {
+        return respond_error(request, 403, "Cross-site schematic requests are disabled");
+    }
+    if let Some(origin) = header_value(&request, "Origin") {
+        let authority = origin
+            .strip_prefix("http://")
+            .or_else(|| origin.strip_prefix("https://"));
+        if authority != header_value(&request, "Host") {
+            return respond_error(
+                request,
+                403,
+                "Schematic requests must use the viewer origin",
+            );
+        }
+    }
+    let Some(raw_id) = path.strip_prefix("/api/schematic/scopes/") else {
+        return respond_error(request, 404, "Not Found");
+    };
+    let Ok(id) = raw_id.parse::<usize>() else {
+        return respond_error(request, 404, "Invalid schematic scope ID");
+    };
+    match request.method() {
+        Method::Post => {
+            if header_value(&request, "X-Hier-Schematic") != Some("1") {
+                return respond_error(request, 403, "Missing schematic request header");
+            }
+            match schematic.request(id) {
+                Ok((status, value)) => respond_json(request, status, &value),
+                Err(error) => respond_service_error(request, error),
+            }
+        }
+        Method::Get | Method::Head => match schematic.scope_file(id) {
+            Ok(path) => {
+                let root = path.parent().expect("scope cache has parent");
+                serve_static(request, root, &format!("{id}.json"), false)
+            }
+            Err(error) => respond_service_error(request, error),
+        },
+        _ => respond_error(request, 405, "Method Not Allowed"),
+    }
 }
 
 fn handle_coverage_api(
@@ -383,6 +447,12 @@ fn serve_static(
             Err(status) => return respond_error(request, status, status_text(status)),
         }
     };
+    if relative
+        .components()
+        .any(|part| part.as_os_str() == ".hier-viewer-cache")
+    {
+        return respond_error(request, 403, "Forbidden");
+    }
     let candidate = root_dir.join(relative);
     let canonical = match fs::canonicalize(&candidate) {
         Ok(path) => path,
