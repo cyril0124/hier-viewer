@@ -589,6 +589,19 @@ impl SchematicInput {
     }
 }
 
+fn link_or_copy(source: &Path, destination: &Path) -> Result<(), std::io::Error> {
+    if fs::symlink_metadata(destination).is_ok() {
+        fs::remove_file(destination)?;
+    }
+    match fs::hard_link(source, destination) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            fs::copy(source, destination)?;
+            Ok(())
+        }
+    }
+}
+
 impl SchematicData {
     pub(crate) fn write_bundle(&self, output_dir: &Path, nodes: &[Node]) -> Result<(), String> {
         let directory = output_dir.join("schematic");
@@ -598,7 +611,7 @@ impl SchematicData {
             let path = directory.join(format!("{id}.json"));
             if let Some(index) = self.scope_files[id] {
                 let source = self.directory.path().join(format!("{index}.json"));
-                fs::copy(&source, &path).map_err(|err| {
+                link_or_copy(&source, &path).map_err(|err| {
                     format!(
                         "failed to write schematic scope '{}': {err}",
                         path.display()
